@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { useGameHistory } from '@/hooks/supabase/useGameHistory';
 import { GameCard } from '@/components/games/GameCard';
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Trophy, Clock, Target, Swords } from 'lucide-react';
 
 const SIMPLE_GAMES = [
@@ -90,29 +89,6 @@ const SIMPLE_GAMES = [
   }
 ];
 
-const HEAVY_GAMES = [
-  {
-    id: 'battlearena',
-    name: 'Battle Arena',
-    description: 'Turn-based combat RPG',
-    icon: '⚔️',
-    route: '/games/rpg',
-    difficulty: 'Hard',
-    players: '1' as const,
-    estimatedTime: '30+ min'
-  },
-  {
-    id: 'dungeoncrawlers',
-    name: 'Dungeon Crawlers',
-    description: 'Explore dungeons and fight monsters',
-    icon: '🏯',
-    route: '/games/rpg',
-    difficulty: 'Hard',
-    players: '1' as const,
-    estimatedTime: '30+ min'
-  }
-];
-
 export const Home: React.FC = () => {
   const { user } = useAuth();
   const { stats, loading: statsLoading } = usePlayerStats();
@@ -131,7 +107,7 @@ export const Home: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome, {user?.displayName}! 🎉
+            Welcome, {user?.displayName || 'Player'}! 🎉
           </h1>
           <p className="text-gray-600 dark:text-gray-400">Choose a game to play with your partner</p>
         </div>
@@ -194,18 +170,9 @@ export const Home: React.FC = () => {
         </div>
 
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Simple Games</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Games</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {filteredGames.map((game) => (
-              <Link key={game.id} to={game.route}>
-                <GameCard {...game} />
-              </Link>
-            ))}
-          </div>
-
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">RPG Games</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {HEAVY_GAMES.map((game) => (
               <Link key={game.id} to={game.route}>
                 <GameCard {...game} />
               </Link>

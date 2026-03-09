@@ -10,7 +10,6 @@ import { TriviaQuiz } from './components/simple-games/TriviaQuiz/TriviaQuiz';
 import { RockPaperScissors } from './components/simple-games/RockPaperScissors/RockPaperScissors';
 import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
 import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
-import { RPGHub } from './pages/RPGHub';
 import { Navbar } from './components/layout/Navbar';
 import { ThemeProvider } from './contexts/ThemeContext';
 import './App.css';
@@ -33,7 +32,6 @@ function App() {
               <Route path="/games/rockpaperscissors" element={<RockPaperScissors />} />
               <Route path="/games/pictionary" element={<Pictionary />} />
               <Route path="/games/mathduel" element={<MathDuel />} />
-              <Route path="/games/rpg" element={<RPGHub />} />
             </Routes>
           </div>
         </Router>
