@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/hooks/shared/useAuth';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { Celebration, MiniCelebration, ScorePopup } from '@/components/shared/Celebration';
+import { playClick, playCorrect, playWrong, playTimeout, playWin } from '@/utils/sounds';
 import { Shuffle, Trophy, Clock, Zap } from 'lucide-react';
 
 interface WordScrambleGameState {
@@ -60,6 +62,10 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [showMiniCelebration, setShowMiniCelebration] = useState(false);
+  const [showScorePopup, setShowScorePopup] = useState(false);
+  const [lastScore, setLastScore] = useState(0);
 
   const initialState: WordScrambleGameState = {
     currentWord: '',
@@ -98,6 +104,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
   }, [gameState?.timeRemaining, gameState?.status]);
 
   const startGame = () => {
+    playClick();
     const word = getRandomWord(difficulty);
     updateGameState({
       ...initialState,
@@ -114,6 +121,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
 
   const handleTimeout = () => {
     if (!gameState) return;
+    playTimeout();
     setFeedback({ type: 'error', message: `Time's up! The word was: ${gameState.currentWord}` });
     setTimeout(() => nextRound(), 2000);
   };
@@ -124,6 +132,16 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
     if (guess.toLowerCase() === gameState.currentWord.toLowerCase()) {
       const timeBonus = Math.floor(gameState.timeRemaining / 3);
       const points = 10 + timeBonus;
+      
+      // Play success sound and show celebrations
+      playCorrect();
+      setShowMiniCelebration(true);
+      setShowScorePopup(true);
+      setLastScore(points);
+      setTimeout(() => {
+        setShowMiniCelebration(false);
+        setShowScorePopup(false);
+      }, 1500);
       
       const updatedPlayers = { ...gameState.players };
       const currentPlayerData = updatedPlayers[user?.email || ''] || { score: 0, lastAnswerTime: 0 };
@@ -144,6 +162,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
       
       setTimeout(() => nextRound(), 1500);
     } else {
+      playWrong();
       setFeedback({ type: 'error', message: '❌ Try again!' });
     }
     setGuess('');
@@ -153,6 +172,8 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
     if (!gameState) return;
 
     if (gameState.roundNumber >= gameState.totalRounds) {
+      playWin();
+      setShowCelebration(true);
       updateGameState({
         ...gameState,
         status: 'finished'
@@ -172,8 +193,10 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
   };
 
   const resetGame = () => {
+    playClick();
     setGuess('');
     setFeedback(null);
+    setShowCelebration(false);
     updateGameState(initialState);
   };
 
@@ -201,7 +224,25 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
   const currentPlayerScore = gameState.players[user?.email || '']?.score || 0;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 dark:from-purple-900 dark:to-pink-900 p-4">
+      {/* Celebrations */}
+      <Celebration
+        show={showCelebration}
+        type="win"
+        message="Game Complete! 🎆"
+        onComplete={() => setShowCelebration(false)}
+      />
+      <MiniCelebration
+        show={showMiniCelebration}
+        message="Correct!"
+        icon="check"
+      />
+      <ScorePopup
+        show={showScorePopup}
+        score={lastScore}
+        position={{ x: 50, y: 30 }}
+      />
+
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 max-w-2xl w-full">
         {/* Header */}
         <div className="text-center mb-6">
@@ -221,8 +262,11 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
                 {(['easy', 'medium', 'hard'] as const).map((level) => (
                   <button
                     key={level}
-                    onClick={() => setDifficulty(level)}
-                    className={`p-4 rounded-lg border-2 transition-all ${
+                    onClick={() => {
+                      playClick();
+                      setDifficulty(level);
+                    }}
+                    className={`p-4 rounded-lg border-2 transition-all hover:scale-105 ${
                       difficulty === level
                         ? 'border-purple-600 bg-purple-100 dark:bg-purple-900/30'
                         : 'border-gray-300 dark:border-gray-700 hover:border-purple-400'
@@ -241,7 +285,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
 
             <button
               onClick={startGame}
-              className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg rounded-lg transition-colors"
+              className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg rounded-lg transition-all hover:scale-105 active:scale-95"
             >
               Start Game
             </button>
@@ -260,8 +304,8 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className={`w-5 h-5 ${gameState.timeRemaining <= 10 ? 'text-red-600' : 'text-gray-600'}`} />
-                <span className={`font-semibold ${gameState.timeRemaining <= 10 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
+                <Clock className={`w-5 h-5 ${gameState.timeRemaining <= 10 ? 'text-red-600 animate-pulse' : 'text-gray-600'}`} />
+                <span className={`font-semibold ${gameState.timeRemaining <= 10 ? 'text-red-600 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
                   {gameState.timeRemaining}s
                 </span>
               </div>
@@ -285,7 +329,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
 
             {/* Feedback */}
             {feedback && (
-              <div className={`p-4 rounded-lg text-center font-semibold ${
+              <div className={`p-4 rounded-lg text-center font-semibold animate-pop-in ${
                 feedback.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
                 feedback.type === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
                 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
@@ -308,7 +352,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
               <button
                 onClick={handleGuess}
                 disabled={!guess.trim()}
-                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all hover:scale-105 active:scale-95"
               >
                 Submit
               </button>
@@ -319,7 +363,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
         {/* Finished State */}
         {gameState.status === 'finished' && (
           <div className="space-y-6 text-center">
-            <div className="text-6xl mb-4">🏆</div>
+            <div className="text-6xl mb-4 animate-bounce-subtle">🏆</div>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Game Complete!</h2>
             
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-xl p-6">
@@ -332,7 +376,7 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
 
             <button
               onClick={resetGame}
-              className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg rounded-lg transition-colors"
+              className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-lg rounded-lg transition-all hover:scale-105 active:scale-95"
             >
               Play Again
             </button>
