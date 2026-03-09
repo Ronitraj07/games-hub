@@ -13,6 +13,8 @@ import { GameLobby } from './pages/GameLobby';
 
 // Simple Games
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
+import { WordScramble } from './components/simple-games/WordScramble/WordScramble';
+import { MemoryMatch } from './components/simple-games/MemoryMatch/MemoryMatch';
 
 // Heavy Games
 import { BattleArena } from './components/heavy-games/BattleArena/BattleArena';
@@ -65,6 +67,26 @@ function App() {
               <AuthGuard>
                 <Layout>
                   <TicTacToe />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/wordscramble"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <WordScramble />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/memorymatch"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <MemoryMatch />
                 </Layout>
               </AuthGuard>
             }
