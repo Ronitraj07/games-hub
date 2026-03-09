@@ -6,7 +6,6 @@ class SoundManager {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // Check if sound is enabled in localStorage
       const soundEnabled = localStorage.getItem('soundEnabled');
       this.enabled = soundEnabled === null ? true : soundEnabled === 'true';
     }
@@ -47,85 +46,65 @@ class SoundManager {
     }
   }
 
-  // Victory/Success Sound
   playWin() {
-    const ctx = this.getContext();
-    const now = ctx.currentTime;
-    
-    // Play a happy ascending arpeggio
-    this.playTone(523.25, 0.15, 'sine', 0.2); // C5
-    setTimeout(() => this.playTone(659.25, 0.15, 'sine', 0.2), 100); // E5
-    setTimeout(() => this.playTone(783.99, 0.15, 'sine', 0.2), 200); // G5
-    setTimeout(() => this.playTone(1046.50, 0.3, 'sine', 0.3), 300); // C6
+    this.playTone(523.25, 0.15, 'sine', 0.2);
+    setTimeout(() => this.playTone(659.25, 0.15, 'sine', 0.2), 100);
+    setTimeout(() => this.playTone(783.99, 0.15, 'sine', 0.2), 200);
+    setTimeout(() => this.playTone(1046.50, 0.3, 'sine', 0.3), 300);
   }
 
-  // Loss/Fail Sound
   playLoss() {
-    const ctx = this.getContext();
-    
-    // Play a descending tone
-    this.playTone(392, 0.15, 'triangle', 0.2); // G4
-    setTimeout(() => this.playTone(349.23, 0.15, 'triangle', 0.2), 100); // F4
-    setTimeout(() => this.playTone(293.66, 0.3, 'triangle', 0.3), 200); // D4
+    this.playTone(392, 0.15, 'triangle', 0.2);
+    setTimeout(() => this.playTone(349.23, 0.15, 'triangle', 0.2), 100);
+    setTimeout(() => this.playTone(293.66, 0.3, 'triangle', 0.3), 200);
   }
 
-  // Draw Sound
   playDraw() {
-    this.playTone(440, 0.2, 'square', 0.2); // A4
+    this.playTone(440, 0.2, 'square', 0.2);
     setTimeout(() => this.playTone(440, 0.2, 'square', 0.2), 150);
   }
 
-  // Click/Button Sound
   playClick() {
     this.playTone(800, 0.05, 'sine', 0.15);
   }
 
-  // Correct Answer Sound
   playCorrect() {
-    this.playTone(880, 0.1, 'sine', 0.2); // A5
-    setTimeout(() => this.playTone(1046.50, 0.15, 'sine', 0.25), 80); // C6
+    this.playTone(880, 0.1, 'sine', 0.2);
+    setTimeout(() => this.playTone(1046.50, 0.15, 'sine', 0.25), 80);
   }
 
-  // Wrong Answer Sound
   playWrong() {
     this.playTone(200, 0.2, 'sawtooth', 0.2);
   }
 
-  // Match Found Sound (Memory Game)
   playMatch() {
-    this.playTone(659.25, 0.1, 'sine', 0.2); // E5
-    setTimeout(() => this.playTone(783.99, 0.15, 'sine', 0.25), 60); // G5
+    this.playTone(659.25, 0.1, 'sine', 0.2);
+    setTimeout(() => this.playTone(783.99, 0.15, 'sine', 0.25), 60);
   }
 
-  // Card Flip Sound
   playFlip() {
     this.playTone(600, 0.05, 'sine', 0.1);
   }
 
-  // Timer Tick (Warning)
   playTick() {
     this.playTone(1000, 0.05, 'square', 0.1);
   }
 
-  // Timer End Sound
   playTimeout() {
     this.playTone(300, 0.15, 'sawtooth', 0.2);
     setTimeout(() => this.playTone(250, 0.15, 'sawtooth', 0.2), 100);
     setTimeout(() => this.playTone(200, 0.2, 'sawtooth', 0.25), 200);
   }
 
-  // Connect4 Drop Sound
   playDrop() {
     this.playTone(400, 0.1, 'sine', 0.2);
     setTimeout(() => this.playTone(300, 0.05, 'sine', 0.15), 80);
   }
 
-  // Hover/Focus Sound
   playHover() {
     this.playTone(1200, 0.03, 'sine', 0.08);
   }
 
-  // Level Up / Achievement Sound
   playLevelUp() {
     const frequencies = [523.25, 659.25, 783.99, 1046.50, 1318.51];
     frequencies.forEach((freq, i) => {
@@ -133,13 +112,12 @@ class SoundManager {
     });
   }
 
-  // Enable/Disable sounds
   toggleSound() {
     this.enabled = !this.enabled;
     localStorage.setItem('soundEnabled', this.enabled.toString());
     
     if (this.enabled) {
-      this.playClick(); // Confirmation sound
+      this.playClick();
     }
     
     return this.enabled;
@@ -150,10 +128,8 @@ class SoundManager {
   }
 }
 
-// Export singleton instance
 export const soundManager = new SoundManager();
 
-// Convenience exports
 export const playWin = () => soundManager.playWin();
 export const playLoss = () => soundManager.playLoss();
 export const playDraw = () => soundManager.playDraw();

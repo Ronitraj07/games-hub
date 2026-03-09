@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/hooks/shared/useAuth';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -101,7 +101,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
 
     playFlip();
     const newFlippedCards = [...gameState.flippedCards, cardId];
-    const newCards = gameState.cards.map(c => 
+    const newCards = gameState.cards.map((c: Card) => 
       c.id === cardId ? { ...c, isFlipped: true } : c
     );
 
@@ -124,7 +124,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
         setShowMiniCelebration(true);
         setTimeout(() => setShowMiniCelebration(false), 1000);
 
-        const matchedCards = newCards.map(c =>
+        const matchedCards = newCards.map((c: Card) =>
           c.id === firstId || c.id === secondId ? { ...c, isMatched: true } : c
         );
 
@@ -137,7 +137,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
           players: updatedPlayers
         });
 
-        if (matchedCards.every(c => c.isMatched)) {
+        if (matchedCards.every((c: Card) => c.isMatched)) {
           setTimeout(() => {
             playWin();
             setShowCelebration(true);
@@ -159,7 +159,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
         });
 
         setTimeout(() => {
-          const resetCards = gameState.cards.map(c =>
+          const resetCards = gameState.cards.map((c: Card) =>
             c.id === firstId || c.id === secondId ? { ...c, isFlipped: false } : c
           );
           updateGameState({
@@ -315,7 +315,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
             <div className={`grid gap-3 ${
               gameState.gridSize === 4 ? 'grid-cols-4' : 'grid-cols-6'
             }`}>
-              {gameState.cards.map((card) => (
+              {gameState.cards.map((card: Card) => (
                 <button
                   key={card.id}
                   onClick={() => handleCardClick(card.id)}
