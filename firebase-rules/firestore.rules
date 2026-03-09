@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user email is in whitelist
+    function isAllowedEmail() {
+      return request.auth.token.email in [
+        'sinharonitraj@gmail.com',
+        'radhikadidwania567@gmail.com'
+      ];
+    }
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Game history collection
+    match /game_history/{document} {
+      allow read, write: if isAuthenticated() && isAllowedEmail();
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && isAllowedEmail();
+    }
+    
+    // Player stats collection
+    match /player_stats/{document} {
+      allow read, write: if isAuthenticated() && isAllowedEmail();
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if isAuthenticated() && isAllowedEmail();
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "rules": {
+    ".read": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+    ".write": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+    
+    "sessions": {
+      "$sessionId": {
+        ".read": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+        ".write": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+        ".indexOn": ["createdAt", "status", "gameType"]
+      }
+    },
+    
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+        ".indexOn": ["status", "lastSeen"]
+      }
+    },
+    
+    "games": {
+      "$gameType": {
+        "$gameId": {
+          ".read": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')",
+          ".write": "auth != null && (auth.token.email == 'sinharonitraj@gmail.com' || auth.token.email == 'radhikadidwania567@gmail.com')"
+        }
+      }
+    }
+  }
+}
