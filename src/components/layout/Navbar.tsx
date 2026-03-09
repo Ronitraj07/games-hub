@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { APP_CONFIG } from '@/lib/auth-config';
-import { LogOut, User, Home, Sun, Moon } from 'lucide-react';
+import { LogOut, User, Home, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { toggleSound, isSoundEnabled } from '@/utils/sounds';
 
 export const Navbar: React.FC = () => {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [soundEnabled, setSoundEnabled] = useState(isSoundEnabled());
 
   const handleSignOut = async () => {
     try {
@@ -17,6 +19,11 @@ export const Navbar: React.FC = () => {
     } catch (error) {
       console.error('Sign out error:', error);
     }
+  };
+
+  const handleSoundToggle = () => {
+    const newState = toggleSound();
+    setSoundEnabled(newState);
   };
 
   return (
@@ -33,6 +40,20 @@ export const Navbar: React.FC = () => {
           </Link>
 
           <div className="flex items-center gap-2">
+            {/* Sound Toggle */}
+            <button
+              onClick={handleSoundToggle}
+              className="p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
+              aria-label="Toggle sound effects"
+              title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+            >
+              {soundEnabled ? (
+                <Volume2 size={20} className="text-green-600 dark:text-green-400" />
+              ) : (
+                <VolumeX size={20} className="text-gray-400" />
+              )}
+            </button>
+
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleTheme}
