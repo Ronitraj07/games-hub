@@ -4,15 +4,18 @@ import { AuthProvider } from './contexts/AuthContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Layout } from './components/layout/Layout';
 
-// Pages (to be created)
+// Pages
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { GameLobby } from './pages/GameLobby';
 
-// Games
+// Simple Games
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
+
+// Heavy Games
+import { BattleArena } from './components/heavy-games/BattleArena/BattleArena';
 
 function App() {
   return (
@@ -55,13 +58,25 @@ function App() {
             }
           />
           
-          {/* Game routes */}
+          {/* Simple Game routes */}
           <Route
             path="/games/tictactoe"
             element={
               <AuthGuard>
                 <Layout>
                   <TicTacToe />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+
+          {/* Heavy Game routes */}
+          <Route
+            path="/games/battle-arena"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <BattleArena />
                 </Layout>
               </AuthGuard>
             }
