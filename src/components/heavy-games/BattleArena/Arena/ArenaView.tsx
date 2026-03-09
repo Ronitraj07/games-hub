@@ -1,1 +1,1 @@
-export {};
+export const ArenaView = () => null;

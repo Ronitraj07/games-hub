@@ -22,7 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Heavy games - not implementing
-src/components/heavy-games/BattleArena/
-src/components/heavy-games/DungeonCrawlers/
