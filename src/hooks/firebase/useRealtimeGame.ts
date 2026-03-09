@@ -1,39 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ref, onValue, set, update, remove, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
-import { nanoid } from 'nanoid';
 
-interface GameSession {
-  gameType: string;
-  players: {
-    player1: string;
-    player2: string;
-  };
-  gameState: any;
-  createdAt: number;
-  lastMove: number;
-}
-
-export const useRealtimeGame = (sessionId: string | null) => {
-  const [gameData, setGameData] = useState<GameSession | null>(null);
+export const useRealtimeGame = <T>(
+  sessionId: string,
+  gameType: string,
+  initialState: T
+) => {
+  const [gameState, setGameState] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !database) {
       setLoading(false);
       return;
     }
 
-    const gameRef = ref(database, `sessions/${sessionId}`);
+    const gameRef = ref(database, `games/${sessionId}`);
+
+    // Initialize game if doesn't exist
+    set(gameRef, initialState).catch(err => {
+      console.error('Failed to initialize game:', err);
+      setError(err.message);
+    });
 
     const unsubscribe = onValue(
       gameRef,
       (snapshot) => {
         const data = snapshot.val();
-        setGameData(data);
+        setGameState(data || initialState);
         setLoading(false);
-        setError(null);
+        setError('');
       },
       (err) => {
         setError(err.message);
@@ -48,17 +46,15 @@ export const useRealtimeGame = (sessionId: string | null) => {
   }, [sessionId]);
 
   const updateGameState = useCallback(
-    async (newState: any) => {
-      if (!sessionId) return;
+    async (newState: T) => {
+      if (!sessionId || !database) return;
 
       try {
-        const gameRef = ref(database, `sessions/${sessionId}`);
-        await update(gameRef, {
-          gameState: newState,
-          lastMove: Date.now(),
-        });
-      } catch (err) {
+        const gameRef = ref(database, `games/${sessionId}`);
+        await set(gameRef, newState);
+      } catch (err: any) {
         console.error('Failed to update game state:', err);
+        setError(err.message);
         throw err;
       }
     },
@@ -66,46 +62,22 @@ export const useRealtimeGame = (sessionId: string | null) => {
   );
 
   const endGame = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !database) return;
 
     try {
-      const gameRef = ref(database, `sessions/${sessionId}`);
+      const gameRef = ref(database, `games/${sessionId}`);
       await remove(gameRef);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to end game:', err);
       throw err;
     }
   }, [sessionId]);
 
   return {
-    gameData,
-    loading,
-    error,
+    gameState,
     updateGameState,
     endGame,
+    loading,
+    error,
   };
-};
-
-export const createGameSession = async (
-  gameType: string,
-  player1Email: string,
-  player2Email: string,
-  initialGameState: any
-): Promise<string> => {
-  const sessionId = nanoid();
-  const sessionRef = ref(database, `sessions/${sessionId}`);
-
-  const session: GameSession = {
-    gameType,
-    players: {
-      player1: player1Email,
-      player2: player2Email,
-    },
-    gameState: initialGameState,
-    createdAt: Date.now(),
-    lastMove: Date.now(),
-  };
-
-  await set(sessionRef, session);
-  return sessionId;
 };
