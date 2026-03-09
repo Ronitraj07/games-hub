@@ -42,11 +42,11 @@ export const usePlayerStats = () => {
 
         if (data) {
           setStats({
-            totalGames: data.total_games_played || 0,
-            wins: data.total_wins || 0,
-            losses: data.total_losses || 0,
-            draws: data.total_draws || 0,
-            favoriteGame: data.favorite_game || 'None'
+            totalGames: (data as any).total_games_played || 0,
+            wins: (data as any).total_wins || 0,
+            losses: (data as any).total_losses || 0,
+            draws: (data as any).total_draws || 0,
+            favoriteGame: (data as any).favorite_game || 'None'
           });
         }
       } catch (err: any) {
