@@ -1,195 +1,142 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { AuthGuard } from './components/auth/AuthGuard';
-import { Layout } from './components/layout/Layout';
-
-// Pages
+import { Navbar } from './components/layout/Navbar';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
-import { Signup } from './pages/Signup';
-import { Profile } from './pages/Profile';
-import { GameLobby } from './pages/GameLobby';
-import { RPGHub } from './pages/RPGHub';
-
-// RPG Games
-import { HeartboundAdventures, MysteryPartners } from './pages/rpg';
-
-// Simple Games - ALL 8 COMPLETE!
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
 import { WordScramble } from './components/simple-games/WordScramble/WordScramble';
 import { MemoryMatch } from './components/simple-games/MemoryMatch/MemoryMatch';
-import { TriviaQuiz } from './components/simple-games/TriviaQuiz/TriviaQuiz';
 import { Connect4 } from './components/simple-games/Connect4/Connect4';
+import { TriviaQuiz } from './components/simple-games/TriviaQuiz/TriviaQuiz';
 import { RockPaperScissors } from './components/simple-games/RockPaperScissors/RockPaperScissors';
 import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
 import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
+import { BattleArena } from './components/heavy-games/BattleArena/BattleArena';
+import { DungeonCrawlers } from './components/heavy-games/DungeonCrawlers/DungeonCrawlers';
+import { Profile } from './pages/Profile';
+import { RPGHub } from './pages/RPGHub';
 
 function App() {
   return (
-    <BrowserRouter>
+    <AuthProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-
-            {/* Protected routes */}
-            <Route
-              path="/"
-              element={
-                <AuthGuard>
-                  <Layout>
+        <Router>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+            <Navbar />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
                     <Home />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
                     <Profile />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/lobby"
-              element={
-                <AuthGuard>
-                  <Layout>
-                    <GameLobby />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-
-            {/* RPG Hub */}
-            <Route
-              path="/rpg"
-              element={
-                <AuthGuard>
-                  <Layout>
-                    <RPGHub />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-
-            {/* RPG Games */}
-            <Route
-              path="/rpg/heartbound"
-              element={
-                <AuthGuard>
-                  <Layout>
-                    <HeartboundAdventures />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/rpg/mystery"
-              element={
-                <AuthGuard>
-                  <Layout>
-                    <MysteryPartners />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            
-            {/* Simple Game Routes - ALL 8 GAMES */}
-            <Route
-              path="/games/tictactoe"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/tictactoe"
+                element={
+                  <ProtectedRoute>
                     <TicTacToe />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/wordscramble"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/wordscramble"
+                element={
+                  <ProtectedRoute>
                     <WordScramble />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/memorymatch"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/memorymatch"
+                element={
+                  <ProtectedRoute>
                     <MemoryMatch />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/trivia"
-              element={
-                <AuthGuard>
-                  <Layout>
-                    <TriviaQuiz />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/connect4"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/connect4"
+                element={
+                  <ProtectedRoute>
                     <Connect4 />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/rps"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/triviaquiz"
+                element={
+                  <ProtectedRoute>
+                    <TriviaQuiz />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/rockpaperscissors"
+                element={
+                  <ProtectedRoute>
                     <RockPaperScissors />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/pictionary"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/pictionary"
+                element={
+                  <ProtectedRoute>
                     <Pictionary />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/games/mathduel"
-              element={
-                <AuthGuard>
-                  <Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/mathduel"
+                element={
+                  <ProtectedRoute>
                     <MathDuel />
-                  </Layout>
-                </AuthGuard>
-              }
-            />
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AuthProvider>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/rpg"
+                element={
+                  <ProtectedRoute>
+                    <RPGHub />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/battlearena"
+                element={
+                  <ProtectedRoute>
+                    <BattleArena />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games/dungeoncrawlers"
+                element={
+                  <ProtectedRoute>
+                    <DungeonCrawlers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </Router>
       </ThemeProvider>
-    </BrowserRouter>
+    </AuthProvider>
   );
 }
 

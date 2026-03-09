@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
-import { useAuth } from '@/hooks/shared/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Celebration, MiniCelebration, ScorePopup } from '@/components/shared/Celebration';
 import { playClick, playCorrect, playWrong, playTimeout, playWin } from '@/utils/sounds';
@@ -85,7 +85,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
     initialState
   );
 
-  // Timer effect
   useEffect(() => {
     if (!gameState || gameState.status !== 'active') return;
 
@@ -133,7 +132,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
       const timeBonus = Math.floor(gameState.timeRemaining / 3);
       const points = 10 + timeBonus;
       
-      // Play success sound and show celebrations
       playCorrect();
       setShowMiniCelebration(true);
       setShowScorePopup(true);
@@ -225,7 +223,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 dark:from-purple-900 dark:to-pink-900 p-4">
-      {/* Celebrations */}
       <Celebration
         show={showCelebration}
         type="win"
@@ -244,7 +241,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
       />
 
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 max-w-2xl w-full">
-        {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-600 rounded-full mb-4">
             <Shuffle className="w-8 h-8 text-white" />
@@ -253,7 +249,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
           <p className="text-gray-600 dark:text-gray-400">Unscramble the word before time runs out!</p>
         </div>
 
-        {/* Waiting State */}
         {gameState.status === 'waiting' && (
           <div className="space-y-6">
             <div className="bg-purple-50 dark:bg-gray-800 rounded-lg p-6">
@@ -292,10 +287,8 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
           </div>
         )}
 
-        {/* Active Game */}
         {gameState.status === 'active' && (
           <div className="space-y-6">
-            {/* Game Info */}
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-yellow-600" />
@@ -317,7 +310,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
               </div>
             </div>
 
-            {/* Scrambled Word */}
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-xl p-8 text-center">
               <p className="text-5xl font-bold tracking-widest text-purple-700 dark:text-purple-300">
                 {gameState.scrambledWord.toUpperCase()}
@@ -327,7 +319,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
               </p>
             </div>
 
-            {/* Feedback */}
             {feedback && (
               <div className={`p-4 rounded-lg text-center font-semibold animate-pop-in ${
                 feedback.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
@@ -338,7 +329,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
               </div>
             )}
 
-            {/* Input */}
             <div className="flex gap-2">
               <input
                 type="text"
@@ -360,7 +350,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
           </div>
         )}
 
-        {/* Finished State */}
         {gameState.status === 'finished' && (
           <div className="space-y-6 text-center">
             <div className="text-6xl mb-4 animate-bounce-subtle">🏆</div>
@@ -383,7 +372,6 @@ export const WordScramble: React.FC<WordScrambleProps> = ({ sessionId }) => {
           </div>
         )}
 
-        {/* Footer */}
         <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
           <p>Playing as: {user?.email}</p>
         </div>
