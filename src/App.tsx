@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { Layout } from './components/layout/Layout';
 
@@ -24,130 +25,132 @@ import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+      <ThemeProvider>
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <Home />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <Profile />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/lobby"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <GameLobby />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          
-          {/* Simple Game Routes - ALL 8 GAMES */}
-          <Route
-            path="/games/tictactoe"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <TicTacToe />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/wordscramble"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <WordScramble />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/memorymatch"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <MemoryMatch />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/trivia"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <TriviaQuiz />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/connect4"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <Connect4 />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/rps"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <RockPaperScissors />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/pictionary"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <Pictionary />
-                </Layout>
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/games/mathduel"
-            element={
-              <AuthGuard>
-                <Layout>
-                  <MathDuel />
-                </Layout>
-              </AuthGuard>
-            }
-          />
+            {/* Protected routes */}
+            <Route
+              path="/"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <Home />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <Profile />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/lobby"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <GameLobby />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            
+            {/* Simple Game Routes - ALL 8 GAMES */}
+            <Route
+              path="/games/tictactoe"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <TicTacToe />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/wordscramble"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <WordScramble />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/memorymatch"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <MemoryMatch />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/trivia"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <TriviaQuiz />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/connect4"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <Connect4 />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/rps"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <RockPaperScissors />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/pictionary"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <Pictionary />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/games/mathduel"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <MathDuel />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }
