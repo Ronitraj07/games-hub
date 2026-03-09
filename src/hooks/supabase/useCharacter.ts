@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../shared/useAuth';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface Character {
+export type CharacterClass = 'warrior' | 'mage' | 'rogue' | 'archer';
+
+export interface Character {
   id: string;
   user_id: string;
   user_email: string;
   name: string;
-  class: 'warrior' | 'mage' | 'rogue' | 'archer';
+  class: CharacterClass;
   level: number;
   experience: number;
   health: number;
@@ -17,20 +19,9 @@ interface Character {
   stamina: number;
   max_stamina: number;
   gold: number;
-  stats: {
-    strength: number;
-    dexterity: number;
-    intelligence: number;
-    vitality: number;
-    luck: number;
-  };
+  stats: any;
   created_at: string;
   updated_at: string;
-}
-
-interface CreateCharacterInput {
-  name: string;
-  class: 'warrior' | 'mage' | 'rogue' | 'archer';
 }
 
 export const useCharacter = () => {
@@ -41,28 +32,23 @@ export const useCharacter = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchCharacters = async () => {
-    if (!user?.email) {
-      setLoading(false);
-      return;
-    }
+    if (!user?.uid) return;
 
     try {
       setLoading(true);
       const { data, error: fetchError } = await supabase
         .from('characters')
         .select('*')
-        .eq('user_email', user.email)
-        .order('created_at', { ascending: false });
+        .eq('user_id', user.uid)
+        .order('created_at', { ascending: false }) as any;
 
       if (fetchError) throw fetchError;
       setCharacters(data || []);
       if (data && data.length > 0 && !activeCharacter) {
         setActiveCharacter(data[0]);
       }
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch characters');
-      console.error('Characters fetch error:', err);
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -70,25 +56,23 @@ export const useCharacter = () => {
 
   useEffect(() => {
     fetchCharacters();
-  }, [user?.email]);
+  }, [user?.uid]);
 
-  const createCharacter = async (input: CreateCharacterInput) => {
-    if (!user?.uid || !user?.email) {
-      throw new Error('User not authenticated');
-    }
+  const createCharacter = async (name: string, characterClass: CharacterClass) => {
+    if (!user?.uid || !user?.email) throw new Error('User not authenticated');
 
     const baseStats = {
-      warrior: { strength: 15, dexterity: 8, intelligence: 5, vitality: 12, luck: 5 },
-      mage: { strength: 5, dexterity: 7, intelligence: 15, vitality: 8, luck: 10 },
-      rogue: { strength: 8, dexterity: 15, intelligence: 7, vitality: 8, luck: 12 },
-      archer: { strength: 7, dexterity: 13, intelligence: 8, vitality: 9, luck: 8 },
+      warrior: { strength: 15, dexterity: 10, intelligence: 8, vitality: 14 },
+      mage: { strength: 8, dexterity: 10, intelligence: 15, vitality: 10 },
+      rogue: { strength: 10, dexterity: 15, intelligence: 10, vitality: 10 },
+      archer: { strength: 10, dexterity: 14, intelligence: 10, vitality: 11 }
     };
 
-    const newCharacter = {
+    const newCharacter: any = {
       user_id: user.uid,
       user_email: user.email,
-      name: input.name,
-      class: input.class,
+      name,
+      class: characterClass,
       level: 1,
       experience: 0,
       health: 100,
@@ -98,42 +82,41 @@ export const useCharacter = () => {
       stamina: 100,
       max_stamina: 100,
       gold: 0,
-      stats: baseStats[input.class],
+      stats: baseStats[characterClass]
     };
 
-    const { data, error: createError } = await supabase
+    const { data, error } = await supabase
       .from('characters')
-      .insert(newCharacter)
+      .insert([newCharacter])
       .select()
-      .single();
+      .single() as any;
 
-    if (createError) throw createError;
+    if (error) throw error;
     await fetchCharacters();
     return data;
   };
 
-  const updateCharacter = async (characterId: string, updates: Partial<Character>) => {
-    const { data, error: updateError } = await supabase
+  const updateCharacter = async (id: string, updates: Partial<Character>) => {
+    const { error } = await supabase
       .from('characters')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', characterId)
-      .select()
-      .single();
+      .update({ ...updates, updated_at: new Date().toISOString() } as any)
+      .eq('id', id) as any;
 
-    if (updateError) throw updateError;
+    if (error) throw error;
     await fetchCharacters();
-    return data;
   };
 
-  const deleteCharacter = async (characterId: string) => {
-    const { error: deleteError } = await supabase
+  const deleteCharacter = async (id: string) => {
+    const { error } = await supabase
       .from('characters')
       .delete()
-      .eq('id', characterId);
+      .eq('id', id);
 
-    if (deleteError) throw deleteError;
+    if (error) throw error;
     await fetchCharacters();
   };
+
+  const refetch = fetchCharacters;
 
   return {
     characters,
@@ -144,6 +127,6 @@ export const useCharacter = () => {
     createCharacter,
     updateCharacter,
     deleteCharacter,
-    refetch: fetchCharacters,
+    refetch
   };
 };

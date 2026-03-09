@@ -1,58 +1,37 @@
-import { useEffect } from 'react';
-import { ref, onDisconnect, set, serverTimestamp } from 'firebase/database';
-import { database } from '../../lib/firebase';
-import { useAuth } from '../shared/useAuth';
+import { useEffect, useRef } from 'react';
+import { ref, onDisconnect, set } from 'firebase/database';
+import { database } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
-export const usePresence = () => {
+export const usePresence = (sessionId: string) => {
   const { user } = useAuth();
+  const presenceRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!user?.uid || !user?.email) return;
+    if (!user || !sessionId || !database) return;
 
-    const userStatusRef = ref(database, `presence/${user.uid}`);
+    const userStatusRef = ref(database, `sessions/${sessionId}/presence/${user.uid}`);
+    presenceRef.current = userStatusRef;
 
-    // Set user as online
-    const setOnline = async () => {
-      await set(userStatusRef, {
-        email: user.email,
-        status: 'online',
-        lastSeen: Date.now(),
-        currentGame: null,
-      });
+    const isOnline = {
+      state: 'online',
+      lastChanged: Date.now(),
+      email: user.email
     };
 
-    // Set user as offline on disconnect
-    onDisconnect(userStatusRef).set({
-      email: user.email,
-      status: 'offline',
-      lastSeen: Date.now(),
-      currentGame: null,
-    });
+    const isOffline = {
+      state: 'offline',
+      lastChanged: Date.now(),
+      email: user.email
+    };
 
-    setOnline();
+    set(userStatusRef, isOnline);
+    onDisconnect(userStatusRef).set(isOffline);
 
-    // Cleanup
     return () => {
-      set(userStatusRef, {
-        email: user.email,
-        status: 'offline',
-        lastSeen: Date.now(),
-        currentGame: null,
-      });
+      if (presenceRef.current) {
+        set(presenceRef.current, isOffline);
+      }
     };
-  }, [user]);
-
-  const updatePresence = async (status: 'online' | 'offline' | 'in-game', currentGame?: string) => {
-    if (!user?.uid || !user?.email) return;
-
-    const userStatusRef = ref(database, `presence/${user.uid}`);
-    await set(userStatusRef, {
-      email: user.email,
-      status,
-      lastSeen: Date.now(),
-      currentGame: currentGame || null,
-    });
-  };
-
-  return { updatePresence };
+  }, [user, sessionId]);
 };
