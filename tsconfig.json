@@ -21,5 +21,10 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "node_modules",
+    "src/components/heavy-games/BattleArena",
+    "src/components/heavy-games/DungeonCrawlers"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
