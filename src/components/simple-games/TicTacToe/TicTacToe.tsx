@@ -2,19 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { Board } from './Board';
 import { TicTacToeProps, TicTacToeGameState, Player, BoardState } from './types';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
-import { useAuth } from '@/hooks/shared/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Celebration } from '@/components/shared/Celebration';
 import { playClick, playWin, playLoss, playDraw } from '@/utils/sounds';
 
 const WINNING_COMBINATIONS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-  [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-  [0, 4, 8], [2, 4, 6] // Diagonals
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
 ];
 
 const checkWinner = (board: BoardState): { winner: Player | 'draw' | null; winningCells: number[] } => {
-  // Check for winner
   for (const combo of WINNING_COMBINATIONS) {
     const [a, b, c] = combo;
     if (board[a] && board[a] === board[b] && board[a] === board[c]) {
@@ -22,7 +21,6 @@ const checkWinner = (board: BoardState): { winner: Player | 'draw' | null; winni
     }
   }
   
-  // Check for draw
   if (board.every(cell => cell !== null)) {
     return { winner: 'draw', winningCells: [] };
   }
@@ -49,11 +47,9 @@ export const TicTacToe: React.FC<TicTacToeProps> = ({ sessionId }) => {
     initialState
   );
 
-  // Assign player X/O based on user (simple assignment)
   useEffect(() => {
     if (user && !userPlayer) {
-      // First user gets X, second user gets O
-      setUserPlayer('X'); // You can implement more sophisticated assignment
+      setUserPlayer('X');
     }
   }, [user, userPlayer]);
 
@@ -68,7 +64,6 @@ export const TicTacToe: React.FC<TicTacToeProps> = ({ sessionId }) => {
           status: 'finished'
         });
 
-        // Play sounds based on outcome
         if (winner === 'draw') {
           playDraw();
         } else if (winner === userPlayer) {
@@ -84,7 +79,6 @@ export const TicTacToe: React.FC<TicTacToeProps> = ({ sessionId }) => {
   const handleCellClick = (index: number) => {
     if (!gameState || gameState.winner || gameState.board[index]) return;
 
-    // Play click sound
     playClick();
 
     const newBoard = [...gameState.board];
@@ -130,7 +124,6 @@ export const TicTacToe: React.FC<TicTacToeProps> = ({ sessionId }) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {/* Celebration Animation */}
       {isWinner && (
         <Celebration
           show={showCelebration}

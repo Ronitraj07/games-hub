@@ -1,407 +1,253 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/shared/useAuth';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { useGameHistory } from '@/hooks/supabase/useGameHistory';
-import { GameCard } from '@/components/shared/GameCard';
+import { GameCard } from '@/components/games/GameCard';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-import { 
-  Gamepad2, 
-  Trophy, 
-  Target, 
-  Clock, 
-  TrendingUp,
-  Heart,
-  Sparkles,
-  Crown,
-  Zap,
-  ArrowRight
-} from 'lucide-react';
-import type { GameCard as GameCardType } from '@/types/shared.types';
+import { Trophy, Clock, Target, Swords } from 'lucide-react';
 
-const GAMES: GameCardType[] = [
+const SIMPLE_GAMES = [
   {
     id: 'tictactoe',
-    title: 'Tic-Tac-Toe',
-    description: 'Classic 3x3 strategy game. Get three in a row!',
-    category: 'simple',
-    players: '2',
-    thumbnail: '❌',
+    name: 'Tic Tac Toe',
+    description: 'Classic 3x3 grid game',
+    icon: '❌⭕',
     route: '/games/tictactoe',
+    difficulty: 'Easy',
+    players: '2' as const,
+    estimatedTime: '2-5 min'
   },
   {
     id: 'wordscramble',
-    title: 'Word Scramble',
-    description: 'Unscramble romantic words against the clock',
-    category: 'simple',
-    players: '1-2',
-    thumbnail: '🔤',
+    name: 'Word Scramble',
+    description: 'Unscramble words against time',
+    icon: '🔤',
     route: '/games/wordscramble',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min'
   },
   {
     id: 'memorymatch',
-    title: 'Memory Match',
-    description: 'Find matching pairs of cute emojis',
-    category: 'simple',
-    players: '1-2',
-    thumbnail: '🧠',
+    name: 'Memory Match',
+    description: 'Find matching pairs',
+    icon: '🃏',
     route: '/games/memorymatch',
-  },
-  {
-    id: 'trivia',
-    title: 'Trivia Quiz',
-    description: 'Create custom quizzes for each other!',
-    category: 'simple',
-    players: '2',
-    thumbnail: '❓',
-    route: '/games/trivia',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min'
   },
   {
     id: 'connect4',
-    title: 'Connect 4',
-    description: 'Drop discs and connect four in a row',
-    category: 'simple',
-    players: '2',
-    thumbnail: '🔴',
+    name: 'Connect 4',
+    description: 'Connect four in a row',
+    icon: '🔴🔵',
     route: '/games/connect4',
+    difficulty: 'Medium',
+    players: '2' as const,
+    estimatedTime: '5-10 min'
   },
   {
-    id: 'rps',
-    title: 'Rock Paper Scissors',
-    description: 'Best of 5 rounds showdown',
-    category: 'simple',
-    players: '2',
-    thumbnail: '✊',
-    route: '/games/rps',
+    id: 'triviaquiz',
+    name: 'Trivia Quiz',
+    description: 'Test your knowledge',
+    icon: '❓',
+    route: '/games/triviaquiz',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '10-15 min'
+  },
+  {
+    id: 'rockpaperscissors',
+    name: 'Rock Paper Scissors',
+    description: 'Best of 5 rounds',
+    icon: '✊✋✌️',
+    route: '/games/rockpaperscissors',
+    difficulty: 'Easy',
+    players: '2' as const,
+    estimatedTime: '2-5 min'
   },
   {
     id: 'pictionary',
-    title: 'Pictionary',
-    description: 'Draw and guess with your partner',
-    category: 'simple',
-    players: '2',
-    thumbnail: '🎨',
+    name: 'Pictionary',
+    description: 'Draw and guess',
+    icon: '🎨',
     route: '/games/pictionary',
+    difficulty: 'Hard',
+    players: '2' as const,
+    estimatedTime: '10-15 min'
   },
   {
     id: 'mathduel',
-    title: 'Math Duel',
-    description: 'Speed math competition. Fastest wins!',
-    category: 'simple',
-    players: '2',
-    thumbnail: '➗',
+    name: 'Math Duel',
+    description: 'Quick math challenges',
+    icon: '🧮',
     route: '/games/mathduel',
-  },
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min'
+  }
 ];
 
-const PARTNER_NAMES = {
-  'sinharonitraj@gmail.com': 'Sparkles',
-  'radhikadidwania567@gmail.com': 'Shizz'
-};
-
-const getPartnerEmail = (currentEmail: string): string => {
-  return currentEmail === 'sinharonitraj@gmail.com' 
-    ? 'radhikadidwania567@gmail.com' 
-    : 'sinharonitraj@gmail.com';
-};
+const HEAVY_GAMES = [
+  {
+    id: 'battlearena',
+    name: 'Battle Arena',
+    description: 'Turn-based combat RPG',
+    icon: '⚔️',
+    route: '/games/rpg',
+    difficulty: 'Hard',
+    players: '1' as const,
+    estimatedTime: '30+ min'
+  },
+  {
+    id: 'dungeoncrawlers',
+    name: 'Dungeon Crawlers',
+    description: 'Explore dungeons and fight monsters',
+    icon: '🏯',
+    route: '/games/rpg',
+    difficulty: 'Hard',
+    players: '1' as const,
+    estimatedTime: '30+ min'
+  }
+];
 
 export const Home: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const { stats, loading: statsLoading } = usePlayerStats(user?.email || '');
-  const { history, loading: historyLoading } = useGameHistory(user?.email || '', 5);
-  const [greeting, setGreeting] = useState('');
+  const { stats, loading: statsLoading } = usePlayerStats();
+  const { history, loading: historyLoading } = useGameHistory();
+  const [filter, setFilter] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
 
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) setGreeting('Good morning');
-    else if (hour < 18) setGreeting('Good afternoon');
-    else setGreeting('Good evening');
-  }, []);
+  const filteredGames = SIMPLE_GAMES.filter(game => 
+    filter === 'all' || game.difficulty.toLowerCase() === filter
+  );
 
-  const yourName = PARTNER_NAMES[user?.email as keyof typeof PARTNER_NAMES] || 'Player';
-  const partnerName = PARTNER_NAMES[getPartnerEmail(user?.email || '') as keyof typeof PARTNER_NAMES] || 'Partner';
-
-  const totalGames = (stats?.wins || 0) + (stats?.losses || 0) + (stats?.draws || 0);
-  const winRate = totalGames > 0 ? ((stats?.wins || 0) / totalGames * 100).toFixed(1) : '0';
+  const totalGames = stats.totalGames;
+  const winRate = totalGames > 0 ? ((stats.wins / totalGames) * 100).toFixed(1) : '0.0';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Hero Section */}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Gamepad2 className="w-10 h-10 text-purple-600 dark:text-purple-400" />
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-                {greeting}, {yourName}! 💕
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Ready to play with {partnerName}?
-              </p>
-            </div>
-          </div>
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+            Welcome, {user?.displayName}! 🎉
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">Choose a game to play with your partner</p>
+        </div>
 
-          {/* Quick Stats Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700">
+        {!statsLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <Target className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </div>
+                <Trophy className="w-8 h-8 text-yellow-600" />
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {statsLoading ? '...' : totalGames}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Games Played</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Games</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalGames}</p>
                 </div>
               </div>
             </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <Trophy className="w-6 h-6 text-green-600 dark:text-green-400" />
-                </div>
+                <Target className="w-8 h-8 text-green-600" />
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {statsLoading ? '...' : stats?.wins || 0}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Wins</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {statsLoading ? '...' : `${winRate}%`}
-                  </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Win Rate</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{winRate}%</p>
                 </div>
               </div>
             </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
-                  <Heart className="w-6 h-6 text-pink-600 dark:text-pink-400" />
-                </div>
+                <Swords className="w-8 h-8 text-blue-600" />
                 <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {statsLoading ? '...' : stats?.favorite_game || 'None'}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Favorite Game</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Wins</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.wins}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Clock className="w-8 h-8 text-purple-600" />
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Favorite</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{stats.favoriteGame}</p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Games Grid - Takes 2 columns */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-6">
-              <Sparkles className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Simple Games
-              </h2>
-              <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-semibold rounded-full">
-                8 Games
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {GAMES.map((game) => (
-                <GameCard key={game.id} game={game} />
-              ))}
-            </div>
-
-            {/* Coming Soon Section - Now Clickable! */}
-            <div 
-              onClick={() => navigate('/rpg')}
-              className="mt-8 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-dashed border-purple-300 dark:border-purple-700 cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-300 group"
+        <div className="mb-6 flex gap-2">
+          {(['all', 'easy', 'medium', 'hard'] as const).map((level) => (
+            <button
+              key={level}
+              onClick={() => setFilter(level)}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                filter === level
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
             >
-              <div className="flex items-start gap-4">
-                <Crown className="w-8 h-8 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-1 group-hover:animate-bounce" />
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                    RPG Adventures Coming Soon! 🎮✨
-                    <ArrowRight className="w-5 h-5 text-purple-600 dark:text-purple-400 group-hover:translate-x-2 transition-transform" />
-                  </h3>
-                  <p className="text-gray-700 dark:text-gray-300 mb-3">
-                    Two amazing adventures are in development:
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🌸</span>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Heartbound Adventures</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Explore magical islands together in this cozy romantic RPG
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🔍</span>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Mystery Partners</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Solve thrilling detective cases as a couple
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 text-sm font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
-                    Click to learn more
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-            </div>
+              {level.charAt(0).toUpperCase() + level.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Simple Games</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            {filteredGames.map((game) => (
+              <Link key={game.id} to={game.route}>
+                <GameCard {...game} />
+              </Link>
+            ))}
           </div>
 
-          {/* Sidebar - Takes 1 column */}
-          <div className="space-y-6">
-            {/* Recent Activity */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Recent Games
-                </h3>
-              </div>
-
-              {historyLoading ? (
-                <div className="flex justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              ) : history && history.length > 0 ? (
-                <div className="space-y-3">
-                  {history.map((game, idx) => {
-                    const isWin = game.winner === user?.email;
-                    const isDraw = game.winner === null;
-                    
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
-                            isWin 
-                              ? 'bg-green-100 dark:bg-green-900/30' 
-                              : isDraw 
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30'
-                              : 'bg-red-100 dark:bg-red-900/30'
-                          }`}>
-                            {GAMES.find(g => g.id === game.game_type)?.thumbnail || '🎮'}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                              {GAMES.find(g => g.id === game.game_type)?.title || 'Game'}
-                            </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
-                              {new Date(game.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          {isWin ? (
-                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded">
-                              Win
-                            </span>
-                          ) : isDraw ? (
-                            <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-semibold rounded">
-                              Draw
-                            </span>
-                          ) : (
-                            <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold rounded">
-                              Loss
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Gamepad2 className="w-12 h-12 text-gray-400 dark:text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">
-                    No games played yet
-                  </p>
-                  <p className="text-gray-500 dark:text-gray-500 text-xs mt-1">
-                    Start playing to see your history!
-                  </p>
-                </div>
-              )}
-
-              {history && history.length > 0 && (
-                <button
-                  onClick={() => navigate('/lobby')}
-                  className="w-full mt-4 py-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors text-sm font-semibold"
-                >
-                  View All History →
-                </button>
-              )}
-            </div>
-
-            {/* Quick Tips */}
-            <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-md p-6 text-white">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap className="w-5 h-5" />
-                <h3 className="text-lg font-bold">Pro Tips</h3>
-              </div>
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-start gap-2">
-                  <span>💡</span>
-                  <span>Try <strong>TriviaQuiz</strong> - create custom questions for each other!</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>🎯</span>
-                  <span><strong>WordScramble</strong> has time bonuses - solve faster for more points!</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>🧠</span>
-                  <span><strong>MemoryMatch</strong> has 3 themes to choose from</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span>🎨</span>
-                  <span><strong>Pictionary</strong> is perfect for laughs and creativity</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Love Meter */}
-            <div className="bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl shadow-md p-6 text-white">
-              <div className="flex items-center gap-2 mb-3">
-                <Heart className="w-5 h-5" />
-                <h3 className="text-lg font-bold">Bond Level</h3>
-              </div>
-              <div className="text-center">
-                <p className="text-4xl font-bold mb-2">❤️ Level {Math.min(Math.floor((stats?.wins || 0) / 5) + 1, 100)}</p>
-                <p className="text-sm opacity-90">
-                  Play more games to strengthen your bond!
-                </p>
-                <div className="mt-4 bg-white/20 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="bg-white h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(((stats?.wins || 0) % 5) * 20, 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs mt-2 opacity-75">
-                  {5 - ((stats?.wins || 0) % 5)} wins to next level
-                </p>
-              </div>
-            </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">RPG Games</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {HEAVY_GAMES.map((game) => (
+              <Link key={game.id} to={game.route}>
+                <GameCard {...game} />
+              </Link>
+            ))}
           </div>
         </div>
+
+        {!historyLoading && history.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Recent Games</h2>
+            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm overflow-hidden">
+              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                {history.slice(0, 5).map((game) => (
+                  <div key={game.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{game.game_type}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          vs {game.player_2_email}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-semibold ${
+                          game.winner_email === user?.email
+                            ? 'text-green-600 dark:text-green-400'
+                            : game.winner_email === null
+                            ? 'text-yellow-600 dark:text-yellow-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {game.winner_email === user?.email ? 'Won' : game.winner_email === null ? 'Draw' : 'Lost'}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(game.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
