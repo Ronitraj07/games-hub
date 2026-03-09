@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Exclude heavy games entirely
+src/components/heavy-games/
+src/pages/RPGHub.tsx
+src/hooks/supabase/useCharacter.ts
+src/hooks/supabase/useCombat.ts
+src/hooks/supabase/useInventory.ts
+src/hooks/supabase/useSkills.ts
