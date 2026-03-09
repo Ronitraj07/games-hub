@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/hooks/shared/useAuth';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { Celebration, MiniCelebration } from '@/components/shared/Celebration';
+import { playClick, playFlip, playMatch, playWrong, playWin } from '@/utils/sounds';
 import { Brain, Trophy, Users, RotateCcw } from 'lucide-react';
 
 interface Card {
@@ -41,7 +43,6 @@ const generateCards = (gridSize: 4 | 6, theme: keyof typeof EMOJI_SETS = 'romant
   const symbols = EMOJI_SETS[theme].slice(0, pairCount);
   const pairs = [...symbols, ...symbols];
   
-  // Fisher-Yates shuffle
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
@@ -59,6 +60,8 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
   const { user } = useAuth();
   const [gridSize, setGridSize] = useState<4 | 6>(4);
   const [theme, setTheme] = useState<keyof typeof EMOJI_SETS>('romantic');
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [showMiniCelebration, setShowMiniCelebration] = useState(false);
 
   const initialState: MemoryMatchGameState = {
     cards: [],
@@ -77,6 +80,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
   );
 
   const startGame = () => {
+    playClick();
     const cards = generateCards(gridSize, theme);
     updateGameState({
       ...initialState,
@@ -95,6 +99,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
     const card = gameState.cards[cardId];
     if (card.isFlipped || card.isMatched || gameState.flippedCards.length >= 2) return;
 
+    playFlip();
     const newFlippedCards = [...gameState.flippedCards, cardId];
     const newCards = gameState.cards.map(c => 
       c.id === cardId ? { ...c, isFlipped: true } : c
@@ -115,7 +120,10 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
       };
 
       if (firstCard.symbol === secondCard.symbol) {
-        // Match found!
+        playMatch();
+        setShowMiniCelebration(true);
+        setTimeout(() => setShowMiniCelebration(false), 1000);
+
         const matchedCards = newCards.map(c =>
           c.id === firstId || c.id === secondId ? { ...c, isMatched: true } : c
         );
@@ -129,9 +137,10 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
           players: updatedPlayers
         });
 
-        // Check if game is complete
         if (matchedCards.every(c => c.isMatched)) {
           setTimeout(() => {
+            playWin();
+            setShowCelebration(true);
             updateGameState({
               ...gameState,
               cards: matchedCards,
@@ -141,7 +150,7 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
           }, 500);
         }
       } else {
-        // No match - flip back after delay
+        playWrong();
         updateGameState({
           ...gameState,
           cards: newCards,
@@ -171,6 +180,8 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
   };
 
   const resetGame = () => {
+    playClick();
+    setShowCelebration(false);
     updateGameState(initialState);
   };
 
@@ -198,9 +209,20 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
   const currentPlayerData = gameState.players[user?.email || ''] || { score: 0, moves: 0 };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-cyan-500 p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-blue-900 dark:to-cyan-900 p-4">
+      <Celebration
+        show={showCelebration}
+        type="win"
+        message="All Pairs Found! 🎉"
+        onComplete={() => setShowCelebration(false)}
+      />
+      <MiniCelebration
+        show={showMiniCelebration}
+        message="Match!"
+        icon="heart"
+      />
+
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 max-w-4xl w-full">
-        {/* Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
             <Brain className="w-8 h-8 text-white" />
@@ -209,16 +231,14 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
           <p className="text-gray-600 dark:text-gray-400">Find matching pairs!</p>
         </div>
 
-        {/* Waiting State */}
         {gameState.status === 'waiting' && (
           <div className="space-y-6">
-            {/* Grid Size Selection */}
             <div className="bg-blue-50 dark:bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-blue-700 dark:text-blue-400">Grid Size:</h2>
               <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setGridSize(4)}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  onClick={() => { playClick(); setGridSize(4); }}
+                  className={`p-4 rounded-lg border-2 transition-all hover:scale-105 ${
                     gridSize === 4
                       ? 'border-blue-600 bg-blue-100 dark:bg-blue-900/30'
                       : 'border-gray-300 dark:border-gray-700 hover:border-blue-400'
@@ -228,8 +248,8 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">8 pairs - Easy</p>
                 </button>
                 <button
-                  onClick={() => setGridSize(6)}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  onClick={() => { playClick(); setGridSize(6); }}
+                  className={`p-4 rounded-lg border-2 transition-all hover:scale-105 ${
                     gridSize === 6
                       ? 'border-blue-600 bg-blue-100 dark:bg-blue-900/30'
                       : 'border-gray-300 dark:border-gray-700 hover:border-blue-400'
@@ -241,15 +261,14 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
               </div>
             </div>
 
-            {/* Theme Selection */}
             <div className="bg-blue-50 dark:bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-blue-700 dark:text-blue-400">Theme:</h2>
               <div className="grid grid-cols-3 gap-4">
                 {(Object.keys(EMOJI_SETS) as Array<keyof typeof EMOJI_SETS>).map((t) => (
                   <button
                     key={t}
-                    onClick={() => setTheme(t)}
-                    className={`p-4 rounded-lg border-2 transition-all ${
+                    onClick={() => { playClick(); setTheme(t); }}
+                    className={`p-4 rounded-lg border-2 transition-all hover:scale-105 ${
                       theme === t
                         ? 'border-blue-600 bg-blue-100 dark:bg-blue-900/30'
                         : 'border-gray-300 dark:border-gray-700 hover:border-blue-400'
@@ -264,17 +283,15 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
 
             <button
               onClick={startGame}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-lg transition-colors"
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-lg transition-all hover:scale-105 active:scale-95"
             >
               Start Game
             </button>
           </div>
         )}
 
-        {/* Active Game */}
         {gameState.status === 'active' && (
           <div className="space-y-6">
-            {/* Stats */}
             <div className="flex justify-around items-center bg-blue-50 dark:bg-gray-800 rounded-lg p-4">
               <div className="text-center">
                 <Trophy className="w-6 h-6 text-yellow-600 mx-auto mb-1" />
@@ -295,7 +312,6 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
               </div>
             </div>
 
-            {/* Card Grid */}
             <div className={`grid gap-3 ${
               gameState.gridSize === 4 ? 'grid-cols-4' : 'grid-cols-6'
             }`}>
@@ -309,14 +325,14 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
                       ? 'bg-green-200 dark:bg-green-900/30 scale-90 opacity-50'
                       : card.isFlipped
                       ? 'bg-blue-100 dark:bg-blue-900/30 scale-105'
-                      : 'bg-gradient-to-br from-blue-400 to-cyan-400 hover:scale-105 hover:shadow-lg'
+                      : 'bg-gradient-to-br from-blue-400 to-cyan-400 dark:from-blue-600 dark:to-cyan-600 hover:scale-105 hover:shadow-lg'
                   } disabled:cursor-not-allowed`}
                 >
                   <div className="flex items-center justify-center h-full">
                     {card.isFlipped || card.isMatched ? (
-                      <span className="text-4xl md:text-5xl">{card.symbol}</span>
+                      <span className="text-4xl md:text-5xl animate-pop-in">{card.symbol}</span>
                     ) : (
-                      <span className="text-2xl">?</span>
+                      <span className="text-2xl text-white">?</span>
                     )}
                   </div>
                 </button>
@@ -325,10 +341,9 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
           </div>
         )}
 
-        {/* Finished State */}
         {gameState.status === 'finished' && (
           <div className="space-y-6 text-center">
-            <div className="text-6xl mb-4">🎉</div>
+            <div className="text-6xl mb-4 animate-bounce-subtle">🎉</div>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Congratulations!</h2>
             
             <div className="bg-gradient-to-r from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30 rounded-xl p-6 space-y-4">
@@ -350,14 +365,13 @@ export const MemoryMatch: React.FC<MemoryMatchProps> = ({ sessionId }) => {
 
             <button
               onClick={resetGame}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-lg transition-colors"
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-lg transition-all hover:scale-105 active:scale-95"
             >
               Play Again
             </button>
           </div>
         )}
 
-        {/* Footer */}
         <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
           <p>Playing as: {user?.email}</p>
         </div>
