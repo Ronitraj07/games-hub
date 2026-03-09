@@ -11,13 +11,15 @@ import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { GameLobby } from './pages/GameLobby';
 
-// Simple Games
+// Simple Games - ALL 8 COMPLETE!
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
 import { WordScramble } from './components/simple-games/WordScramble/WordScramble';
 import { MemoryMatch } from './components/simple-games/MemoryMatch/MemoryMatch';
-
-// Heavy Games
-import { BattleArena } from './components/heavy-games/BattleArena/BattleArena';
+import { TriviaQuiz } from './components/simple-games/TriviaQuiz/TriviaQuiz';
+import { Connect4 } from './components/simple-games/Connect4/Connect4';
+import { RockPaperScissors } from './components/simple-games/RockPaperScissors/RockPaperScissors';
+import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
+import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
 
 function App() {
   return (
@@ -60,7 +62,7 @@ function App() {
             }
           />
           
-          {/* Simple Game routes */}
+          {/* Simple Game Routes - ALL 8 GAMES */}
           <Route
             path="/games/tictactoe"
             element={
@@ -91,14 +93,52 @@ function App() {
               </AuthGuard>
             }
           />
-
-          {/* Heavy Game routes */}
           <Route
-            path="/games/battle-arena"
+            path="/games/trivia"
             element={
               <AuthGuard>
                 <Layout>
-                  <BattleArena />
+                  <TriviaQuiz />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/connect4"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <Connect4 />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/rps"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <RockPaperScissors />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/pictionary"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <Pictionary />
+                </Layout>
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/games/mathduel"
+            element={
+              <AuthGuard>
+                <Layout>
+                  <MathDuel />
                 </Layout>
               </AuthGuard>
             }
