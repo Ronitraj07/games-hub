@@ -14,7 +14,8 @@ import {
   Heart,
   Sparkles,
   Crown,
-  Zap
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 import type { GameCard as GameCardType } from '@/types/shared.types';
 
@@ -221,13 +222,17 @@ export const Home: React.FC = () => {
               ))}
             </div>
 
-            {/* Coming Soon Section */}
-            <div className="mt-8 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-dashed border-purple-300 dark:border-purple-700">
+            {/* Coming Soon Section - Now Clickable! */}
+            <div 
+              onClick={() => navigate('/rpg')}
+              className="mt-8 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-dashed border-purple-300 dark:border-purple-700 cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-300 group"
+            >
               <div className="flex items-start gap-4">
-                <Crown className="w-8 h-8 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                <Crown className="w-8 h-8 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-1 group-hover:animate-bounce" />
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                     RPG Adventures Coming Soon! 🎮✨
+                    <ArrowRight className="w-5 h-5 text-purple-600 dark:text-purple-400 group-hover:translate-x-2 transition-transform" />
                   </h3>
                   <p className="text-gray-700 dark:text-gray-300 mb-3">
                     Two amazing adventures are in development:
@@ -251,6 +256,10 @@ export const Home: React.FC = () => {
                         </p>
                       </div>
                     </div>
+                  </div>
+                  <div className="mt-4 text-sm font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                    Click to learn more
+                    <ArrowRight className="w-4 h-4" />
                   </div>
                 </div>
               </div>
