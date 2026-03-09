@@ -11,6 +11,10 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { GameLobby } from './pages/GameLobby';
+import { RPGHub } from './pages/RPGHub';
+
+// RPG Games
+import { HeartboundAdventures, MysteryPartners } from './pages/rpg';
 
 // Simple Games - ALL 8 COMPLETE!
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
@@ -59,6 +63,40 @@ function App() {
                 <AuthGuard>
                   <Layout>
                     <GameLobby />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+
+            {/* RPG Hub */}
+            <Route
+              path="/rpg"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <RPGHub />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+
+            {/* RPG Games */}
+            <Route
+              path="/rpg/heartbound"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <HeartboundAdventures />
+                  </Layout>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/rpg/mystery"
+              element={
+                <AuthGuard>
+                  <Layout>
+                    <MysteryPartners />
                   </Layout>
                 </AuthGuard>
               }
