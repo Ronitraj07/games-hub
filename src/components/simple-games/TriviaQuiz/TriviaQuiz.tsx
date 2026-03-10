@@ -6,45 +6,62 @@ import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
 import { RefreshCw, ArrowLeft, Clock, Trophy, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
+import type { GameMode } from '@/components/shared/GameLobby';
 
-// ───────────────── Question bank ─────────────────
+// ───────────────── Romantic Question Bank ─────────────────
 const ALL_QUESTIONS = [
-  // Geography
-  {q:'What is the capital of France?',         options:['London','Berlin','Paris','Rome'],                answer:2,category:'🌍 Geography'},
-  {q:'What is the largest ocean on Earth?',    options:['Atlantic','Indian','Arctic','Pacific'],          answer:3,category:'🌍 Geography'},
-  {q:'What is the longest river in the world?',options:['Amazon','Nile','Yangtze','Mississippi'],         answer:1,category:'🌍 Geography'},
-  {q:'Which country has the most natural lakes?',options:['USA','Canada','Russia','Brazil'],               answer:1,category:'🌍 Geography'},
-  {q:'What is the smallest country in the world?',options:['Monaco','Liechtenstein','Vatican City','San Marino'],answer:2,category:'🌍 Geography'},
-  // Science
-  {q:'What gas do plants absorb from the air?',options:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen'],  answer:2,category:'🌱 Science'},
-  {q:'What is the chemical symbol for Gold?',  options:['Go','Gd','Au','Ag'],                              answer:2,category:'🌱 Science'},
-  {q:'How many bones are in the human body?',  options:['196','206','216','226'],                          answer:1,category:'🌱 Science'},
-  {q:'What is the speed of light (km/s)?',     options:['200,000','300,000','400,000','500,000'],          answer:1,category:'🌱 Science'},
-  {q:'What planet is known as the Red Planet?',options:['Venus','Mars','Jupiter','Saturn'],                answer:1,category:'🌱 Science'},
-  // History
-  {q:'In which year did WW2 end?',             options:['1943','1944','1945','1946'],                      answer:2,category:'📚 History'},
-  {q:'Who was the first US President?',        options:['Lincoln','Jefferson','Washington','Adams'],       answer:2,category:'📚 History'},
-  {q:'Which empire built the Colosseum?',      options:['Greek','Ottoman','Roman','Persian'],              answer:2,category:'📚 History'},
-  // Math
-  {q:'What is 7 × 8?',                          options:['54','56','58','64'],                              answer:1,category:'🔢 Math'},
-  {q:'How many sides does a hexagon have?',    options:['5','6','7','8'],                                  answer:1,category:'🔢 Math'},
-  {q:'What is the square root of 144?',        options:['10','11','12','13'],                              answer:2,category:'🔢 Math'},
-  {q:'What is 15% of 200?',                    options:['25','30','35','40'],                              answer:1,category:'🔢 Math'},
-  // Art & Culture
-  {q:'Who painted the Mona Lisa?',             options:['Van Gogh','Picasso','Da Vinci','Monet'],          answer:2,category:'🎨 Art'},
-  {q:'Which country invented pizza?',          options:['Greece','France','Italy','Spain'],                answer:2,category:'🎨 Art'},
-  // Animals
-  {q:'How many hearts does an octopus have?',  options:['1','2','3','4'],                                  answer:2,category:'🐙 Animals'},
-  {q:'What is the fastest land animal?',       options:['Lion','Cheetah','Horse','Leopard'],               answer:1,category:'🐙 Animals'},
-  {q:'How many strings does a guitar have?',   options:['4','5','6','7'],                                  answer:2,category:'🎸 Music'},
-  // Love & Relationships
-  {q:'What is the traditional gift for a 25th wedding anniversary?',options:['Gold','Silver','Diamond','Pearl'],answer:1,category:'💕 Love'},
-  {q:'Which flower is most associated with love?',options:['Tulip','Lily','Rose','Daisy'],                 answer:2,category:'💕 Love'},
-  {q:'What is the language of flowers called?',options:['Floristry','Floriography','Botany','Phytology'],  answer:1,category:'💕 Love'},
+  // 💕 Anniversaries & Traditions
+  { q: 'What is the traditional gift for a 1st wedding anniversary?',      options: ['Paper','Cotton','Leather','Wood'],                    answer: 0, category: '💕 Anniversaries' },
+  { q: 'What is the traditional gift for a 5th wedding anniversary?',      options: ['Wood','Silver','Gold','Wood'],                        answer: 0, category: '💕 Anniversaries' },
+  { q: 'What is the traditional gift for a 25th wedding anniversary?',     options: ['Gold','Silver','Diamond','Pearl'],                    answer: 1, category: '💕 Anniversaries' },
+  { q: 'What is the traditional gift for a 50th wedding anniversary?',     options: ['Silver','Ruby','Gold','Diamond'],                     answer: 2, category: '💕 Anniversaries' },
+  { q: 'What is the traditional gift for a 10th wedding anniversary?',     options: ['Tin/Aluminium','Copper','Bronze','Iron'],             answer: 0, category: '💕 Anniversaries' },
+  { q: 'Valentine\'s Day is celebrated on which date?',                     options: ['12 Feb','13 Feb','14 Feb','15 Feb'],                  answer: 2, category: '💕 Anniversaries' },
+  { q: 'Who is the patron saint of love?',                                 options: ['St. George','St. Valentine','St. Nicholas','St. Andrew'], answer: 1, category: '💕 Anniversaries' },
+
+  // 🌹 Romance & Flowers
+  { q: 'Which flower is most associated with romantic love?',              options: ['Tulip','Lily','Rose','Daisy'],                        answer: 2, category: '🌹 Romance' },
+  { q: 'What colour rose traditionally means "I love you"?',              options: ['White','Yellow','Pink','Red'],                        answer: 3, category: '🌹 Romance' },
+  { q: 'What colour rose symbolises new beginnings?',                     options: ['Red','White','Orange','Purple'],                      answer: 1, category: '🌹 Romance' },
+  { q: 'What is the language of flowers called?',                         options: ['Floristry','Floriography','Botany','Phytology'],      answer: 1, category: '🌹 Romance' },
+  { q: 'Which flower means "You are on my mind"?',                        options: ['Sunflower','Pansy','Orchid','Tulip'],                 answer: 1, category: '🌹 Romance' },
+  { q: 'Which gemstone is traditionally given on a proposal?',            options: ['Ruby','Emerald','Diamond','Sapphire'],                answer: 2, category: '🌹 Romance' },
+  { q: 'Which city is most famous as the "City of Love"?',               options: ['Venice','Rome','Paris','Barcelona'],                  answer: 2, category: '🌹 Romance' },
+
+  // 🎬 Romantic Movies & Songs
+  { q: 'Which film features the line "You had me at hello"?',             options: ['Pretty Woman','Jerry Maguire','Titanic','Notting Hill'], answer: 1, category: '🎬 Romance Films' },
+  { q: 'In Titanic, what is the name of the female lead?',                options: ['Rachel','Rose','Ruby','Rita'],                        answer: 1, category: '🎬 Romance Films' },
+  { q: 'Which Shakespeare play features the balcony scene?',              options: ['A Midsummer Night\'s Dream','Othello','Romeo & Juliet','Hamlet'], answer: 2, category: '🎬 Romance Films' },
+  { q: 'In "The Notebook", where do Noah and Allie share their first kiss?', options: ['On a bridge','In the rain','In a boat','On a ferris wheel'], answer: 3, category: '🎬 Romance Films' },
+  { q: 'Which Adele song starts with "Hello, it\'s me"?',                 options: ['Someone Like You','Rolling in the Deep','Hello','Skyfall'], answer: 2, category: '🎬 Romance Films' },
+  { q: 'Which romantic movie takes place mostly on a cruise ship?',        options: ['Ghost','Titanic','Out of Africa','Grease'],          answer: 1, category: '🎬 Romance Films' },
+
+  // 💑 Relationship Knowledge
+  { q: 'According to researchers, how long does it typically take to fall in love?', options: ['A few seconds','A few minutes','A few days','A few weeks'], answer: 0, category: '💑 Relationships' },
+  { q: 'What hormone is known as the "love hormone"?',                    options: ['Serotonin','Dopamine','Oxytocin','Adrenaline'],       answer: 2, category: '💑 Relationships' },
+  { q: 'Which country has the highest rate of marriage in the world?',    options: ['USA','India','Egypt','Maldives'],                     answer: 2, category: '💑 Relationships' },
+  { q: 'What does the word "soulmate" most closely mean?',                options: ['Best friend','Perfect romantic partner','Twin','Companion'], answer: 1, category: '💑 Relationships' },
+  { q: 'In psychology, what are the three components of love according to Sternberg?', options: ['Trust, Respect, Loyalty','Passion, Intimacy, Commitment','Attraction, Affection, Communication','Care, Trust, Honesty'], answer: 1, category: '💑 Relationships' },
+  { q: 'What is a "honeymoon phase" in a relationship?',                  options: ['The wedding ceremony','Early blissful stage of romance','A holiday tradition','Anniversary celebration'], answer: 1, category: '💑 Relationships' },
+
+  // 🗺️ Romantic Destinations
+  { q: 'Which Italian city is famous for gondola rides with loved ones?', options: ['Rome','Florence','Venice','Milan'],                   answer: 2, category: '🗺️ Romantic Places' },
+  { q: 'The Taj Mahal was built as a symbol of what?',                    options: ['Military power','Eternal love','Religious faith','Royal wealth'], answer: 1, category: '🗺️ Romantic Places' },
+  { q: 'Which Greek island is famous for white buildings and sunsets?',   options: ['Crete','Rhodes','Corfu','Santorini'],                 answer: 3, category: '🗺️ Romantic Places' },
+  { q: 'Which city has the famous "love locks" bridge (Pont des Arts)?',  options: ['London','Paris','Rome','Prague'],                     answer: 1, category: '🗺️ Romantic Places' },
+  { q: 'Which South Asian country is the top honeymoon destination?',     options: ['Sri Lanka','Nepal','Maldives','Bhutan'],             answer: 2, category: '🗺️ Romantic Places' },
+
+  // 🧠 Love Trivia
+  { q: 'Which organ is traditionally associated with love in art?',       options: ['Brain','Lungs','Heart','Stomach'],                   answer: 2, category: '🧠 Love Trivia' },
+  { q: 'What does "XOXO" stand for?',                                     options: ['Love & Hugs','Kisses & Hugs','Hugs & Kisses','Love & Kisses'], answer: 2, category: '🧠 Love Trivia' },
+  { q: 'In which country did chocolate become associated with Valentine\'s Day gifts?', options: ['Belgium','Switzerland','USA','France'], answer: 2, category: '🧠 Love Trivia' },
+  { q: 'How many love languages are there according to Gary Chapman?',     options: ['3','4','5','6'],                                     answer: 2, category: '🧠 Love Trivia' },
+  { q: 'Which of these is NOT one of the 5 love languages?',             options: ['Words of Affirmation','Gift Giving','Eye Contact','Quality Time'], answer: 2, category: '🧠 Love Trivia' },
+  { q: 'What is the Roman god of love called?',                           options: ['Eros','Cupid','Venus','Apollo'],                      answer: 1, category: '🧠 Love Trivia' },
+  { q: 'What is the Greek goddess of love called?',                       options: ['Hera','Athena','Aphrodite','Persephone'],            answer: 2, category: '🧠 Love Trivia' },
 ];
 
-const CATEGORIES = ['⭐ All', '🌍 Geography', '🌱 Science', '📚 History', '🔢 Math', '🎨 Art', '🐙 Animals', '💕 Love'];
+const CATEGORIES = ['⭐ All', '💕 Anniversaries', '🌹 Romance', '🎬 Romance Films', '💑 Relationships', '🗺️ Romantic Places', '🧠 Love Trivia'];
 const TIME_PER = 20;
 const TOTAL_Q  = 10;
 
@@ -62,12 +79,10 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const userKey  = user?.email ?? null;
 
-  const [gameMode,   setGameMode]   = useState<GameMode|null>(null);
-  const [category,   setCategory]   = useState('⭐ All');
-  const [showCatPicker, setShowCatPicker] = useState(false);
+  const [gameMode,  setGameMode]  = useState<GameMode|null>(null);
+  const [category,  setCategory]  = useState('⭐ All');
 
   // ─── Solo state ───
-  const [questions]  = useState(() => [...ALL_QUESTIONS].sort(() => Math.random() - .5));
   const [current,    setCurrent]    = useState(0);
   const [selected,   setSelected]   = useState<number|null>(null);
   const [score,      setScore]      = useState(0);
@@ -81,7 +96,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return [...pool].sort(() => Math.random() - .5).slice(0, TOTAL_Q);
   }, [category]);
 
-  const [activeQ, setActiveQ] = useState<typeof ALL_QUESTIONS>(filteredQ);
+  const [activeQ, setActiveQ] = useState<typeof ALL_QUESTIONS>(() => filteredQ());
 
   // ─── Online state ───
   const safeSession = sessionId
@@ -156,7 +171,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent">❓ Trivia Quiz</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">💕 Romantic Trivia</h1>
           <div className="w-10"/>
         </div>
 
@@ -168,7 +183,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               <button key={c} onClick={() => setCategory(c)}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                   category === c
-                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md'
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
                     : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 }`}>
                 {c}
@@ -179,10 +194,10 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
         <div className="flex items-center justify-center min-h-[50vh]">
           <GameLobby
-            gameName="Trivia Quiz"
-            gameIcon="❓"
-            gradient="from-blue-500 to-indigo-500"
-            description="10 questions, 20 seconds each. First to answer gets bonus points!"
+            gameName="Romantic Trivia"
+            gameIcon="💕"
+            gradient="from-pink-500 to-rose-500"
+            description="10 romantic questions, 20 seconds each. How well do you know love?"
             supportsSolo
             supportsAI={false}
             gameType="TriviaQuiz"
@@ -204,15 +219,15 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md w-full text-center">
-          <div className="text-6xl mb-4">{pct >= 80 ? '🏆' : pct >= 50 ? '⭐' : '📚'}</div>
+          <div className="text-6xl mb-4">{pct >= 80 ? '💖' : pct >= 50 ? '💕' : '💝'}</div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">Quiz Complete!</h2>
           {!isOnline && <p className="text-gray-500 mb-6">{correct}/{TOTAL_Q} correct</p>}
           {isOnline  && <p className="text-gray-500 mb-6">You: {myFinal} · Partner: {oppFinal}</p>}
-          <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-6 mb-6">
-            <p className="text-5xl font-bold text-blue-600 dark:text-blue-400">{myFinal}</p>
+          <div className="bg-pink-50 dark:bg-pink-900/30 rounded-xl p-6 mb-6">
+            <p className="text-5xl font-bold text-pink-600 dark:text-pink-400">{myFinal}</p>
             <p className="text-gray-500 mt-1">Your Score</p>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mt-3">
-              <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
+              <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-3 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
             </div>
           </div>
           {!isOnline && (
@@ -231,7 +246,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           )}
           <div className="flex gap-3">
             <button onClick={() => { setGameMode(null); setGameOver(false); }}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
+              className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <RefreshCw size={18}/> Play Again
             </button>
             <Link to="/" className="flex-1 glass-btn text-gray-700 dark:text-gray-300 font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
@@ -258,8 +273,8 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
           <button onClick={() => setGameMode(null)} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent">❓ Trivia Quiz</h1>
-          <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18}/><span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span></div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">💕 Romantic Trivia</h1>
+          <div className="flex items-center gap-1 text-pink-500"><Trophy size={18}/><span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span></div>
         </div>
 
         <div className="flex justify-between items-center mb-4">
@@ -273,7 +288,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
         <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{q.category}</span>
+            <span className="text-sm font-medium text-pink-600 dark:text-pink-400">{q.category}</span>
             {!isOnlineActive && (
               <div className="flex items-center gap-1 font-bold text-gray-600 dark:text-gray-400">
                 <Clock size={16}/>
@@ -292,20 +307,20 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             <span className="text-xs text-gray-400">Q {qNum}/{TOTAL_Q}</span>
           </div>
           <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mb-6">
-            <div className="bg-gradient-to-r from-pink-400 to-purple-400 h-1.5 rounded-full transition-all" style={{ width: `${((qNum-1) / TOTAL_Q) * 100}%` }} />
+            <div className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 rounded-full transition-all" style={{ width: `${((qNum-1) / TOTAL_Q) * 100}%` }} />
           </div>
 
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed">{q.q}</h2>
 
           {myAnswered && isOnlineActive ? (
-            <div className="flex items-center justify-center gap-3 py-8 text-purple-500">
+            <div className="flex items-center justify-center gap-3 py-8 text-pink-500">
               <Loader2 size={20} className="animate-spin"/>
               <span>Waiting for partner…</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {q.options.map((option, i) => {
-                let style = 'glass-btn border-0 hover:ring-2 hover:ring-blue-400';
+                let style = 'glass-btn border-0 hover:ring-2 hover:ring-pink-400';
                 if (showResult && !isOnlineActive) {
                   if (i === q.answer) style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
                   else if (i === selected) style = 'bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
