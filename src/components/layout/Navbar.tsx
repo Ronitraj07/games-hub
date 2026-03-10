@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { APP_CONFIG, getPlayerEmoji } from '@/lib/auth-config';
-import { Home, Sun, Moon, Volume2, VolumeX, LogIn } from 'lucide-react';
+import { getPlayerEmoji } from '@/lib/auth-config';
+import { Home, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { toggleSound, isSoundEnabled } from '@/utils/sounds';
+import { GamesHubLogo } from '@/components/shared/GamesHubLogo';
 
 export const Navbar: React.FC = () => {
   const { user } = useAuth();
@@ -22,13 +23,8 @@ export const Navbar: React.FC = () => {
         <div className="flex justify-between items-center h-16">
 
           {/* Logo */}
-          <Link
-            to="/"
-            className="flex items-center gap-2 text-xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent hover:from-pink-400 hover:to-purple-400 transition-all"
-          >
-            <span className="text-2xl animate-heartbeat">🎮</span>
-            <span className="hidden sm:inline">{APP_CONFIG.APP_NAME}</span>
-            <span className="sm:hidden">GH</span>
+          <Link to="/" className="hover:opacity-90 transition-opacity">
+            <GamesHubLogo size={36} showText={true} />
           </Link>
 
           {/* Right side */}
@@ -58,14 +54,12 @@ export const Navbar: React.FC = () => {
 
             {user ? (
               <>
-                {/* Home */}
                 <Link to="/"
                   className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400 transition">
                   <Home size={18} />
                   <span className="hidden sm:inline text-sm">Home</span>
                 </Link>
 
-                {/* Profile avatar/name — click to go to /profile */}
                 <Link to="/profile"
                   className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition">
                   {user.photoURL ? (
@@ -77,12 +71,10 @@ export const Navbar: React.FC = () => {
                 </Link>
               </>
             ) : (
-              /* NOT LOGGED IN */
               <Link
                 to="/login"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold text-sm transition-all hover:scale-[1.03] active:scale-[0.97] shadow-md shadow-pink-200/50 dark:shadow-pink-900/30"
               >
-                <LogIn size={16} />
                 Sign In
               </Link>
             )}
