@@ -3,7 +3,6 @@ import { ref, onValue, set, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
 // Firebase paths cannot contain . # $ [ ]
-// Sanitize any string before using it in a path
 export const sanitizeFirebasePath = (raw: string): string =>
   raw
     .replace(/\./g, '_')
@@ -16,18 +15,34 @@ export const sanitizeFirebasePath = (raw: string): string =>
     .replace(/_{2,}/g, '_')
     .replace(/^_|_$/g, '') || 'session';
 
-// Firebase stores arrays as objects {0: val, 1: val} — convert back to arrays
+/**
+ * Firebase stores JS arrays as objects {"0": val, "1": val, ...}.
+ * Crucially, it OMITS null/undefined slots entirely, so a board like
+ * [null, 'X', null] becomes {"1": "X"} — and the naive isArrayLike
+ * reconstruction skips the null slots, leaving undefined at index 0 & 2.
+ *
+ * Fix: detect array-like objects by checking if ALL keys are numeric,
+ * then rebuild the array up to (maxKey + 1) filling missing slots with null.
+ */
 const normalizeFirebaseData = (data: any): any => {
   if (data === null || data === undefined) return data;
   if (typeof data !== 'object') return data;
   if (Array.isArray(data)) return data.map(normalizeFirebaseData);
+
   const keys = Object.keys(data);
-  const isArrayLike = keys.length > 0 && keys.every(k => !isNaN(Number(k)));
+  if (keys.length === 0) return data;
+
+  const isArrayLike = keys.every(k => /^\d+$/.test(k));
   if (isArrayLike) {
+    const maxIndex = Math.max(...keys.map(Number));
     const arr: any[] = [];
-    for (let i = 0; i < keys.length; i++) arr.push(normalizeFirebaseData(data[i]));
+    for (let i = 0; i <= maxIndex; i++) {
+      // Fill missing numeric slots (Firebase-omitted nulls) back with null
+      arr.push(i in data ? normalizeFirebaseData(data[i]) : null);
+    }
     return arr;
   }
+
   const normalized: any = {};
   for (const key of keys) normalized[key] = normalizeFirebaseData(data[key]);
   return normalized;
@@ -48,12 +63,11 @@ export const useRealtimeGame = <T>(
   initialState: T
 ) => {
   const [gameState, setGameState] = useState<T>(initialState);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const localState = useRef<T>(initialState);
-  const firebaseEnabled = useRef(isFirebaseConfigured());
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string>('');
+  const localState       = useRef<T>(initialState);
+  const firebaseEnabled  = useRef(isFirebaseConfigured());
 
-  // Always sanitize — this is the single source of truth for path safety
   const safePath = `games/${sanitizeFirebasePath(sessionId)}`;
 
   useEffect(() => {
@@ -78,10 +92,10 @@ export const useRealtimeGame = <T>(
     const unsubscribe = onValue(
       gameRef,
       (snapshot) => {
-        const raw = snapshot.val();
-        const normalized = normalizeFirebaseData(raw) || initialState;
-        setGameState(normalized);
-        localState.current = normalized;
+        const raw        = snapshot.val();
+        const normalized = normalizeFirebaseData(raw) ?? initialState;
+        setGameState(normalized as T);
+        localState.current = normalized as T;
         setLoading(false);
         setError('');
       },
@@ -100,7 +114,6 @@ export const useRealtimeGame = <T>(
     async (newState: T) => {
       setGameState(newState);
       localState.current = newState;
-
       if (!firebaseEnabled.current || !database) return;
       try {
         const gameRef = ref(database, safePath);
