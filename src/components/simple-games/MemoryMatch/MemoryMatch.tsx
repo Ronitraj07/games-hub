@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -38,12 +38,17 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const [theme, setTheme] = useState<keyof typeof EMOJI_SETS>('romantic');
   const [showCelebration, setShowCelebration] = useState(false);
   const [showMini, setShowMini] = useState(false);
+  // Ref to always hold the latest gameState for use inside setTimeout closures
+  const gameStateRef = useRef<MemoryMatchGameState | null>(null);
 
   const initialState: MemoryMatchGameState = {
     cards: [], flippedCards: [], players: {}, currentPlayer: user?.email || '', status: 'waiting', gridSize: 4, gameMode: 'solo',
   };
 
   const { gameState, updateGameState, loading } = useRealtimeGame<MemoryMatchGameState>(sessionId || 'memorymatch-game', 'memorymatch', initialState);
+
+  // Keep ref in sync with latest gameState
+  gameStateRef.current = gameState ?? null;
 
   const startGame = () => {
     playClick();
@@ -55,28 +60,52 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     const safeCards = Array.isArray(gameState.cards) ? gameState.cards : [];
     const card = safeCards[cardId];
     if (!card || card.isFlipped || card.isMatched || gameState.flippedCards.length >= 2) return;
+
     playFlip();
     const newFlipped = [...gameState.flippedCards, cardId];
     const newCards   = safeCards.map((c: Card) => c.id === cardId ? { ...c, isFlipped: true } : c);
-    const playerData = gameState.players[user?.email || ''] || { score: 0, moves: 0 };
-    const updPlayers = { ...gameState.players, [user?.email || '']: { ...playerData, moves: playerData.moves + 1 } };
+    const playerEmail = user?.email || '';
+    const playerData  = gameState.players[playerEmail] || { score: 0, moves: 0 };
+    const updPlayers  = { ...gameState.players, [playerEmail]: { ...playerData, moves: playerData.moves + 1 } };
 
     if (newFlipped.length === 2) {
       const [fId, sId] = newFlipped;
+
       if (newCards[fId].symbol === newCards[sId].symbol) {
-        playMatch(); setShowMini(true); setTimeout(() => setShowMini(false), 1000);
+        // ✅ MATCH
+        playMatch();
+        setShowMini(true);
+        setTimeout(() => setShowMini(false), 1000);
+
         const matched = newCards.map((c: Card) => c.id === fId || c.id === sId ? { ...c, isMatched: true } : c);
-        updPlayers[user?.email || ''].score = playerData.score + 1;
-        updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers });
-        if (matched.every((c: Card) => c.isMatched)) {
-          setTimeout(() => { playWin(); setShowCelebration(true); updateGameState({ ...gameState, cards: matched, status: 'finished', players: updPlayers }); }, 500);
+        const newScore = playerData.score + 1;
+        const finalPlayers = { ...updPlayers, [playerEmail]: { ...updPlayers[playerEmail], score: newScore } };
+        const isFinished = matched.every((c: Card) => c.isMatched);
+
+        updateGameState({
+          ...gameState,
+          cards: matched,
+          flippedCards: [],
+          players: finalPlayers,
+          status: isFinished ? 'finished' : 'active',
+        });
+
+        if (isFinished) {
+          setTimeout(() => { playWin(); setShowCelebration(true); }, 500);
         }
       } else {
+        // ❌ NO MATCH — show both flipped briefly, then flip back using the ref (avoids stale closure)
         playWrong();
         updateGameState({ ...gameState, cards: newCards, flippedCards: newFlipped, players: updPlayers });
+
         setTimeout(() => {
-          const reset = safeCards.map((c: Card) => c.id === fId || c.id === sId ? { ...c, isFlipped: false } : c);
-          updateGameState({ ...gameState, cards: reset, flippedCards: [], players: updPlayers });
+          const latest = gameStateRef.current;
+          if (!latest) return;
+          const latestCards = Array.isArray(latest.cards) ? latest.cards : [];
+          const reset = latestCards.map((c: Card) =>
+            c.id === fId || c.id === sId ? { ...c, isFlipped: false } : c
+          );
+          updateGameState({ ...latest, cards: reset, flippedCards: [] });
         }, 1000);
       }
     } else {
@@ -155,7 +184,11 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
           {gameState?.status === 'active' && (
             <div className="space-y-5">
               <div className="flex justify-around">
-                {[{icon: Trophy, label: 'Pairs', value: playerData.score, color: 'text-yellow-500'}, {icon: Users, label: 'Moves', value: playerData.moves, color: 'text-pink-500'}, {icon: Brain, label: 'Left', value: ((gameState.gridSize * gameState.gridSize) / 2) - playerData.score, color: 'text-purple-500'}].map(({icon: Icon, label, value, color}) => (
+                {[
+                  { icon: Trophy, label: 'Pairs',  value: playerData.score, color: 'text-yellow-500' },
+                  { icon: Users,  label: 'Moves',  value: playerData.moves, color: 'text-pink-500' },
+                  { icon: Brain,  label: 'Left',   value: ((gameState.gridSize * gameState.gridSize) / 2) - playerData.score, color: 'text-purple-500' },
+                ].map(({ icon: Icon, label, value, color }) => (
                   <div key={label} className="text-center glass rounded-xl px-5 py-3">
                     <Icon className={`w-5 h-5 ${color} mx-auto mb-1`} />
                     <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
