@@ -1,6 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ref, onValue, set, update, remove, off } from 'firebase/database';
+import { ref, onValue, set, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
+
+// Firebase stores arrays as objects {0: val, 1: val} — convert back to arrays
+const normalizeFirebaseData = (data: any): any => {
+  if (data === null || data === undefined) return data;
+  if (typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(normalizeFirebaseData);
+  // Check if it looks like an array (all keys are numeric)
+  const keys = Object.keys(data);
+  const isArrayLike = keys.length > 0 && keys.every(k => !isNaN(Number(k)));
+  if (isArrayLike) {
+    const arr = [];
+    for (let i = 0; i < keys.length; i++) {
+      arr.push(normalizeFirebaseData(data[i]));
+    }
+    return arr;
+  }
+  // Recursively normalize object values
+  const normalized: any = {};
+  for (const key of keys) {
+    normalized[key] = normalizeFirebaseData(data[key]);
+  }
+  return normalized;
+};
 
 export const useRealtimeGame = <T>(
   sessionId: string,
@@ -14,12 +37,12 @@ export const useRealtimeGame = <T>(
   useEffect(() => {
     if (!sessionId || !database) {
       setLoading(false);
+      setError('Firebase database not configured. Please add VITE_FIREBASE_DATABASE_URL to your environment variables.');
       return;
     }
 
     const gameRef = ref(database, `games/${sessionId}`);
 
-    // Initialize game if doesn't exist
     set(gameRef, initialState).catch(err => {
       console.error('Failed to initialize game:', err);
       setError(err.message);
@@ -28,8 +51,9 @@ export const useRealtimeGame = <T>(
     const unsubscribe = onValue(
       gameRef,
       (snapshot) => {
-        const data = snapshot.val();
-        setGameState(data || initialState);
+        const raw = snapshot.val();
+        const normalized = normalizeFirebaseData(raw) || initialState;
+        setGameState(normalized);
         setLoading(false);
         setError('');
       },
@@ -40,15 +64,12 @@ export const useRealtimeGame = <T>(
       }
     );
 
-    return () => {
-      off(gameRef);
-    };
+    return () => { off(gameRef); };
   }, [sessionId]);
 
   const updateGameState = useCallback(
     async (newState: T) => {
       if (!sessionId || !database) return;
-
       try {
         const gameRef = ref(database, `games/${sessionId}`);
         await set(gameRef, newState);
@@ -61,23 +82,5 @@ export const useRealtimeGame = <T>(
     [sessionId]
   );
 
-  const endGame = useCallback(async () => {
-    if (!sessionId || !database) return;
-
-    try {
-      const gameRef = ref(database, `games/${sessionId}`);
-      await remove(gameRef);
-    } catch (err: any) {
-      console.error('Failed to end game:', err);
-      throw err;
-    }
-  }, [sessionId]);
-
-  return {
-    gameState,
-    updateGameState,
-    endGame,
-    loading,
-    error,
-  };
+  return { gameState, updateGameState, loading, error };
 };
