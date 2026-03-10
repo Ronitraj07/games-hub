@@ -7,37 +7,125 @@ import { GameCard } from '@/components/games/GameCard';
 import { Trophy, Clock, Target, Swords, Sparkles } from 'lucide-react';
 
 const SIMPLE_GAMES = [
-  { id: 'tictactoe',        name: 'Tic Tac Toe',         description: 'Classic 3×3 grid battle',       icon: '❌⭕', route: '/games/tictactoe',        difficulty: 'Easy',   players: '2' as const,   estimatedTime: '2-5 min'   },
-  { id: 'wordscramble',     name: 'Word Scramble',        description: 'Unscramble words vs the clock',  icon: '🔤',  route: '/games/wordscramble',     difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
-  { id: 'memorymatch',      name: 'Memory Match',         description: 'Find matching pairs',            icon: '🃏',  route: '/games/memorymatch',      difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
-  { id: 'connect4',         name: 'Connect 4',            description: 'Connect four in a row',          icon: '🔴🔵', route: '/games/connect4',        difficulty: 'Medium', players: '2' as const,   estimatedTime: '5-10 min'  },
-  { id: 'triviaquiz',       name: 'Trivia Quiz',          description: 'Test your knowledge together',   icon: '❓',  route: '/games/triviaquiz',       difficulty: 'Medium', players: '1-2' as const, estimatedTime: '10-15 min' },
-  { id: 'rockpaperscissors',name: 'Rock Paper Scissors',  description: 'Best of 5 rounds',               icon: '✊✋✌️', route: '/games/rockpaperscissors', difficulty: 'Easy', players: '2' as const,   estimatedTime: '2-5 min'   },
-  { id: 'pictionary',       name: 'Pictionary',           description: 'Draw and guess the word',        icon: '🎨',  route: '/games/pictionary',       difficulty: 'Hard',   players: '2' as const,   estimatedTime: '10-15 min' },
-  { id: 'mathduel',         name: 'Math Duel',            description: 'Quick-fire math challenges',     icon: '🧮',  route: '/games/mathduel',         difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
+  {
+    id: 'tictactoe',
+    name: 'Tic Tac Toe',
+    description: 'Classic 3×3 grid battle',
+    icon: '💗',
+    gradient:  'from-rose-400 to-pink-500',
+    glowColor: 'shadow-rose-300/60 dark:shadow-rose-500/40',
+    route: '/games/tictactoe',
+    difficulty: 'Easy',
+    players: '2' as const,
+    estimatedTime: '2-5 min',
+  },
+  {
+    id: 'wordscramble',
+    name: 'Word Scramble',
+    description: 'Unscramble words vs the clock',
+    icon: '🔮',
+    gradient:  'from-violet-400 to-purple-600',
+    glowColor: 'shadow-violet-300/60 dark:shadow-violet-500/40',
+    route: '/games/wordscramble',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min',
+  },
+  {
+    id: 'memorymatch',
+    name: 'Memory Match',
+    description: 'Find matching pairs together',
+    icon: '🌸',
+    gradient:  'from-pink-400 to-fuchsia-500',
+    glowColor: 'shadow-pink-300/60 dark:shadow-pink-500/40',
+    route: '/games/memorymatch',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min',
+  },
+  {
+    id: 'connect4',
+    name: 'Connect 4',
+    description: 'Connect four in a row',
+    icon: '💎',
+    gradient:  'from-sky-400 to-blue-600',
+    glowColor: 'shadow-sky-300/60 dark:shadow-sky-500/40',
+    route: '/games/connect4',
+    difficulty: 'Medium',
+    players: '2' as const,
+    estimatedTime: '5-10 min',
+  },
+  {
+    id: 'triviaquiz',
+    name: 'Trivia Quiz',
+    description: 'Test your love knowledge',
+    icon: '✨',
+    gradient:  'from-amber-400 to-rose-500',
+    glowColor: 'shadow-amber-300/60 dark:shadow-amber-500/40',
+    route: '/games/triviaquiz',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '10-15 min',
+  },
+  {
+    id: 'rockpaperscissors',
+    name: 'Rock Paper Scissors',
+    description: 'Best of 5 rounds',
+    icon: '🫧',
+    gradient:  'from-teal-400 to-cyan-500',
+    glowColor: 'shadow-teal-300/60 dark:shadow-teal-500/40',
+    route: '/games/rockpaperscissors',
+    difficulty: 'Easy',
+    players: '2' as const,
+    estimatedTime: '2-5 min',
+  },
+  {
+    id: 'pictionary',
+    name: 'Pictionary',
+    description: 'Draw and guess the word',
+    icon: '🎴',
+    gradient:  'from-orange-400 to-rose-500',
+    glowColor: 'shadow-orange-300/60 dark:shadow-orange-500/40',
+    route: '/games/pictionary',
+    difficulty: 'Hard',
+    players: '2' as const,
+    estimatedTime: '10-15 min',
+  },
+  {
+    id: 'mathduel',
+    name: 'Math Duel',
+    description: 'Quick-fire math challenges',
+    icon: '⚡',
+    gradient:  'from-lime-400 to-emerald-500',
+    glowColor: 'shadow-lime-300/60 dark:shadow-emerald-500/40',
+    route: '/games/mathduel',
+    difficulty: 'Medium',
+    players: '1-2' as const,
+    estimatedTime: '5-10 min',
+  },
 ];
 
 const STAT_CARDS = [
-  { icon: Trophy,  color: 'text-yellow-500', label: 'Total Games', key: 'totalGames' as const },
-  { icon: Target,  color: 'text-pink-500',   label: 'Win Rate',    key: 'winRate'    as const },
-  { icon: Swords,  color: 'text-purple-500', label: 'Wins',        key: 'wins'       as const },
+  { icon: Trophy,  color: 'text-yellow-500', label: 'Total Games', key: 'totalGames'   as const },
+  { icon: Target,  color: 'text-pink-500',   label: 'Win Rate',    key: 'winRate'      as const },
+  { icon: Swords,  color: 'text-purple-500', label: 'Wins',        key: 'wins'         as const },
   { icon: Clock,   color: 'text-rose-400',   label: 'Favourite',   key: 'favoriteGame' as const },
 ];
 
 export const Home: React.FC = () => {
-  const { user } = useAuth();
-  const { stats, loading: statsLoading } = usePlayerStats();
+  const { user }                              = useAuth();
+  const { stats, loading: statsLoading }     = usePlayerStats();
   const { history, loading: historyLoading } = useGameHistory();
-  const [filter, setFilter] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
+  const [filter, setFilter]                  = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
 
   const filteredGames = SIMPLE_GAMES.filter(g => filter === 'all' || g.difficulty.toLowerCase() === filter);
-  const totalGames = stats.totalGames;
-  const winRate    = totalGames > 0 ? ((stats.wins / totalGames) * 100).toFixed(1) : '0.0';
+  const totalGames    = stats.totalGames;
+  const winRate       = totalGames > 0 ? ((stats.wins / totalGames) * 100).toFixed(1) : '0.0';
 
   const statValues: Record<string, string | number> = {
     totalGames,
-    winRate: `${winRate}%`,
-    wins:    stats.wins,
+    winRate:      `${winRate}%`,
+    wins:         stats.wins,
     favoriteGame: stats.favoriteGame || '—',
   };
 
