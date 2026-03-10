@@ -1,175 +1,97 @@
 import React, { useState, useCallback } from 'react';
-import { ArrowLeft, Plus, X, Shuffle, Lock } from 'lucide-react';
+import { ArrowLeft, Plus, X, Shuffle, Lock, Copy, Check, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useAuth } from '@/contexts/AuthContext';
 
-// ─────────────────── Card Decks ───────────────────
+// ─────────────────────────────────────────────────────────
+//  DECKS
+// ─────────────────────────────────────────────────────────
 const DECKS = {
-  sweet: {
-    label: '🌸 Sweet',
-    color: 'from-pink-400 to-rose-400',
-    bg:    'bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20',
+  romantic: {
+    label: '💕 Romantic',
+    color: 'from-pink-400 to-rose-500',
+    bg: 'bg-gradient-to-br from-pink-950/40 to-rose-950/40',
     adult: false,
     truths: [
       'What is your happiest memory with me?',
-      'What is the nicest thing I have ever done for you?',
-      'When did you first realize you had feelings for me?',
-      'What song reminds you of us?',
-      'What is your favourite thing about our relationship?',
-      'What is a small thing I do that makes you smile?',
-      'What is your dream date with me?',
-      'What is something you have always wanted to tell me but never have?',
-      'What is your favourite nickname for me?',
+      'When did you first realise you had feelings for me?',
+      'What is your favourite thing I do that makes you feel loved?',
+      'What song instantly makes you think of us?',
       'If you could relive one moment with me, which would it be?',
-      'What is the most romantic thing I have ever done?',
-      'What does love mean to you?',
+      'What is the most romantic thing I have ever done for you?',
+      'What small thing do I do that secretly melts your heart?',
+      'What is your dream date with me?',
+      'What does being with me feel like in one word?',
+      'What is something you have always wanted to tell me but never have?',
+      'What physical feature of mine do you love most?',
+      'How did you know I was the one?',
+      'What is the sweetest thing I have ever said to you?',
+      'Where would your perfect holiday with me be?',
+      'What is one promise you want us to make to each other right now?',
     ],
     dares: [
-      'Give me the longest hug you can.',
-      'Write me a 3-sentence love note and read it aloud.',
-      'Tell me 5 things you love about me in under 30 seconds.',
-      'Recreate our first meeting in 30 seconds.',
-      'Sing one line of our favourite song to me.',
-      'Give me a forehead kiss.',
-      'Hold my hand and tell me one thing you appreciate about me.',
-      'Do your best impression of how I walk.',
-      'Draw a quick portrait of me and show it.',
-      'Write "I love you" on my hand.',
-    ],
-  },
-  spicy: {
-    label: '🌶️ Spicy',
-    color: 'from-orange-500 to-red-500',
-    bg:    'bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20',
-    adult: false,
-    truths: [
-      'What is your biggest secret that I do not know?',
-      'Have you ever lied to me and regretted it?',
-      'What is something you are embarrassed to admit you like?',
-      'Who do you think is the better kisser — me or your ex?',
-      'Have you ever stalked my social media?',
-      'What is one thing you would change about our relationship?',
-      'Have you ever had feelings for one of my friends?',
-      'What is your most controversial opinion about us?',
-      'What is the weirdest dream you have had about me?',
-      'Have you ever gone through my phone? What did you find?',
-    ],
-    dares: [
-      'Send the last photo in your camera roll right now.',
-      'Show me the last 5 messages you sent someone.',
-      'Let me choose your next social media post caption.',
-      'Text your mum something I choose right now.',
-      'Do 10 push-ups while I sit on your back.',
-      'Let me style your hair any way I want for the rest of the game.',
-      'Speak only in a whisper for the next 3 rounds.',
-      'Let me go through your search history for 60 seconds.',
-      'Do your best "sexy walk" across the room.',
-      'Let me draw a small tattoo design on your arm.',
-    ],
-  },
-  funny: {
-    label: '🤣 Funny',
-    color: 'from-yellow-400 to-orange-400',
-    bg:    'bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20',
-    adult: false,
-    truths: [
-      'What is the most embarrassing thing that has happened to you in front of me?',
-      'What animal do I remind you of and why?',
-      'Have you ever farted and blamed it on someone else when with me?',
-      'What is the weirdest food you actually enjoy?',
-      'What is your most embarrassing childhood memory?',
-      'Have you ever walked into a glass door or wall?',
-      'What is the dumbest thing you have ever done?',
-      'Have you ever accidentally called a teacher "Mum"?',
-      'What is the most ridiculous reason you have ever cried?',
-      'What is a habit of yours that even you find weird?',
-    ],
-    dares: [
-      'Do your best robot dance for 30 seconds.',
-      'Speak in an accent of my choice for the next 3 rounds.',
-      'Let me tickle you for 10 seconds without laughing.',
-      'Try to lick your elbow for 10 seconds.',
-      'Do 10 star jumps while singing "Twinkle Twinkle Little Star".',
-      'Narrate everything you do for the next 2 minutes like a nature documentary.',
-      'Make the ugliest face you can and hold it for 30 seconds.',
-      'Text a friend saying "I just saw a unicorn" and wait for their reply.',
-      'Walk to the fridge and back while pretending to be a catwalk model.',
-      'Let me write anything I want on your forehead with my finger (invisible ink).',
-    ],
-  },
-  challenge: {
-    label: '🏆 Challenge',
-    color: 'from-purple-500 to-indigo-500',
-    bg:    'bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20',
-    adult: false,
-    truths: [
-      'What is one goal you have been secretly working towards?',
-      'What is something you wish I understood better about you?',
-      'What is your biggest fear in our relationship?',
-      'What is something you have always wanted to try with me?',
-      'If you had one wish for our future, what would it be?',
-      'What is a promise you are willing to make to me right now?',
-      'What is one habit of yours you want to change?',
-      'What is something you are proud of yourself for?',
-      'If we could travel anywhere together, where and why?',
-      'What is the bravest thing you have ever done?',
-    ],
-    dares: [
-      'Do not use your phone for the next hour.',
-      'Cook or order my favourite meal for our next date.',
-      'Plan a surprise mini-date for me within the next week.',
-      'Write a list of 10 reasons you love me and share it.',
-      'Learn one line of my favourite song and perform it.',
-      'Give me a 5-minute back massage right now.',
-      'Take a photo of us together right now and set it as your wallpaper.',
-      'For the rest of the game, you must compliment me every 5 minutes.',
-      'Write me a poem with at least 4 lines right now.',
-      'Give me control of the TV/music for the rest of the evening.',
+      'Send me the most romantic voice note you can right now.',
+      'Write me a 4-line poem and send it.',
+      'Tell me 5 things you love about me — you have 30 seconds.',
+      'Send me the photo in your gallery that reminds you of us.',
+      'Record a 10-second video saying why you love me.',
+      'Send me a voice message singing one line of our favourite song.',
+      'Describe in a text exactly what you would do if I were there right now.',
+      'Send me your most recent selfie, no filter.',
+      'Write me a flirty text as if we just met.',
+      'Tell me the one thing about me that you find irresistible.',
+      'Send me a voice note with the cheesiest pickup line you know.',
+      'Describe our first kiss in detail over text.',
+      'Set a photo of us as your wallpaper and send me a screenshot.',
+      'Send me a voice message saying the three words.',
+      'Tell me one thing you have never told anyone about how you feel about me.',
     ],
   },
   adult: {
     label: '🔞 After Dark',
     color: 'from-rose-600 to-red-700',
-    bg:    'bg-gradient-to-br from-rose-950/40 to-red-950/40 dark:from-rose-950/60 dark:to-red-950/60',
+    bg: 'bg-gradient-to-br from-rose-950/60 to-red-950/60',
     adult: true,
     truths: [
-      'What is your favourite thing about our intimate life?',
-      'What is one fantasy you have never told me about?',
-      'Where is your favourite place to be kissed?',
-      'What is one thing you want me to do more of in the bedroom?',
+      'What is your number one fantasy you have never told me?',
       'What is the most turned on you have ever been because of something I did?',
-      'What outfit of mine drives you the most crazy?',
-      'What is something new you would like us to try together?',
-      'What is your all-time favourite intimate memory of us?',
-      'What is your biggest turn-on that I might not know about?',
-      'If you could design our perfect intimate evening, what would it look like?',
-      'What body part of mine do you find most attractive?',
-      'What is something you have always wanted to say to me in the moment but held back?',
-      'What is the most seductive thing I have ever done without knowing it?',
-      'Have you ever thought about me at an inappropriate time? When?',
-      'What is one word that best describes our chemistry?',
-      'What is something you secretly love that I do during a kiss?',
-      'If we had the house completely to ourselves for 24 hours, what would you plan?',
-      'What is one thing about your body you want me to appreciate more?',
+      'What outfit or look of mine drives you absolutely crazy?',
+      'What is something new and wild you want us to try together?',
+      'What body part of mine do you think about most?',
+      'Have you ever touched yourself thinking about me? Describe it.',
+      'What is your dirtiest thought about me you have never said out loud?',
+      'What would your ideal night alone with me look like in full detail?',
+      'What is one thing you want me to do to you that I have never done?',
+      'What is the most attractive thing I do without knowing it?',
+      'Have you ever imagined us in a specific location doing something explicit? Where and what?',
+      'What is something you want to hear me say in an intimate moment?',
+      'Rate our intimacy honestly and tell me what would make it a 10.',
+      'What is one word that describes what you want from me tonight?',
+      'Have you ever watched something and immediately thought of doing it with me?',
+      'What do you think about just before you fall asleep when you miss me?',
+      'What is the wildest place you have imagined us together?',
+      'Tell me the most explicit dream you have ever had about me.',
     ],
     dares: [
-      'Give me the most passionate kiss you can right now.',
-      'Whisper the most attractive thing about me into my ear.',
-      'Give me a 3-minute shoulder and neck massage.',
-      'Look into my eyes without laughing or looking away for 60 seconds.',
-      'Describe in detail what you find most physically attractive about me.',
-      'Send me a flirty text right now as if we just met.',
-      'Let me blindfold you with a scarf for 2 minutes — I choose what happens.',
-      'Kiss me somewhere unexpected (not the lips).',
-      'Act out what you would do if you were trying to seduce me from scratch.',
-      'Slow dance with me for one full song with no phones.',
-      'Whisper something you have always wanted to do with me.',
-      'Feed me something sweet without using your hands.',
-      'Let me choose a compliment you have to say to me with full eye contact.',
-      'Take a photo of just us right now and set it as your lock screen.',
-      'Tell me exactly what you are thinking about me right now — no filter.',
-      'Let me trace a shape on your back with my finger and guess what it is.',
-      'Give me a kiss that lasts at least 10 seconds.',
-      'Tell me the hottest dream you have ever had about me.',
+      'Send me your sexiest photo right now.',
+      'Send me a voice note describing exactly what you would do to me if I were there.',
+      'Send me a photo of whatever you are wearing right now — or not wearing.',
+      'Record a 15-second video of you doing your most seductive look into the camera.',
+      'Send me the most explicit text you have ever wanted to send me.',
+      'Describe in detail over voice note what you want me to do to you.',
+      'Send me a photo of your favourite body part of yours.',
+      'Voice note: tell me your hottest fantasy about us, no holding back.',
+      'Send a flirty video saying exactly what you want tonight.',
+      'Text me the dirtiest thing on your mind right now.',
+      'Send me a photo that would make my jaw drop.',
+      'Record yourself saying the most explicit thing you have ever wanted to say to me.',
+      'Send me a voice note moaning my name.',
+      'Describe in a text message what you are going to do to me next time we are together.',
+      'Send me a photo from an angle I have never seen before.',
+      'Voice note: narrate what our perfect explicit night together looks like.',
+      'Send me a photo that would get you in trouble if anyone else saw it.',
+      'Text me exactly what you are thinking about me right now — zero filter.',
     ],
   },
 } as const;
@@ -177,90 +99,254 @@ const DECKS = {
 type DeckKey = keyof typeof DECKS;
 type CardType = 'truth' | 'dare';
 
-interface Card { type: CardType; text: string; deck: DeckKey; }
+interface TodCard { type: CardType; text: string; deck: DeckKey; drawnBy: string; }
+
+interface TodState {
+  status: 'lobby' | 'active';
+  deck: DeckKey;
+  adultUnlocked: boolean;
+  currentCard: TodCard | null;
+  currentTurn: string;          // email of whose turn it is
+  player1: string;
+  player2: string | null;
+  customTruths: string[];
+  customDares: string[];
+  history: TodCard[];
+  flipping: boolean;
+}
 
 const pickRandom = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-export const TruthOrDare: React.FC = () => {
-  const [activeDeck,   setActiveDeck]   = useState<DeckKey>('sweet');
-  const [card,         setCard]         = useState<Card | null>(null);
-  const [flipping,     setFlipping]     = useState(false);
-  const [history,      setHistory]      = useState<Card[]>([]);
-  const [showCustom,   setShowCustom]   = useState(false);
-  const [customTruths, setCustomTruths] = useState<string[]>([]);
-  const [customDares,  setCustomDares]  = useState<string[]>([]);
-  const [newCustom,    setNewCustom]    = useState('');
-  const [customType,   setCustomType]   = useState<CardType>('truth');
-  // Age-gate state
-  const [adultUnlocked, setAdultUnlocked] = useState(false);
-  const [showAgeGate,   setShowAgeGate]   = useState(false);
+const generateRoomCode = () =>
+  Math.random().toString(36).substring(2, 8).toUpperCase();
 
-  const handleDeckSelect = (d: DeckKey) => {
-    if (DECKS[d].adult && !adultUnlocked) {
-      setShowAgeGate(true);
-      return;
+export const TruthOrDare: React.FC = () => {
+  const { user } = useAuth();
+  const userEmail = user?.email ?? 'guest';
+
+  // ── Local UI state ──────────────────────────────────
+  const [roomInput,     setRoomInput]     = useState('');
+  const [roomId,        setRoomId]        = useState<string | null>(null);
+  const [isHost,        setIsHost]        = useState(false);
+  const [showAgeGate,   setShowAgeGate]   = useState(false);
+  const [showCustom,    setShowCustom]    = useState(false);
+  const [newCustomText, setNewCustomText] = useState('');
+  const [newCustomType, setNewCustomType] = useState<CardType>('truth');
+  const [copied,        setCopied]        = useState(false);
+
+  // ── Firebase session ────────────────────────────────
+  const safeRoom = roomId ? `tod-${sanitizeFirebasePath(roomId)}` : 'tod-placeholder';
+
+  const initialState: TodState = {
+    status: 'lobby',
+    deck: 'romantic',
+    adultUnlocked: false,
+    currentCard: null,
+    currentTurn: userEmail,
+    player1: userEmail,
+    player2: null,
+    customTruths: [],
+    customDares: [],
+    history: [],
+    flipping: false,
+  };
+
+  const { gameState, updateGameState } = useRealtimeGame<TodState>(
+    safeRoom, 'truthordare', initialState
+  );
+
+  const gs = gameState;
+  const isMyTurn = gs?.currentTurn === userEmail;
+  const amPlayer1 = gs?.player1 === userEmail;
+  const partnerJoined = !!gs?.player2;
+
+  // ── Room management ─────────────────────────────────
+  const createRoom = () => {
+    const code = generateRoomCode();
+    setRoomId(code);
+    setIsHost(true);
+  };
+
+  const joinRoom = () => {
+    const code = roomInput.trim().toUpperCase();
+    if (!code) return;
+    setRoomId(code);
+    setIsHost(false);
+  };
+
+  // When guest joins, write their email into player2
+  React.useEffect(() => {
+    if (!roomId || isHost || !gs) return;
+    if (gs.player1 === userEmail) return; // already host
+    if (!gs.player2 && gs.player1 !== userEmail) {
+      updateGameState({ ...gs, player2: userEmail, status: 'active' });
     }
-    setActiveDeck(d);
-    setCard(null);
+  }, [roomId, isHost, gs?.player1, gs?.player2]);
+
+  // Host starts game when partner joins
+  React.useEffect(() => {
+    if (!isHost || !gs) return;
+    if (gs.player2 && gs.status === 'lobby') {
+      updateGameState({ ...gs, status: 'active' });
+    }
+  }, [gs?.player2]);
+
+  const copyCode = () => {
+    if (!roomId) return;
+    navigator.clipboard.writeText(roomId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // ── Deck selection ───────────────────────────────────
+  const selectDeck = (d: DeckKey) => {
+    if (!gs) return;
+    if (DECKS[d].adult && !gs.adultUnlocked) { setShowAgeGate(true); return; }
+    updateGameState({ ...gs, deck: d, currentCard: null });
   };
 
   const confirmAge = () => {
-    setAdultUnlocked(true);
+    if (!gs) return;
     setShowAgeGate(false);
-    setActiveDeck('adult');
-    setCard(null);
+    updateGameState({ ...gs, adultUnlocked: true, deck: 'adult', currentCard: null });
   };
 
+  // ── Draw card ────────────────────────────────────────
   const drawCard = useCallback((type?: CardType) => {
-    if (flipping) return;
-    setFlipping(true);
-    const t: CardType = type ?? (Math.random() > .5 ? 'truth' : 'dare');
-    const deck = DECKS[activeDeck];
+    if (!gs || gs.flipping || !isMyTurn) return;
+    const t: CardType = type ?? (Math.random() > 0.5 ? 'truth' : 'dare');
+    const deck = DECKS[gs.deck];
     const pool = [
-      ...deck[t === 'truth' ? 'truths' : 'dares'],
-      ...(t === 'truth' ? customTruths : customDares),
+      ...(t === 'truth' ? deck.truths : deck.dares),
+      ...(t === 'truth' ? gs.customTruths : gs.customDares),
     ];
     const text = pickRandom(pool);
+    const card: TodCard = { type: t, text, deck: gs.deck, drawnBy: userEmail };
+    const nextTurn = amPlayer1
+      ? (gs.player2 ?? userEmail)
+      : gs.player1;
+    updateGameState({
+      ...gs,
+      flipping: true,
+      currentCard: card,
+      history: [card, ...(gs.history || [])].slice(0, 20),
+    });
     setTimeout(() => {
-      const c: Card = { type: t, text, deck: activeDeck };
-      setCard(c);
-      setHistory(h => [c, ...h].slice(0, 20));
-      setFlipping(false);
-    }, 350);
-  }, [flipping, activeDeck, customTruths, customDares]);
+      updateGameState({
+        ...gs,
+        flipping: false,
+        currentCard: card,
+        currentTurn: nextTurn,
+        history: [card, ...(gs.history || [])].slice(0, 20),
+      });
+    }, 400);
+  }, [gs, isMyTurn, amPlayer1, userEmail]);
 
+  // ── Custom cards ─────────────────────────────────────
   const addCustomCard = () => {
-    if (!newCustom.trim()) return;
-    if (customType === 'truth') setCustomTruths(t => [...t, newCustom.trim()]);
-    else                        setCustomDares(d  => [...d, newCustom.trim()]);
-    setNewCustom('');
+    if (!gs || !newCustomText.trim()) return;
+    if (newCustomType === 'truth') {
+      updateGameState({ ...gs, customTruths: [...gs.customTruths, newCustomText.trim()] });
+    } else {
+      updateGameState({ ...gs, customDares: [...gs.customDares, newCustomText.trim()] });
+    }
+    setNewCustomText('');
   };
 
-  const deck = DECKS[activeDeck];
+  // ─────────────────────────────────────────────────────
+  //  RENDER — no room yet
+  // ─────────────────────────────────────────────────────
+  if (!roomId) return (
+    <div className="min-h-screen p-4">
+      <div className="max-w-sm mx-auto pt-16">
+        <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-pink-500 transition mb-10 text-sm">
+          <ArrowLeft size={16} /> Back
+        </Link>
+        <div className="text-center mb-10">
+          <div className="text-7xl mb-4">🔥</div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-500 to-pink-500 bg-clip-text text-transparent">
+            Truth or Dare
+          </h1>
+          <p className="text-gray-400 mt-2 text-sm">Real-time · Two players · Two devices</p>
+        </div>
+
+        <div className="space-y-4">
+          <button onClick={createRoom}
+            className="w-full py-4 rounded-2xl font-bold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-3">
+            <Users size={20} /> Create Room
+          </button>
+
+          <div className="relative flex items-center gap-2">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-gray-500 text-xs">or join with code</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              value={roomInput}
+              onChange={e => setRoomInput(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && joinRoom()}
+              placeholder="Room code"
+              maxLength={6}
+              className="flex-1 glass border-0 rounded-xl px-4 py-3 text-center text-xl font-bold tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
+            />
+            <button onClick={joinRoom}
+              className="px-5 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 transition-transform">
+              Join
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ─────────────────────────────────────────────────────
+  //  RENDER — waiting for partner
+  // ─────────────────────────────────────────────────────
+  if (isHost && !partnerJoined) return (
+    <div className="min-h-screen p-4 flex items-center justify-center">
+      <div className="glass-card max-w-sm w-full p-10 text-center">
+        <div className="text-6xl mb-4 animate-pulse">⏳</div>
+        <h2 className="text-xl font-bold text-white mb-2">Room Created!</h2>
+        <p className="text-gray-400 text-sm mb-6">Share this code with your partner</p>
+        <div className="glass rounded-2xl px-6 py-4 mb-4">
+          <p className="text-4xl font-black tracking-widest text-pink-400">{roomId}</p>
+        </div>
+        <button onClick={copyCode}
+          className="flex items-center gap-2 mx-auto text-sm text-gray-400 hover:text-pink-400 transition">
+          {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+          {copied ? 'Copied!' : 'Copy code'}
+        </button>
+        <p className="text-gray-500 text-xs mt-6">Waiting for partner to join…</p>
+      </div>
+    </div>
+  );
+
+  // ─────────────────────────────────────────────────────
+  //  RENDER — game active
+  // ─────────────────────────────────────────────────────
+  const deck = DECKS[gs?.deck ?? 'romantic'];
 
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
 
-        {/* Age-gate modal */}
+        {/* Age gate modal */}
         {showAgeGate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div className="glass-card max-w-sm w-full p-8 text-center animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="glass-card max-w-sm w-full p-8 text-center">
               <div className="text-6xl mb-4">🔞</div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Adults Only</h2>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-                The <span className="font-bold text-rose-500">After Dark</span> deck contains mature content intended for couples aged 18+.
-                By continuing you confirm that both players are 18 or older.
+              <h2 className="text-2xl font-bold text-white mb-2">Adults Only</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                The <span className="font-bold text-rose-400">After Dark</span> deck contains explicit 18+ content for couples.
+                Both players must be 18 or older to continue.
               </p>
               <div className="flex gap-3">
-                <button
-                  onClick={() => setShowAgeGate(false)}
-                  className="flex-1 glass-btn py-3 rounded-xl font-semibold text-gray-600 dark:text-gray-300">
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmAge}
-                  className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-rose-600 to-red-700 shadow-lg hover:scale-105 transition-transform">
+                <button onClick={() => setShowAgeGate(false)}
+                  className="flex-1 glass-btn py-3 rounded-xl font-semibold text-gray-300">Cancel</button>
+                <button onClick={confirmAge}
+                  className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-rose-600 to-red-700 hover:scale-105 transition-transform">
                   I am 18+ ✓
                 </button>
               </div>
@@ -269,33 +355,44 @@ export const TruthOrDare: React.FC = () => {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20}/> Back
-          </Link>
-          <h1 className={`text-2xl font-bold bg-gradient-to-r ${deck.color} bg-clip-text text-transparent`}>
-            🔥 Truth or Dare
-          </h1>
+        <div className="flex items-center justify-between mb-5">
+          <button onClick={() => setRoomId(null)}
+            className="flex items-center gap-2 text-gray-400 hover:text-pink-400 transition text-sm">
+            <ArrowLeft size={18} /> Leave
+          </button>
+          <div className="text-center">
+            <h1 className={`text-xl font-bold bg-gradient-to-r ${deck.color} bg-clip-text text-transparent`}>
+              🔥 Truth or Dare
+            </h1>
+            <p className="text-xs text-gray-500">Room: <span className="text-pink-400 font-bold">{roomId}</span></p>
+          </div>
           <button onClick={() => setShowCustom(s => !s)}
-            className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
-            <Plus size={20}/>
+            className="glass-btn p-2 rounded-xl text-gray-400">
+            <Plus size={18} />
           </button>
         </div>
 
+        {/* Turn indicator */}
+        <div className={`text-center py-2 px-4 rounded-full text-sm font-semibold mb-5 ${
+          isMyTurn
+            ? 'bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30'
+            : 'glass text-gray-400'
+        }`}>
+          {isMyTurn ? '✨ Your turn — pick Truth or Dare' : "Partner's turn — wait for them…"}
+        </div>
+
         {/* Deck selector */}
-        <div className="grid grid-cols-5 gap-2 mb-6">
+        <div className="grid grid-cols-2 gap-3 mb-5">
           {(Object.keys(DECKS) as DeckKey[]).map(d => (
-            <button key={d} onClick={() => handleDeckSelect(d)}
-              className={`relative py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeDeck === d
-                  ? `bg-gradient-to-r ${DECKS[d].color} text-white shadow-md scale-105`
-                  : 'glass text-gray-600 dark:text-gray-400 hover:scale-105'
+            <button key={d} onClick={() => selectDeck(d)}
+              className={`relative py-3 rounded-2xl text-sm font-bold transition-all ${
+                gs?.deck === d
+                  ? `bg-gradient-to-r ${DECKS[d].color} text-white shadow-lg scale-105`
+                  : 'glass text-gray-400 hover:scale-105'
               }`}>
-              {DECKS[d].label.split(' ').slice(0,1)}
-              {DECKS[d].adult && !adultUnlocked && (
-                <span className="absolute -top-1 -right-1">
-                  <Lock size={10} className="text-rose-400"/>
-                </span>
+              {DECKS[d].label}
+              {DECKS[d].adult && !gs?.adultUnlocked && (
+                <Lock size={10} className="absolute top-1 right-2 text-rose-400" />
               )}
             </button>
           ))}
@@ -303,97 +400,103 @@ export const TruthOrDare: React.FC = () => {
 
         {/* Custom card panel */}
         {showCustom && (
-          <div className="glass-card p-4 mb-6 animate-in slide-in-from-top-2 duration-200">
+          <div className="glass-card p-4 mb-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm">Add Custom Card</h3>
-              <button onClick={() => setShowCustom(false)} className="text-gray-400 hover:text-red-500 transition"><X size={16}/></button>
+              <h3 className="font-bold text-white text-sm">Add Custom Card</h3>
+              <button onClick={() => setShowCustom(false)} className="text-gray-400 hover:text-red-400"><X size={16} /></button>
             </div>
             <div className="flex gap-2 mb-3">
-              {(['truth','dare'] as CardType[]).map(t => (
-                <button key={t} onClick={() => setCustomType(t)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
-                    customType===t?'bg-gradient-to-r from-pink-500 to-purple-500 text-white':'glass text-gray-500'
+              {(['truth', 'dare'] as CardType[]).map(t => (
+                <button key={t} onClick={() => setNewCustomType(t)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${
+                    newCustomType === t ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white' : 'glass text-gray-400'
                   }`}>{t}</button>
               ))}
             </div>
             <div className="flex gap-2">
-              <input value={newCustom} onChange={e=>setNewCustom(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&addCustomCard()}
-                placeholder={`Write a ${customType}…`}
-                className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"/>
+              <input value={newCustomText} onChange={e => setNewCustomText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addCustomCard()}
+                placeholder={`Write a custom ${newCustomType}…`}
+                className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
               <button onClick={addCustomCard}
-                className="bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold px-4 py-2 rounded-xl transition hover:scale-105">
+                className="px-4 py-2 rounded-xl font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:scale-105 transition-transform">
                 Add
               </button>
             </div>
-            {(customTruths.length > 0 || customDares.length > 0) && (
+            {(gs?.customTruths?.length > 0 || gs?.customDares?.length > 0) && (
               <div className="mt-3 flex flex-wrap gap-1">
-                {[...customTruths.map(t=>({text:t,type:'truth'})),...customDares.map(d=>({text:d,type:'dare'}))]
-                  .map((c,i) => (
-                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400 text-xs">
-                      {c.type==='truth'?'🧠':'🎯'} {c.text.slice(0,25)}{c.text.length>25?'…':''}
-                    </span>
-                  ))}
+                {[
+                  ...(gs.customTruths || []).map(t => ({ text: t, type: 'truth' })),
+                  ...(gs.customDares  || []).map(d => ({ text: d, type: 'dare'  })),
+                ].map((c, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-pink-900/40 text-pink-300 text-xs">
+                    {c.type === 'truth' ? '🧠' : '🎯'} {c.text.slice(0, 25)}{c.text.length > 25 ? '…' : ''}
+                  </span>
+                ))}
               </div>
             )}
           </div>
         )}
 
         {/* Main card */}
-        <div className={`glass-card overflow-hidden transition-all duration-300 mb-6 ${
-          flipping ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
+        <div className={`glass-card overflow-hidden mb-5 transition-all duration-300 ${
+          gs?.flipping ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
         }`}>
-          {!card ? (
+          {!gs?.currentCard ? (
             <div className="p-12 text-center">
-              <div className="text-7xl mb-6">🔥</div>
-              <p className="text-gray-600 dark:text-gray-400 text-lg mb-2">Ready to play?</p>
-              <p className="text-gray-400 dark:text-gray-500 text-sm">Pick Truth or Dare below</p>
+              <div className="text-7xl mb-4">🔥</div>
+              <p className="text-gray-400">Draw a card to start</p>
             </div>
           ) : (
             <div className={`p-8 ${deck.bg}`}>
-              <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-3 mb-5">
                 <span className={`px-4 py-1.5 rounded-full text-white font-bold text-sm bg-gradient-to-r ${deck.color}`}>
-                  {card.type === 'truth' ? '🧠 TRUTH' : '🎯 DARE'}
+                  {gs.currentCard.type === 'truth' ? '🧠 TRUTH' : '🎯 DARE'}
                 </span>
-                <span className="text-xs text-gray-400">{DECKS[card.deck].label}</span>
+                <span className="text-xs text-gray-400">{DECKS[gs.currentCard.deck].label}</span>
+                <span className="text-xs text-gray-500 ml-auto">
+                  {gs.currentCard.drawnBy === userEmail ? 'You drew this' : 'Partner drew this'}
+                </span>
               </div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
-                {card.text}
+              <p className="text-xl font-bold text-white leading-relaxed">
+                {gs.currentCard.text}
               </p>
             </div>
           )}
         </div>
 
-        {/* Buttons */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        {/* Draw buttons — only active on your turn */}
+        <div className={`grid grid-cols-3 gap-3 mb-5 transition-opacity ${
+          isMyTurn ? 'opacity-100' : 'opacity-30 pointer-events-none'
+        }`}>
           <button onClick={() => drawCard('truth')}
-            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl transition-all hover:scale-105 active:scale-95">
+            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all">
             <span className="text-2xl">🧠</span>
-            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Truth</span>
+            <span className="text-sm font-bold text-gray-300">Truth</span>
           </button>
           <button onClick={() => drawCard()}
-            className={`flex flex-col items-center gap-1 py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 bg-gradient-to-r ${deck.color} text-white shadow-lg`}>
-            <Shuffle size={22}/>
+            className={`flex flex-col items-center gap-1 py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all bg-gradient-to-r ${deck.color} text-white shadow-lg`}>
+            <Shuffle size={22} />
             <span className="text-sm font-bold">Random</span>
           </button>
           <button onClick={() => drawCard('dare')}
-            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl transition-all hover:scale-105 active:scale-95">
+            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all">
             <span className="text-2xl">🎯</span>
-            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Dare</span>
+            <span className="text-sm font-bold text-gray-300">Dare</span>
           </button>
         </div>
 
         {/* History */}
-        {history.length > 1 && (
+        {gs?.history && gs.history.length > 1 && (
           <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Previous Cards</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {history.slice(1).map((h, i) => (
+            <h3 className="text-xs font-semibold text-gray-500 mb-3">Card History</h3>
+            <div className="space-y-2 max-h-44 overflow-y-auto">
+              {gs.history.slice(1).map((h, i) => (
                 <div key={i} className="flex items-start gap-2 text-sm">
                   <span className={`shrink-0 px-2 py-0.5 rounded-full text-white text-xs font-bold bg-gradient-to-r ${DECKS[h.deck].color}`}>
                     {h.type === 'truth' ? '🧠' : '🎯'}
                   </span>
-                  <span className="text-gray-600 dark:text-gray-400 line-clamp-2">{h.text}</span>
+                  <span className="text-gray-400 line-clamp-2">{h.text}</span>
                 </div>
               ))}
             </div>
