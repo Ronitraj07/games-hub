@@ -2,6 +2,20 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, onValue, set, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
+// Firebase paths cannot contain . # $ [ ]
+// Sanitize any string before using it in a path
+export const sanitizeFirebasePath = (raw: string): string =>
+  raw
+    .replace(/\./g, '_')
+    .replace(/#/g, '_')
+    .replace(/\$/g, '_')
+    .replace(/\[/g, '_')
+    .replace(/\]/g, '_')
+    .replace(/@/g, '_at_')
+    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_|_$/g, '') || 'session';
+
 // Firebase stores arrays as objects {0: val, 1: val} — convert back to arrays
 const normalizeFirebaseData = (data: any): any => {
   if (data === null || data === undefined) return data;
@@ -39,8 +53,10 @@ export const useRealtimeGame = <T>(
   const localState = useRef<T>(initialState);
   const firebaseEnabled = useRef(isFirebaseConfigured());
 
+  // Always sanitize — this is the single source of truth for path safety
+  const safePath = `games/${sanitizeFirebasePath(sessionId)}`;
+
   useEffect(() => {
-    // If Firebase not configured, just use local state — no crash
     if (!firebaseEnabled.current) {
       setGameState(initialState);
       localState.current = initialState;
@@ -49,7 +65,7 @@ export const useRealtimeGame = <T>(
     }
 
     setLoading(true);
-    const gameRef = ref(database, `games/${sessionId}`);
+    const gameRef = ref(database, safePath);
 
     set(gameRef, initialState).catch(err => {
       console.warn('Firebase init failed, using local state:', err.message);
@@ -78,24 +94,22 @@ export const useRealtimeGame = <T>(
     );
 
     return () => { off(gameRef); };
-  }, [sessionId]);
+  }, [safePath]);
 
   const updateGameState = useCallback(
     async (newState: T) => {
-      // Always update local state immediately
       setGameState(newState);
       localState.current = newState;
 
-      // Try Firebase if configured
       if (!firebaseEnabled.current || !database) return;
       try {
-        const gameRef = ref(database, `games/${sessionId}`);
+        const gameRef = ref(database, safePath);
         await set(gameRef, newState);
       } catch (err: any) {
         console.warn('Firebase write failed, continuing with local state:', err.message);
       }
     },
-    [sessionId]
+    [safePath]
   );
 
   return { gameState, updateGameState, loading, error };
