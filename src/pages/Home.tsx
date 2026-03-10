@@ -103,6 +103,18 @@ const SIMPLE_GAMES = [
     players: '1-2' as const,
     estimatedTime: '5-10 min',
   },
+  {
+    id: 'truthordare',
+    name: 'Truth or Dare',
+    description: 'Secrets, dares & After Dark 🔞',
+    icon: '🔥',
+    gradient:  'from-rose-500 to-red-600',
+    glowColor: 'shadow-rose-400/60 dark:shadow-red-600/40',
+    route: '/games/truthordare',
+    difficulty: 'Easy',
+    players: '2' as const,
+    estimatedTime: '10+ min',
+  },
 ];
 
 const STAT_CARDS = [
