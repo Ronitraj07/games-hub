@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Lock, Eye, EyeOff, Heart, LogIn } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { signInWithEmail, signInWithGoogle } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  // Redirect back to the page the user originally tried to access
+  const from = (location.state as any)?.from?.pathname || '/';
+
+  const [email,         setEmail]         = useState('');
+  const [password,      setPassword]      = useState('');
+  const [showPw,        setShowPw]        = useState(false);
+  const [loading,       setLoading]       = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError]       = useState('');
+  const [error,         setError]         = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +23,7 @@ export const Login: React.FC = () => {
     setLoading(true);
     try {
       await signInWithEmail(email, password);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
     } finally {
@@ -32,7 +36,7 @@ export const Login: React.FC = () => {
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
     } finally {

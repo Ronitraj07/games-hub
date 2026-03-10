@@ -31,15 +31,14 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser]       = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
-  // Sign up with email - Layer 1: Check email BEFORE account creation
+  // Sign up with email
   const signUpWithEmail = async (email: string, password: string) => {
     setError(null);
-    
-    // LAYER 1: Frontend whitelist check
+
     if (!isEmailAllowed(email)) {
       throw new Error(AUTH_ERRORS.UNAUTHORIZED_EMAIL);
     }
@@ -64,8 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign in with email
   const signInWithEmail = async (email: string, password: string) => {
     setError(null);
-    
-    // LAYER 1: Frontend whitelist check
+
     if (!isEmailAllowed(email)) {
       throw new Error(AUTH_ERRORS.UNAUTHORIZED_EMAIL);
     }
@@ -73,7 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+      // Firebase SDK v9+ unified these into auth/invalid-credential
+      if (
+        err.code === 'auth/user-not-found'      ||
+        err.code === 'auth/wrong-password'       ||
+        err.code === 'auth/invalid-credential'
+      ) {
         throw new Error(AUTH_ERRORS.INVALID_CREDENTIALS);
       } else if (err.code === 'auth/network-request-failed') {
         throw new Error(AUTH_ERRORS.NETWORK_ERROR);
@@ -85,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Sign in with Google - Layer 1: Check email AFTER login, delete if unauthorized
+  // Sign in with Google
   const signInWithGoogle = async () => {
     setError(null);
     const provider = new GoogleAuthProvider();
@@ -94,16 +97,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, provider);
       const userEmail = result.user.email;
 
-      // LAYER 1: Check if email is allowed AFTER Google sign-in
       if (!userEmail || !isEmailAllowed(userEmail)) {
-        // Delete the unauthorized account immediately
         await deleteUser(result.user);
         await firebaseSignOut(auth);
         throw new Error(AUTH_ERRORS.ACCOUNT_DELETED);
       }
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user') {
-        // User closed the popup, ignore
         return;
       } else if (err.code === 'auth/network-request-failed') {
         throw new Error(AUTH_ERRORS.NETWORK_ERROR);
@@ -121,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await firebaseSignOut(auth);
       setUser(null);
-    } catch (err) {
+    } catch {
       throw new Error(AUTH_ERRORS.UNKNOWN_ERROR);
     }
   };
@@ -130,18 +130,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser && firebaseUser.email) {
-        // Double-check email whitelist on auth state change
         if (!isEmailAllowed(firebaseUser.email)) {
-          // If somehow an unauthorized user got through, sign them out
           await firebaseSignOut(auth);
           setUser(null);
           setError(AUTH_ERRORS.UNAUTHORIZED_EMAIL);
         } else {
           setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
+            uid:         firebaseUser.uid,
+            email:       firebaseUser.email,
             displayName: getDisplayNameFromEmail(firebaseUser.email),
-            photoURL: firebaseUser.photoURL || undefined,
+            photoURL:    firebaseUser.photoURL || undefined,
           });
           setError(null);
         }

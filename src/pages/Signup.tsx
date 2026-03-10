@@ -6,13 +6,14 @@ import { Mail, Lock, User, Eye, EyeOff, Heart, UserPlus } from 'lucide-react';
 export const Signup: React.FC = () => {
   const { signUpWithEmail } = useAuth();
   const navigate = useNavigate();
-  const [name, setName]         = useState('');
-  const [email, setEmail]       = useState('');
+
+  const [name,    setName]    = useState('');
+  const [email,   setEmail]   = useState('');
   const [password, setPassword] = useState('');
-  const [confirm, setConfirm]   = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [confirm,  setConfirm]  = useState('');
+  const [showPw,   setShowPw]   = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +23,7 @@ export const Signup: React.FC = () => {
     setLoading(true);
     try {
       await signUpWithEmail(email, password);
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     } finally {
