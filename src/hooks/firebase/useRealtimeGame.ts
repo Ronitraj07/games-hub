@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, onValue, set, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
@@ -7,22 +7,25 @@ const normalizeFirebaseData = (data: any): any => {
   if (data === null || data === undefined) return data;
   if (typeof data !== 'object') return data;
   if (Array.isArray(data)) return data.map(normalizeFirebaseData);
-  // Check if it looks like an array (all keys are numeric)
   const keys = Object.keys(data);
   const isArrayLike = keys.length > 0 && keys.every(k => !isNaN(Number(k)));
   if (isArrayLike) {
-    const arr = [];
-    for (let i = 0; i < keys.length; i++) {
-      arr.push(normalizeFirebaseData(data[i]));
-    }
+    const arr: any[] = [];
+    for (let i = 0; i < keys.length; i++) arr.push(normalizeFirebaseData(data[i]));
     return arr;
   }
-  // Recursively normalize object values
   const normalized: any = {};
-  for (const key of keys) {
-    normalized[key] = normalizeFirebaseData(data[key]);
-  }
+  for (const key of keys) normalized[key] = normalizeFirebaseData(data[key]);
   return normalized;
+};
+
+const isFirebaseConfigured = (): boolean => {
+  try {
+    const dbUrl = import.meta.env.VITE_FIREBASE_DATABASE_URL;
+    return !!(dbUrl && dbUrl.length > 10 && database);
+  } catch {
+    return false;
+  }
 };
 
 export const useRealtimeGame = <T>(
@@ -30,22 +33,30 @@ export const useRealtimeGame = <T>(
   gameType: string,
   initialState: T
 ) => {
-  const [gameState, setGameState] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [gameState, setGameState] = useState<T>(initialState);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const localState = useRef<T>(initialState);
+  const firebaseEnabled = useRef(isFirebaseConfigured());
 
   useEffect(() => {
-    if (!sessionId || !database) {
+    // If Firebase not configured, just use local state — no crash
+    if (!firebaseEnabled.current) {
+      setGameState(initialState);
+      localState.current = initialState;
       setLoading(false);
-      setError('Firebase database not configured. Please add VITE_FIREBASE_DATABASE_URL to your environment variables.');
       return;
     }
 
+    setLoading(true);
     const gameRef = ref(database, `games/${sessionId}`);
 
     set(gameRef, initialState).catch(err => {
-      console.error('Failed to initialize game:', err);
-      setError(err.message);
+      console.warn('Firebase init failed, using local state:', err.message);
+      firebaseEnabled.current = false;
+      setGameState(initialState);
+      localState.current = initialState;
+      setLoading(false);
     });
 
     const unsubscribe = onValue(
@@ -54,13 +65,15 @@ export const useRealtimeGame = <T>(
         const raw = snapshot.val();
         const normalized = normalizeFirebaseData(raw) || initialState;
         setGameState(normalized);
+        localState.current = normalized;
         setLoading(false);
         setError('');
       },
       (err) => {
-        setError(err.message);
+        console.warn('Firebase read failed, using local state:', err.message);
+        firebaseEnabled.current = false;
+        setGameState(localState.current);
         setLoading(false);
-        console.error('Firebase read error:', err);
       }
     );
 
@@ -69,14 +82,17 @@ export const useRealtimeGame = <T>(
 
   const updateGameState = useCallback(
     async (newState: T) => {
-      if (!sessionId || !database) return;
+      // Always update local state immediately
+      setGameState(newState);
+      localState.current = newState;
+
+      // Try Firebase if configured
+      if (!firebaseEnabled.current || !database) return;
       try {
         const gameRef = ref(database, `games/${sessionId}`);
         await set(gameRef, newState);
       } catch (err: any) {
-        console.error('Failed to update game state:', err);
-        setError(err.message);
-        throw err;
+        console.warn('Firebase write failed, continuing with local state:', err.message);
       }
     },
     [sessionId]

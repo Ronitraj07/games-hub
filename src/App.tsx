@@ -19,20 +19,30 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
-          <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/games/tictactoe" element={<TicTacToe />} />
-              <Route path="/games/wordscramble" element={<WordScramble />} />
-              <Route path="/games/memorymatch" element={<MemoryMatch />} />
-              <Route path="/games/connect4" element={<Connect4 />} />
-              <Route path="/games/triviaquiz" element={<TriviaQuiz />} />
-              <Route path="/games/rockpaperscissors" element={<RockPaperScissors />} />
-              <Route path="/games/pictionary" element={<Pictionary />} />
-              <Route path="/games/mathduel" element={<MathDuel />} />
-            </Routes>
+          <div className="relative min-h-screen">
+            {/* Romantic background blobs */}
+            <div className="romantic-bg" aria-hidden="true" />
+            {/* Floating hearts */}
+            <div className="floating-hearts" aria-hidden="true">
+              {'❤️💕💖💗💘💙💜💝💞💟'.split('').filter(c => c.trim()).map((h, i) => (
+                <span key={i} className="heart-particle">{h}</span>
+              ))}
+            </div>
+            <div className="relative z-10">
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/games/tictactoe" element={<TicTacToe />} />
+                <Route path="/games/wordscramble" element={<WordScramble />} />
+                <Route path="/games/memorymatch" element={<MemoryMatch />} />
+                <Route path="/games/connect4" element={<Connect4 />} />
+                <Route path="/games/triviaquiz" element={<TriviaQuiz />} />
+                <Route path="/games/rockpaperscissors" element={<RockPaperScissors />} />
+                <Route path="/games/pictionary" element={<Pictionary />} />
+                <Route path="/games/mathduel" element={<MathDuel />} />
+              </Routes>
+            </div>
           </div>
         </Router>
       </AuthProvider>
