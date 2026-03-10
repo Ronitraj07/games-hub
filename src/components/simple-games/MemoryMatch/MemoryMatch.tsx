@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
+import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Celebration, MiniCelebration } from '@/components/shared/Celebration';
 import { playClick, playFlip, playMatch, playWrong, playWin } from '@/utils/sounds';
-import { Brain, Trophy, Users, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Brain, Trophy, Users, RotateCcw, ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Card { id: number; symbol: string; isFlipped: boolean; isMatched: boolean; }
 interface MemoryMatchGameState {
   cards: Card[];
   flippedCards: number[];
-  players: { [email: string]: { score: number; moves: number } };
+  players: { [safeEmail: string]: { score: number; moves: number } };
   currentPlayer: string;
   status: 'waiting' | 'active' | 'finished';
   gridSize: 4 | 6;
@@ -19,9 +18,9 @@ interface MemoryMatchGameState {
 }
 
 const EMOJI_SETS = {
-  romantic: ['❤️','💕','💖','💗','💘','💙','💚','💛','💜','💝','💞','💟','💋','💌','💍','💎','💐','🌹'],
-  nature:   ['🌺','🌻','🌼','🌷','🌸','🌿','🍀','🍁','🍂','🍃','🍄','🌾','🌱','🌲','🌳','🌴','🌵','🌽'],
-  animals:  ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐒','🐔','🐧'],
+  romantic: ['\u2764\ufe0f','\ud83d\udc95','\ud83d\udc96','\ud83d\udc97','\ud83d\udc98','\ud83d\udc99','\ud83d\udc9a','\ud83d\udc9b','\ud83d\udc9c','\ud83d\udc9d','\ud83d\udc9e','\ud83d\udc9f','\ud83d\udc8b','\ud83d\udc8c','\ud83d\udc8d','\ud83d\udc8e','\ud83d\udc90','\ud83c\udf39'],
+  nature:   ['\ud83c\udf3a','\ud83c\udf3b','\ud83c\udf3c','\ud83c\udf37','\ud83c\udf38','\ud83c\udf3f','\ud83c\udf40','\ud83c\udf41','\ud83c\udf42','\ud83c\udf43','\ud83c\udf44','\ud83c\udf3e','\ud83c\udf31','\ud83c\udf32','\ud83c\udf33','\ud83c\udf34','\ud83c\udf35','\ud83c\udf3d'],
+  animals:  ['\ud83d\udc36','\ud83d\udc31','\ud83d\udc2d','\ud83d\udc39','\ud83d\udc30','\ud83e\udd8a','\ud83d\udc3b','\ud83d\udc3c','\ud83d\udc28','\ud83d\udc2f','\ud83e\udd81','\ud83d\udc2e','\ud83d\udc37','\ud83d\udc38','\ud83d\udc35','\ud83d\udc12','\ud83d\udc14','\ud83d\udc27'],
 };
 
 const EMPTY_PLAYER = { score: 0, moves: 0 };
@@ -44,14 +43,15 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const [showCelebration, setShowCelebration] = useState(false);
   const [showMini, setShowMini] = useState(false);
 
-  // Safe key — never an empty string
-  const userKey = user?.email ?? null;
+  const userKey     = user?.email ?? null;
+  // Always use sanitized key as the Firebase object key
+  const safeUserKey = userKey ? sanitizeFirebasePath(userKey) : null;
 
   const initialState: MemoryMatchGameState = {
     cards: [],
     flippedCards: [],
     players: {},
-    currentPlayer: userKey ?? '',
+    currentPlayer: safeUserKey ?? '',
     status: 'waiting',
     gridSize: 4,
     gameMode: 'solo',
@@ -61,34 +61,33 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     sessionId || 'memorymatch-game', 'memorymatch', initialState
   );
 
-  // Safe helpers
   const safePlayers = (gameState?.players && typeof gameState.players === 'object') ? gameState.players : {};
-  const playerData  = (userKey && safePlayers[userKey]) ? safePlayers[userKey] : { ...EMPTY_PLAYER };
+  const playerData  = (safeUserKey && safePlayers[safeUserKey]) ? safePlayers[safeUserKey] : { ...EMPTY_PLAYER };
   const safeCards   = Array.isArray(gameState?.cards) ? gameState!.cards : [];
   const safeFlipped = Array.isArray(gameState?.flippedCards) ? gameState!.flippedCards : [];
 
   const startGame = () => {
-    if (!userKey) return;
+    if (!safeUserKey) return;
     playClick();
     updateGameState({
       ...initialState,
       cards: generateCards(gridSize, theme),
       gridSize,
       status: 'active',
-      players: { [userKey]: { score: 0, moves: 0 } },
+      players: { [safeUserKey]: { score: 0, moves: 0 } },
     });
   };
 
   const handleCardClick = (cardId: number) => {
-    if (!gameState || gameState.status !== 'active' || !userKey) return;
+    if (!gameState || gameState.status !== 'active' || !safeUserKey) return;
     const card = safeCards.find((c: Card) => c.id === cardId);
     if (!card || card.isFlipped || card.isMatched || safeFlipped.length >= 2) return;
     playFlip();
 
     const newFlipped = [...safeFlipped, cardId];
     const newCards   = safeCards.map((c: Card) => c.id === cardId ? { ...c, isFlipped: true } : c);
-    const curData    = safePlayers[userKey] ?? { ...EMPTY_PLAYER };
-    const updPlayers = { ...safePlayers, [userKey]: { ...curData, moves: curData.moves + 1 } };
+    const curData    = safePlayers[safeUserKey] ?? { ...EMPTY_PLAYER };
+    const updPlayers = { ...safePlayers, [safeUserKey]: { ...curData, moves: curData.moves + 1 } };
 
     if (newFlipped.length === 2) {
       const [fId, sId] = newFlipped;
@@ -100,7 +99,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
         setShowMini(true);
         setTimeout(() => setShowMini(false), 1000);
         const matched = newCards.map((c: Card) => c.id === fId || c.id === sId ? { ...c, isMatched: true } : c);
-        updPlayers[userKey].score = curData.score + 1;
+        updPlayers[safeUserKey].score = curData.score + 1;
         const allMatched = matched.every((c: Card) => c.isMatched);
         if (allMatched) {
           setTimeout(() => {
@@ -132,13 +131,13 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
-      <LoadingSpinner />
+      <Loader2 size={32} className="animate-spin text-blue-500" />
     </div>
   );
 
   return (
     <div className="min-h-screen p-4">
-      <Celebration show={showCelebration} type="win" message="All Pairs Found! 🎉" onComplete={() => setShowCelebration(false)} />
+      <Celebration show={showCelebration} type="win" message="All Pairs Found! \ud83c\udf89" onComplete={() => setShowCelebration(false)} />
       <MiniCelebration show={showMini} message="Match!" icon="heart" />
 
       <div className="max-w-4xl mx-auto">
@@ -146,14 +145,14 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">🃏 Memory Match</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">\ud83c\udccf Memory Match</h1>
           <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
             <RotateCcw size={20} />
           </button>
         </div>
 
         <div className="glass-card p-6">
-          {/* ── WAITING ── */}
+          {/* WAITING */}
           {(!gameState || gameState.status === 'waiting') && (
             <div className="space-y-6">
               <div className="text-center">
@@ -173,8 +172,8 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                       className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
                         gridSize === s ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
                       }`}>
-                      <p className="font-bold text-gray-900 dark:text-white">{s}×{s}</p>
-                      <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs · Easy' : '18 pairs · Hard'}</p>
+                      <p className="font-bold text-gray-900 dark:text-white">{s}\u00d7{s}</p>
+                      <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs \u00b7 Easy' : '18 pairs \u00b7 Hard'}</p>
                     </button>
                   ))}
                 </div>
@@ -196,14 +195,14 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 </div>
               </div>
 
-              <button onClick={startGame} disabled={!userKey}
+              <button onClick={startGame} disabled={!safeUserKey}
                 className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
                 Start Game
               </button>
             </div>
           )}
 
-          {/* ── ACTIVE ── */}
+          {/* ACTIVE */}
           {gameState?.status === 'active' && (
             <div className="space-y-5">
               <div className="flex justify-around">
@@ -238,10 +237,10 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
             </div>
           )}
 
-          {/* ── FINISHED ── */}
+          {/* FINISHED */}
           {gameState?.status === 'finished' && (
             <div className="text-center space-y-5">
-              <div className="text-6xl">🎉</div>
+              <div className="text-6xl">\ud83c\udf89</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Congratulations!</h2>
               <div className="glass rounded-xl p-6 space-y-3">
                 <div>
@@ -263,7 +262,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
               </div>
               <button onClick={resetGame}
                 className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
-                Play Again 💕
+                Play Again \ud83d\udc95
               </button>
             </div>
           )}
