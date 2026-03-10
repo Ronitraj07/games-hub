@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -24,11 +24,16 @@ const EMOJI_SETS = {
   animals:  ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐒','🐔','🐧'],
 };
 
+const EMPTY_PLAYER = { score: 0, moves: 0 };
+
 const generateCards = (gridSize: 4 | 6, theme: keyof typeof EMOJI_SETS = 'romantic'): Card[] => {
   const pairCount = (gridSize * gridSize) / 2;
   const symbols = EMOJI_SETS[theme].slice(0, pairCount);
   const pairs = [...symbols, ...symbols];
-  for (let i = pairs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pairs[i], pairs[j]] = [pairs[j], pairs[i]]; }
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
   return pairs.map((symbol, id) => ({ id, symbol, isFlipped: false, isMatched: false }));
 };
 
@@ -38,74 +43,80 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const [theme, setTheme] = useState<keyof typeof EMOJI_SETS>('romantic');
   const [showCelebration, setShowCelebration] = useState(false);
   const [showMini, setShowMini] = useState(false);
-  // Ref to always hold the latest gameState for use inside setTimeout closures
-  const gameStateRef = useRef<MemoryMatchGameState | null>(null);
+
+  // Safe key — never an empty string
+  const userKey = user?.email ?? null;
 
   const initialState: MemoryMatchGameState = {
-    cards: [], flippedCards: [], players: {}, currentPlayer: user?.email || '', status: 'waiting', gridSize: 4, gameMode: 'solo',
+    cards: [],
+    flippedCards: [],
+    players: {},
+    currentPlayer: userKey ?? '',
+    status: 'waiting',
+    gridSize: 4,
+    gameMode: 'solo',
   };
 
-  const { gameState, updateGameState, loading } = useRealtimeGame<MemoryMatchGameState>(sessionId || 'memorymatch-game', 'memorymatch', initialState);
+  const { gameState, updateGameState, loading } = useRealtimeGame<MemoryMatchGameState>(
+    sessionId || 'memorymatch-game', 'memorymatch', initialState
+  );
 
-  // Keep ref in sync with latest gameState
-  gameStateRef.current = gameState ?? null;
+  // Safe helpers
+  const safePlayers = (gameState?.players && typeof gameState.players === 'object') ? gameState.players : {};
+  const playerData  = (userKey && safePlayers[userKey]) ? safePlayers[userKey] : { ...EMPTY_PLAYER };
+  const safeCards   = Array.isArray(gameState?.cards) ? gameState!.cards : [];
+  const safeFlipped = Array.isArray(gameState?.flippedCards) ? gameState!.flippedCards : [];
 
   const startGame = () => {
+    if (!userKey) return;
     playClick();
-    updateGameState({ ...initialState, cards: generateCards(gridSize, theme), gridSize, status: 'active', players: { [user?.email || '']: { score: 0, moves: 0 } } });
+    updateGameState({
+      ...initialState,
+      cards: generateCards(gridSize, theme),
+      gridSize,
+      status: 'active',
+      players: { [userKey]: { score: 0, moves: 0 } },
+    });
   };
 
   const handleCardClick = (cardId: number) => {
-    if (!gameState || gameState.status !== 'active') return;
-    const safeCards = Array.isArray(gameState.cards) ? gameState.cards : [];
-    const card = safeCards[cardId];
-    if (!card || card.isFlipped || card.isMatched || gameState.flippedCards.length >= 2) return;
-
+    if (!gameState || gameState.status !== 'active' || !userKey) return;
+    const card = safeCards.find((c: Card) => c.id === cardId);
+    if (!card || card.isFlipped || card.isMatched || safeFlipped.length >= 2) return;
     playFlip();
-    const newFlipped = [...gameState.flippedCards, cardId];
+
+    const newFlipped = [...safeFlipped, cardId];
     const newCards   = safeCards.map((c: Card) => c.id === cardId ? { ...c, isFlipped: true } : c);
-    const playerEmail = user?.email || '';
-    const playerData  = gameState.players[playerEmail] || { score: 0, moves: 0 };
-    const updPlayers  = { ...gameState.players, [playerEmail]: { ...playerData, moves: playerData.moves + 1 } };
+    const curData    = safePlayers[userKey] ?? { ...EMPTY_PLAYER };
+    const updPlayers = { ...safePlayers, [userKey]: { ...curData, moves: curData.moves + 1 } };
 
     if (newFlipped.length === 2) {
       const [fId, sId] = newFlipped;
+      const cardA = newCards.find((c: Card) => c.id === fId);
+      const cardB = newCards.find((c: Card) => c.id === sId);
 
-      if (newCards[fId].symbol === newCards[sId].symbol) {
-        // ✅ MATCH
+      if (cardA && cardB && cardA.symbol === cardB.symbol) {
         playMatch();
         setShowMini(true);
         setTimeout(() => setShowMini(false), 1000);
-
         const matched = newCards.map((c: Card) => c.id === fId || c.id === sId ? { ...c, isMatched: true } : c);
-        const newScore = playerData.score + 1;
-        const finalPlayers = { ...updPlayers, [playerEmail]: { ...updPlayers[playerEmail], score: newScore } };
-        const isFinished = matched.every((c: Card) => c.isMatched);
-
-        updateGameState({
-          ...gameState,
-          cards: matched,
-          flippedCards: [],
-          players: finalPlayers,
-          status: isFinished ? 'finished' : 'active',
-        });
-
-        if (isFinished) {
-          setTimeout(() => { playWin(); setShowCelebration(true); }, 500);
+        updPlayers[userKey].score = curData.score + 1;
+        const allMatched = matched.every((c: Card) => c.isMatched);
+        if (allMatched) {
+          setTimeout(() => {
+            playWin();
+            setShowCelebration(true);
+            updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers, status: 'finished' });
+          }, 500);
+        } else {
+          updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers });
         }
       } else {
-        // ❌ NO MATCH — show both flipped briefly, then flip back using the ref (avoids stale closure)
         playWrong();
         updateGameState({ ...gameState, cards: newCards, flippedCards: newFlipped, players: updPlayers });
-
         setTimeout(() => {
-          const latest = gameStateRef.current;
-          if (!latest) return;
-          const latestCards = Array.isArray(latest.cards) ? latest.cards : [];
-          const reset = latestCards.map((c: Card) =>
-            c.id === fId || c.id === sId ? { ...c, isFlipped: false } : c
-          );
-          updateGameState({ ...latest, cards: reset, flippedCards: [] });
+          const reset = safeCards.map((c: Card) => c.id === fId || c.id === sId ? { ...c, isFlipped: false } : c);
+          updateGameState({ ...gameState, cards: reset, flippedCards: [], players: updPlayers });
         }, 1000);
       }
     } else {
@@ -113,12 +124,17 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     }
   };
 
-  const resetGame = () => { playClick(); setShowCelebration(false); updateGameState(initialState); };
+  const resetGame = () => {
+    playClick();
+    setShowCelebration(false);
+    updateGameState(initialState);
+  };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>;
-
-  const safeCards = Array.isArray(gameState?.cards) ? gameState.cards : [];
-  const playerData = gameState?.players[user?.email || ''] || { score: 0, moves: 0 };
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <LoadingSpinner />
+    </div>
+  );
 
   return (
     <div className="min-h-screen p-4">
@@ -131,11 +147,14 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
             <ArrowLeft size={20} /> Back
           </Link>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">🃏 Memory Match</h1>
-          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
+          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
+            <RotateCcw size={20} />
+          </button>
         </div>
 
         <div className="glass-card p-6">
-          {gameState?.status === 'waiting' && (
+          {/* ── WAITING ── */}
+          {(!gameState || gameState.status === 'waiting') && (
             <div className="space-y-6">
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 glass rounded-2xl mb-3">
@@ -145,6 +164,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 <p className="text-gray-500 dark:text-gray-400 mt-1">Find all the matching pairs!</p>
               </div>
 
+              {/* Grid Size */}
               <div className="glass rounded-xl p-5">
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Grid Size</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -160,6 +180,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 </div>
               </div>
 
+              {/* Theme */}
               <div className="glass rounded-xl p-5">
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Theme</h3>
                 <div className="grid grid-cols-3 gap-3">
@@ -175,18 +196,20 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 </div>
               </div>
 
-              <button onClick={startGame} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
+              <button onClick={startGame} disabled={!userKey}
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
                 Start Game
               </button>
             </div>
           )}
 
+          {/* ── ACTIVE ── */}
           {gameState?.status === 'active' && (
             <div className="space-y-5">
               <div className="flex justify-around">
                 {[
                   { icon: Trophy, label: 'Pairs',  value: playerData.score, color: 'text-yellow-500' },
-                  { icon: Users,  label: 'Moves',  value: playerData.moves, color: 'text-pink-500' },
+                  { icon: Users,  label: 'Moves',  value: playerData.moves, color: 'text-pink-500'   },
                   { icon: Brain,  label: 'Left',   value: ((gameState.gridSize * gameState.gridSize) / 2) - playerData.score, color: 'text-purple-500' },
                 ].map(({ icon: Icon, label, value, color }) => (
                   <div key={label} className="text-center glass rounded-xl px-5 py-3">
@@ -201,31 +224,47 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 {safeCards.map((card: Card) => (
                   <button key={card.id} onClick={() => handleCardClick(card.id)}
                     disabled={card.isFlipped || card.isMatched}
-                    className={`aspect-square rounded-xl transition-all duration-300 ${
+                    className={`aspect-square rounded-xl transition-all duration-300 flex items-center justify-center text-3xl ${
                       card.isMatched
                         ? 'bg-green-100 dark:bg-green-900/30 scale-90 opacity-60'
                         : card.isFlipped
                         ? 'glass scale-105 ring-2 ring-pink-400'
-                        : 'bg-gradient-to-br from-pink-400 to-purple-500 hover:scale-105 hover:shadow-lg shadow-pink-200/30'
+                        : 'bg-gradient-to-br from-pink-400 to-purple-500 hover:scale-105 hover:shadow-lg'
                     }`}>
-                    <span className={`text-3xl ${card.isFlipped || card.isMatched ? 'opacity-100' : 'opacity-0'}`}>{card.symbol}</span>
-                    {!card.isFlipped && !card.isMatched && <span className="text-2xl text-white">?</span>}
+                    {(card.isFlipped || card.isMatched) ? card.symbol : <span className="text-2xl text-white font-bold">?</span>}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
+          {/* ── FINISHED ── */}
           {gameState?.status === 'finished' && (
             <div className="text-center space-y-5">
-              <div className="text-6xl animate-bounce-subtle">🎉</div>
+              <div className="text-6xl">🎉</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Congratulations!</h2>
               <div className="glass rounded-xl p-6 space-y-3">
-                <div><p className="text-gray-500 text-sm">Pairs Found</p><p className="text-4xl font-bold text-pink-600">{playerData.score}</p></div>
-                <div><p className="text-gray-500 text-sm">Total Moves</p><p className="text-3xl font-bold text-purple-600">{playerData.moves}</p></div>
-                {playerData.moves > 0 && <div><p className="text-gray-500 text-sm">Accuracy</p><p className="text-2xl font-bold text-green-600">{((playerData.score / playerData.moves) * 100).toFixed(1)}%</p></div>}
+                <div>
+                  <p className="text-gray-500 text-sm">Pairs Found</p>
+                  <p className="text-4xl font-bold text-pink-600">{playerData.score}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Total Moves</p>
+                  <p className="text-3xl font-bold text-purple-600">{playerData.moves}</p>
+                </div>
+                {playerData.moves > 0 && (
+                  <div>
+                    <p className="text-gray-500 text-sm">Accuracy</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {((playerData.score / playerData.moves) * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                )}
               </div>
-              <button onClick={resetGame} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">Play Again 💕</button>
+              <button onClick={resetGame}
+                className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
+                Play Again 💕
+              </button>
             </div>
           )}
         </div>
