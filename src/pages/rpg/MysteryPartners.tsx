@@ -1,169 +1,248 @@
-import React from 'react';
-import { Search, BookOpen, Users, Fingerprint, Lock, Map } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Search, BookOpen, Users, Fingerprint, Lock, ArrowLeft, Sparkles, ChevronRight, Star } from 'lucide-react';
+
+const CASES = [
+  {
+    id: 1,
+    emoji: '🎁',
+    title: 'The Missing Anniversary Gift',
+    tagline: 'A stolen necklace on the most important night of the year.',
+    difficulty: 'Easy',
+    difficultyColor: 'text-green-400',
+    difficultyBg: 'bg-green-900/30 border-green-700/40',
+    suspects: 3,
+    clues: 8,
+    isTutorial: true,
+    status: 'Coming in Phase 2',
+  },
+  {
+    id: 2,
+    emoji: '🎭',
+    title: 'The Theater Phantom',
+    tagline: 'An actor vanishes mid-performance on opening night.',
+    difficulty: 'Medium',
+    difficultyColor: 'text-yellow-400',
+    difficultyBg: 'bg-yellow-900/30 border-yellow-700/40',
+    suspects: 6,
+    clues: 14,
+    isTutorial: false,
+    status: 'Planned',
+  },
+  {
+    id: 3,
+    emoji: '🖼️',
+    title: "The Art Collector's Curse",
+    tagline: 'Mysterious deaths trail a stolen painting across the city.',
+    difficulty: 'Hard',
+    difficultyColor: 'text-red-400',
+    difficultyBg: 'bg-red-900/30 border-red-700/40',
+    suspects: 9,
+    clues: 22,
+    isTutorial: false,
+    status: 'Planned',
+  },
+];
 
 export const MysteryPartners: React.FC = () => {
+  const [activeCase, setActiveCase] = useState(0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-indigo-900 to-purple-900">
-      <div className="max-w-6xl mx-auto px-4 py-16">
-        {/* Header */}
-        <div className="text-center mb-16 animate-fade-in">
-          <div className="inline-block mb-6 animate-float">
-            <div className="text-8xl">🔍</div>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-indigo-300 mb-4">
-            Mystery Partners
-          </h1>
-          <p className="text-xl text-gray-300 mb-6">
-            Solve thrilling detective cases together as a crime-solving duo
-          </p>
-          <div className="flex items-center justify-center gap-2 text-yellow-400 bg-yellow-900/30 px-4 py-2 rounded-full inline-flex">
-            <Lock className="w-5 h-5" />
-            <span className="font-semibold">In Development</span>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-purple-950">
+
+      {/* Back button */}
+      <div className="max-w-6xl mx-auto px-4 pt-6">
+        <Link to="/rpg" className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition font-medium">
+          <ArrowLeft size={18} /> Back to RPG Hub
+        </Link>
+      </div>
+
+      {/* Hero */}
+      <div className="max-w-6xl mx-auto px-4 py-12 text-center">
+        {/* Noir rain effect bar */}
+        <div className="flex justify-center gap-1 mb-6 opacity-30">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <div key={i} className="w-px bg-indigo-400" style={{ height: `${20 + Math.random() * 30}px`, animationDelay: `${i * 0.05}s` }} />
+          ))}
         </div>
-
-        {/* Key Features */}
-        <div className="grid md:grid-cols-2 gap-8 mb-16">
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-indigo-500/20 animate-slide-in-left">
-            <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center mb-4">
-              <BookOpen className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3">
-              10+ Mystery Cases
-            </h3>
-            <p className="text-gray-300">
-              From missing persons to art heists, each case offers unique challenges, suspects, and twists to unravel together.
-            </p>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-purple-500/20 animate-slide-in-right">
-            <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4">
-              <Fingerprint className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3">
-              Evidence Collection
-            </h3>
-            <p className="text-gray-300">
-              Gather clues, analyze evidence, and piece together the truth using your detective board and deduction skills.
-            </p>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-blue-500/20 animate-slide-in-left">
-            <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4">
-              <Users className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3">
-              Detective & Analyst Roles
-            </h3>
-            <p className="text-gray-300">
-              One player leads interrogations while the other analyzes evidence. Switch roles or work together on tough cases.
-            </p>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-pink-500/20 animate-slide-in-right">
-            <div className="w-12 h-12 bg-pink-500 rounded-xl flex items-center justify-center mb-4">
-              <Map className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3">
-              Noir Atmosphere
-            </h3>
-            <p className="text-gray-300">
-              Atmospheric 1940s noir aesthetic with jazz music, rain-soaked streets, and moody lighting throughout.
-            </p>
-          </div>
+        <div className="text-8xl mb-4">🔍</div>
+        <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent mb-4">
+          Mystery Partners
+        </h1>
+        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-4">
+          A co-op noir detective adventure set in the rain-soaked streets of 1940s. Two roles, one truth — you can only solve it together.
+        </p>
+        <p className="text-indigo-400 italic text-sm mb-6">"The game is afoot, partner."</p>
+        <div className="inline-flex items-center gap-2 bg-yellow-900/30 text-yellow-300 border border-yellow-700/40 px-5 py-2 rounded-full font-semibold">
+          <Lock size={15} /> In Development — Beta: Q4 2026
         </div>
+      </div>
 
-        {/* Sample Cases */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl p-8 text-white mb-16 animate-scale-in">
-          <div className="flex items-center gap-3 mb-6">
-            <Search className="w-6 h-6" />
-            <h3 className="text-2xl font-bold">Sample Cases</h3>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-black/20 rounded-xl p-4">
-              <p className="font-bold mb-2">🎁 The Missing Anniversary Gift</p>
-              <p className="text-sm text-indigo-100">Tutorial case: A stolen necklace on your anniversary</p>
-              <p className="text-xs text-indigo-200 mt-2">Difficulty: Easy</p>
+      {/* 4 Core Pillars */}
+      <div className="max-w-6xl mx-auto px-4 pb-16">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            { icon: <BookOpen size={22} className="text-white" />, color: 'from-indigo-500 to-blue-600', title: '10+ Cases', desc: 'Missing persons, art heists, theater scandals — each case is unique with real twists.' },
+            { icon: <Fingerprint size={22} className="text-white" />, color: 'from-purple-500 to-violet-600', title: 'Evidence Board', desc: 'Gather clues, pin connections, and build your deduction map piece by piece.' },
+            { icon: <Users size={22} className="text-white" />, color: 'from-pink-500 to-rose-600', title: 'Split Roles', desc: 'One interrogates, one analyzes. Switch roles on harder cases.' },
+            { icon: <Search size={22} className="text-white" />, color: 'from-blue-500 to-indigo-600', title: 'Noir World', desc: 'Jazz, rain, dim lights. A fully atmospheric 1940s detective world.' },
+          ].map(p => (
+            <div key={p.title} className="bg-gray-900/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-gray-700/50 hover:border-indigo-500/50 transition-colors">
+              <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${p.color} flex items-center justify-center mb-4`}>{p.icon}</div>
+              <h3 className="font-bold text-white mb-2">{p.title}</h3>
+              <p className="text-sm text-gray-400 leading-relaxed">{p.desc}</p>
             </div>
-            <div className="bg-black/20 rounded-xl p-4">
-              <p className="font-bold mb-2">🎭 The Theater Phantom</p>
-              <p className="text-sm text-indigo-100">An actor vanishes during opening night</p>
-              <p className="text-xs text-indigo-200 mt-2">Difficulty: Medium</p>
-            </div>
-            <div className="bg-black/20 rounded-xl p-4">
-              <p className="font-bold mb-2">🖼️ The Art Collector's Curse</p>
-              <p className="text-sm text-indigo-100">Mysterious deaths follow a stolen painting</p>
-              <p className="text-xs text-indigo-200 mt-2">Difficulty: Hard</p>
-            </div>
-          </div>
+          ))}
         </div>
+      </div>
 
-        {/* Inspiration */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 mb-16">
-          <h3 className="text-2xl font-bold text-white mb-4">Inspired By</h3>
-          <div className="grid md:grid-cols-3 gap-4 text-gray-300">
-            <div>
-              <p className="font-bold mb-1 text-indigo-300">⚖️ Ace Attorney</p>
-              <p className="text-sm">Interrogation and deduction mechanics</p>
-            </div>
-            <div>
-              <p className="font-bold mb-1 text-purple-300">📼 Her Story</p>
-              <p className="text-sm">Non-linear evidence discovery</p>
-            </div>
-            <div>
-              <p className="font-bold mb-1 text-blue-300">⛵ Return of the Obra Dinn</p>
-              <p className="text-sm">Deduction board puzzle solving</p>
-            </div>
+      {/* Case Files */}
+      <div className="bg-gray-900/60 backdrop-blur-sm border-y border-gray-700/50 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl font-bold text-center text-white mb-2">📁 Case Files</h2>
+          <p className="text-center text-gray-500 mb-10">Three mysteries designed — more in development</p>
+
+          {/* Case tabs */}
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {CASES.map((c, i) => (
+              <button
+                key={c.id}
+                onClick={() => setActiveCase(i)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
+                  activeCase === i
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-lg scale-105'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                }`}
+              >
+                <span>{c.emoji}</span>
+                <span>Case {c.id}</span>
+                {c.isTutorial && <span className="text-xs bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded">Tutorial</span>}
+              </button>
+            ))}
           </div>
-        </div>
 
-        {/* Development Status */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-gray-700 text-center">
-          <h3 className="text-2xl font-bold text-white mb-4">
-            Development Roadmap
-          </h3>
+          {/* Active case card */}
           <div className="max-w-2xl mx-auto">
-            <div className="space-y-4 text-left">
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-xs font-bold text-gray-900 mt-1">
-                  1
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Phase 1: Case Structure & UI</p>
-                  <p className="text-sm text-gray-400">Evidence board, case files, interrogation interface</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center text-xs font-bold text-gray-300 mt-1">
-                  2
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Phase 2: First Mystery</p>
-                  <p className="text-sm text-gray-400">"The Missing Anniversary Gift" - tutorial case</p>
+            <div className={`rounded-2xl p-8 border ${CASES[activeCase].difficultyBg} bg-gray-900/80 shadow-2xl`}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="text-6xl">{CASES[activeCase].emoji}</div>
+                <div className="text-right">
+                  <span className={`text-sm font-bold ${CASES[activeCase].difficultyColor}`}>
+                    {CASES[activeCase].difficulty}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">{CASES[activeCase].status}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center text-xs font-bold text-gray-300 mt-1">
-                  3
+              <h3 className="text-2xl font-bold text-white mb-2">{CASES[activeCase].title}</h3>
+              <p className="text-gray-400 italic mb-6">"{CASES[activeCase].tagline}"</p>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-800/70 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-indigo-400">{CASES[activeCase].suspects}</p>
+                  <p className="text-xs text-gray-500">Suspects</p>
                 </div>
-                <div>
-                  <p className="font-semibold text-white">Phase 3: Core Systems</p>
-                  <p className="text-sm text-gray-400">Deduction engine, ranking system, case progression</p>
+                <div className="bg-gray-800/70 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-purple-400">{CASES[activeCase].clues}</p>
+                  <p className="text-xs text-gray-500">Clues</p>
+                </div>
+                <div className="bg-gray-800/70 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-pink-400">2</p>
+                  <p className="text-xs text-gray-500">Players</p>
                 </div>
               </div>
+
+              {CASES[activeCase].isTutorial && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-green-400">
+                  <Star size={14} fill="currentColor" />
+                  Tutorial case — perfect for your first investigation
+                </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* CTA */}
-        <div className="mt-16 text-center">
-          <p className="text-gray-400 mb-4">
-            The game is afoot! Stay tuned for development updates.
-          </p>
-          <p className="text-sm text-gray-500">
-            Estimated Beta: Q4 2026
-          </p>
+      {/* Roles Section */}
+      <div className="max-w-6xl mx-auto px-4 py-16">
+        <h2 className="text-2xl font-bold text-center text-white mb-2">🕵️ The Two Roles</h2>
+        <p className="text-center text-gray-500 mb-10">The case breaks only when both of you play your part</p>
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="bg-indigo-900/30 border border-indigo-700/40 rounded-2xl p-8">
+            <div className="text-4xl mb-4">🎤</div>
+            <h3 className="text-xl font-bold text-white mb-3">The Interrogator</h3>
+            <p className="text-gray-400 mb-4">You face the suspects. Ask the right questions, read their body language, and push for the truth under pressure.</p>
+            <div className="space-y-2">
+              {['Conduct suspect interviews', 'Unlock new dialogue paths', 'Call for backup when stuck'].map(item => (
+                <div key={item} className="flex items-center gap-2 text-sm text-indigo-300">
+                  <ChevronRight size={14} />{item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-purple-900/30 border border-purple-700/40 rounded-2xl p-8">
+            <div className="text-4xl mb-4">🔬</div>
+            <h3 className="text-xl font-bold text-white mb-3">The Analyst</h3>
+            <p className="text-gray-400 mb-4">You work the evidence board. Connect clues, spot contradictions in testimony, and reveal what the interrogator should ask next.</p>
+            <div className="space-y-2">
+              {['Manage the evidence board', 'Cross-reference clue connections', 'Flag contradictions in testimony'].map(item => (
+                <div key={item} className="flex items-center gap-2 text-sm text-purple-300">
+                  <ChevronRight size={14} />{item}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Inspiration + Roadmap */}
+      <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 border-y border-indigo-700/30 py-12">
+        <div className="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-10 text-white">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles size={20} className="text-indigo-400" />
+              <h3 className="text-xl font-bold">Inspired By</h3>
+            </div>
+            <div className="space-y-3">
+              {[
+                { emoji: '⚖️', title: 'Ace Attorney', desc: 'Interrogation mechanics and dramatic reveals' },
+                { emoji: '📼', title: 'Her Story', desc: 'Non-linear evidence discovery' },
+                { emoji: '⛵', title: 'Return of the Obra Dinn', desc: 'Deduction board puzzle solving' },
+              ].map(s => (
+                <div key={s.title} className="bg-white/10 rounded-xl p-4">
+                  <p className="font-semibold">{s.emoji} {s.title}</p>
+                  <p className="text-sm text-indigo-200">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="text-xl font-bold mb-4">🗓️ Development Roadmap</h3>
+            <div className="space-y-3">
+              {[
+                { phase: '1', title: 'Case Structure & UI', desc: 'Evidence board, case files, interrogation interface', active: true },
+                { phase: '2', title: 'First Mystery', desc: '"The Missing Anniversary Gift" — tutorial case', active: false },
+                { phase: '3', title: 'Core Systems', desc: 'Deduction engine, ranking system, case progression', active: false },
+              ].map(step => (
+                <div key={step.phase} className={`rounded-xl p-4 flex items-start gap-4 ${ step.active ? 'bg-white/20' : 'bg-white/10'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${ step.active ? 'bg-yellow-400 text-gray-900' : 'bg-white/20 text-white'}`}>{step.phase}</div>
+                  <div>
+                    <p className="font-semibold">{step.title}</p>
+                    <p className="text-sm text-indigo-200">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-indigo-400 mt-4 text-center">Estimated Beta: Q4 2026</p>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA footer */}
+      <div className="text-center py-12 px-4">
+        <p className="text-gray-600 italic mb-6">"Every lie leaves a trace. Every truth hides one too."</p>
+        <Link to="/rpg" className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-semibold transition">
+          <ArrowLeft size={16} /> Back to RPG Hub
+        </Link>
       </div>
     </div>
   );
