@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Lock, Eye, EyeOff, Heart, LogIn } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signInWithEmail } = useAuth();
   const navigate    = useNavigate();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -17,7 +17,7 @@ export const Login: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signInWithEmail(email, password);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');

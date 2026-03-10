@@ -3,20 +3,21 @@ import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Board } from './Board';
+import { BoardState, GameStatus } from './types';
 import { RotateCcw, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface TicTacToeGameState {
-  board: (string | null)[];
+  board: BoardState;
   currentPlayer: string;
   players: { player1: string; player2: string | null };
   winner: string | null;
   winningCells: number[] | null;
-  status: 'waiting' | 'active' | 'finished';
+  status: GameStatus;
   isDraw: boolean;
 }
 
-const calculateWinner = (board: (string | null)[]): { winner: string | null; cells: number[] | null } => {
+const calculateWinner = (board: BoardState): { winner: string | null; cells: number[] | null } => {
   const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   for (const [a,b,c] of lines) {
     if (board[a] && board[a] === board[b] && board[a] === board[c])
@@ -29,7 +30,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
 
   const initialState: TicTacToeGameState = {
-    board: Array(9).fill(null),
+    board: Array(9).fill(null) as BoardState,
     currentPlayer: user?.email || '',
     players: { player1: user?.email || '', player2: null },
     winner: null, winningCells: null, status: 'waiting', isDraw: false,
@@ -42,8 +43,8 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const handleCellClick = (index: number) => {
     if (!gameState || gameState.status !== 'active' || gameState.currentPlayer !== user?.email) return;
     if (gameState.board[index]) return;
-    const newBoard = [...gameState.board];
-    newBoard[index] = user?.email || '';
+    const newBoard = [...gameState.board] as BoardState;
+    newBoard[index] = gameState.players.player1 === user?.email ? 'X' : 'O';
     const { winner, cells } = calculateWinner(newBoard);
     const isDraw = !winner && newBoard.every(c => c !== null);
     const nextPlayer = gameState.currentPlayer === gameState.players.player1 ? gameState.players.player2 : gameState.players.player1;
@@ -94,7 +95,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
         {gameState && gameState.status !== 'waiting' && (
           <div className="space-y-4">
-            {/* Status bar */}
             <div className="glass-card p-4 text-center">
               {gameState.status === 'active' && (
                 <p className={`font-semibold text-lg ${

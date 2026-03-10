@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Lock, User, Eye, EyeOff, Heart, UserPlus } from 'lucide-react';
 
 export const Signup: React.FC = () => {
-  const { signUp } = useAuth();
+  const { signUpWithEmail } = useAuth();
   const navigate = useNavigate();
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
@@ -21,7 +21,7 @@ export const Signup: React.FC = () => {
     if (password.length < 6)  { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      await signUp(email, password, name);
+      await signUpWithEmail(email, password);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
