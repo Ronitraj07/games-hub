@@ -1,5 +1,5 @@
 {
-  "name": "couple-games-hub",
+  "name": "games-hub",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -15,7 +15,8 @@
     "@supabase/supabase-js": "^2.48.1",
     "lucide-react": "^0.454.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "nanoid": "^5.0.8"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

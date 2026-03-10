@@ -34,7 +34,7 @@ export const AUTH_ERRORS = {
  * Application configuration
  */
 export const APP_CONFIG = {
-  APP_NAME: 'Couple Games Hub',
+  APP_NAME: 'Games-Hub',
   DESCRIPTION: 'Private gaming platform for Ronit & Radhika',
   COUPLE_NAMES: ['Ronit', 'Radhika'],
 };
