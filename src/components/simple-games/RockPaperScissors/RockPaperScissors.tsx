@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useGameStats } from '@/hooks/useGameStats';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong, playClick } from '@/utils/sounds';
@@ -11,9 +12,9 @@ import type { RPSChoice, RPSDifficulty } from '@/lib/rps-ai';
 import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
 
 const CHOICES: { value: RPSChoice; emoji: string; label: string; beats: RPSChoice }[] = [
-  { value: 'rock',     emoji: '✊', label: 'Rock',     beats: 'scissors' },
-  { value: 'paper',   emoji: '✋', label: 'Paper',    beats: 'rock'     },
-  { value: 'scissors',emoji: '✌️', label: 'Scissors', beats: 'paper'    },
+  { value: 'rock',     emoji: '\u270a', label: 'Rock',     beats: 'scissors' },
+  { value: 'paper',   emoji: '\u270b', label: 'Paper',    beats: 'rock'     },
+  { value: 'scissors',emoji: '\u270c\ufe0f', label: 'Scissors', beats: 'paper'    },
 ];
 
 const TOTAL_ROUNDS = 5;
@@ -36,10 +37,12 @@ interface RPSOnlineState {
   mode: GameMode;
   aiDifficulty: AIDifficulty;
   history: { p1: RPSChoice; p2: RPSChoice }[];
+  recorded?: boolean;
 }
 
 export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
 
   const [mode,         setMode]         = useState<GameMode | null>(null);
@@ -54,6 +57,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
   const [animating,    setAnimating]    = useState(false);
   const [history,      setHistory]      = useState<{ player: RPSChoice; cpu: RPSChoice; result: Result }[]>([]);
   const [aiHistory,    setAiHistory]    = useState<RPSChoice[]>([]);
+  const [aiRecorded,   setAiRecorded]   = useState(false);
 
   const safeSession = sessionId
     ? sanitizeFirebasePath(sessionId)
@@ -65,6 +69,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     p1Score: 0, p2Score: 0, round: 1,
     status: 'waiting', mode: 'vs-partner',
     aiDifficulty: 'medium', history: [],
+    recorded: false,
   };
 
   const { gameState, updateGameState, loading } =
@@ -73,6 +78,25 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
   const isP1Online      = gameState?.p1Email === userKey;
   const myOnlineChoice  = isP1Online ? gameState?.p1Choice : gameState?.p2Choice;
   const oppOnlineChoice = isP1Online ? gameState?.p2Choice : gameState?.p1Choice;
+
+  // Record AI game result
+  const recordAIResult = (pScore: number, aScore: number) => {
+    if (aiRecorded || !userKey) return;
+    setAiRecorded(true);
+    const result = pScore > aScore ? 'win' : pScore < aScore ? 'loss' : 'draw';
+    recordGame({ gameType: 'rps', playerEmail: userKey, result, score: pScore, mode: 'vs-ai' });
+  };
+
+  // Record online game result
+  const recordOnlineResult = (gs: RPSOnlineState) => {
+    if (gs.recorded || !userKey) return;
+    const myScore  = isP1Online ? gs.p1Score : gs.p2Score;
+    const oppScore = isP1Online ? gs.p2Score : gs.p1Score;
+    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp      = isP1Online ? (gs.p2Email ?? undefined) : gs.p1Email;
+    recordGame({ gameType: 'rps', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
+    updateGameState({ ...gs, recorded: true });
+  };
 
   const handleAIChoice = (choice: RPSChoice) => {
     if (animating || gameOver) return;
@@ -85,11 +109,18 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
       setAiChoice(cpu); setResult(res);
       setAiHistory(h => [...h, choice]);
       setHistory(h => [...h, { player: choice, cpu, result: res }]);
-      if (res === 'win')       { setPlayerScore(s => s+1); playCorrect(); }
-      else if (res === 'lose') { setAiScore(s => s+1);     playWrong(); }
+      const newP = res === 'win'  ? playerScore + 1 : playerScore;
+      const newA = res === 'lose' ? aiScore + 1     : aiScore;
+      if (res === 'win')       { setPlayerScore(newP); playCorrect(); }
+      else if (res === 'lose') { setAiScore(newA);     playWrong(); }
       else                     { playClick(); }
-      if (round >= TOTAL_ROUNDS) setGameOver(true);
-      else setRound(r => r+1);
+      const isLast = round >= TOTAL_ROUNDS;
+      if (isLast) {
+        setGameOver(true);
+        recordAIResult(newP, newA);
+      } else {
+        setRound(r => r + 1);
+      }
       setAnimating(false);
     }, 800);
   };
@@ -97,7 +128,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
   const resetAI = () => {
     setPlayerChoice(null); setAiChoice(null); setResult(null);
     setPlayerScore(0); setAiScore(0); setRound(1);
-    setGameOver(false); setHistory([]); setAiHistory([]);
+    setGameOver(false); setHistory([]); setAiHistory([]); setAiRecorded(false);
   };
 
   const pickOnline = (choice: RPSChoice) => {
@@ -111,7 +142,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
       const p1c = isP1Online ? choice : gameState.p1Choice!;
       const p2c = isP1Online ? gameState.p2Choice! : choice;
       const res1 = getResult(p1c, p2c);
-      updateGameState({
+      const newState: RPSOnlineState = {
         ...update,
         p2Choice: isP1Online ? gameState.p2Choice : choice,
         p1Choice: isP1Online ? choice : gameState.p1Choice,
@@ -119,7 +150,10 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
         p2Score: gameState.p2Score + (res1 === 'lose' ? 1 : 0),
         history: [...(gameState.history || []), { p1: p1c, p2: p2c }],
         status: gameState.round >= TOTAL_ROUNDS ? 'finished' : 'reveal',
-      });
+        recorded: false,
+      };
+      if (newState.status === 'finished') recordOnlineResult(newState);
+      else updateGameState(newState);
     } else {
       updateGameState(update);
     }
@@ -147,12 +181,8 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
 
   const resetOnline = () => updateGameState(initialOnline);
 
-  const handleStartVsAI = (diff: AIDifficulty) => {
-    setAiDiff(diff); setMode('vs-ai'); resetAI();
-  };
-  const handleStartVsPartner = (_roomId: string, _isHost: boolean) => {
-    setMode('vs-partner'); startOnlineGame();
-  };
+  const handleStartVsAI      = (diff: AIDifficulty) => { setAiDiff(diff); setMode('vs-ai'); resetAI(); };
+  const handleStartVsPartner = (_roomId: string, _isHost: boolean) => { setMode('vs-partner'); startOnlineGame(); };
 
   const resultColors = {
     win:  'text-green-600 dark:text-green-400',
@@ -166,7 +196,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     </div>
   );
 
-  // ──────────── LOBBY ────────────
+  // LOBBY
   if (!mode) return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
@@ -174,20 +204,20 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
           <div className="w-10" />
         </div>
         <div className="flex items-center justify-center min-h-[60vh]">
           <GameLobby
             gameName="Rock Paper Scissors"
-            gameIcon="✊"
+            gameIcon="\u270a"
             gradient="from-orange-500 to-pink-500"
-            description="5 rounds — best score wins!"
+            description="5 rounds \u2014 best score wins!"
             supportsAI
             aiLabels={{
-              easy:   'pure random — unpredictable',
+              easy:   'pure random \u2014 unpredictable',
               medium: '50% chance to counter your last move',
-              hard:   'analyses your pattern — adapts',
+              hard:   'analyses your pattern \u2014 adapts',
             }}
             gameType="RPS"
             onStartVsAI={handleStartVsAI}
@@ -198,7 +228,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     </div>
   );
 
-  // ──────────── VS AI ────────────
+  // VS AI
   if (mode === 'vs-ai') return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
@@ -206,7 +236,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <button onClick={() => setMode(null)} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
           <button onClick={resetAI} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
         </div>
 
@@ -225,7 +255,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
               <p className="text-2xl font-bold text-gray-400">VS</p>
             </div>
             <div className="text-center flex-1">
-              <p className="text-sm text-gray-500">AI 🤖</p>
+              <p className="text-sm text-gray-500">AI \ud83e\udd16</p>
               <p className="text-4xl font-bold text-red-600 dark:text-red-400">{aiScore}</p>
             </div>
           </div>
@@ -235,21 +265,21 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <div className="flex justify-between items-center mb-6">
             <div className="text-center flex-1">
               <div className={`text-8xl transition-all duration-300 ${animating ? 'animate-bounce' : ''}`}>
-                {playerChoice ? CHOICES.find(c => c.value === playerChoice)!.emoji : '❓'}
+                {playerChoice ? CHOICES.find(c => c.value === playerChoice)!.emoji : '\u2753'}
               </div>
               <p className="text-sm text-gray-500 mt-2">Your choice</p>
             </div>
-            <div className="text-3xl">⚔️</div>
+            <div className="text-3xl">\u2694\ufe0f</div>
             <div className="text-center flex-1">
               <div className={`text-8xl transition-all duration-300 ${animating ? 'animate-bounce' : ''}`}>
-                {animating ? '🤔' : aiChoice ? CHOICES.find(c => c.value === aiChoice)!.emoji : '❓'}
+                {animating ? '\ud83e\udd14' : aiChoice ? CHOICES.find(c => c.value === aiChoice)!.emoji : '\u2753'}
               </div>
               <p className="text-sm text-gray-500 mt-2">AI choice</p>
             </div>
           </div>
           {result && !gameOver && (
             <div className={`text-center text-2xl font-bold mb-4 ${resultColors[result]}`}>
-              {result === 'win' ? '🎉 You Win!' : result === 'lose' ? '😅 AI Wins!' : '🤝 Draw!'}
+              {result === 'win' ? '\ud83c\udf89 You Win!' : result === 'lose' ? '\ud83d\ude05 AI Wins!' : '\ud83e\udd1d Draw!'}
             </div>
           )}
           {!gameOver && (
@@ -265,11 +295,11 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           )}
           {gameOver && (
             <div className="text-center">
-              <div className="text-5xl mb-3">{playerScore > aiScore ? '🏆' : playerScore < aiScore ? '🤖' : '🤝'}</div>
+              <div className="text-5xl mb-3">{playerScore > aiScore ? '\ud83c\udfc6' : playerScore < aiScore ? '\ud83e\udd16' : '\ud83e\udd1d'}</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                {playerScore > aiScore ? 'You Win! 🏆' : playerScore < aiScore ? 'AI Wins! 🤖' : "It's a Tie! 🤝"}
+                {playerScore > aiScore ? 'You Win! \ud83c\udfc6' : playerScore < aiScore ? 'AI Wins! \ud83e\udd16' : "It's a Tie! \ud83e\udd1d"}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} – {aiScore} after {TOTAL_ROUNDS} rounds</p>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} \u2013 {aiScore} after {TOTAL_ROUNDS} rounds</p>
               <button onClick={resetAI}
                 className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition flex items-center gap-2 mx-auto">
                 <RefreshCw size={18} /> Play Again
@@ -298,10 +328,10 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     </div>
   );
 
-  // ──────────── VS PARTNER ────────────
-  const myScore       = isP1Online ? gameState?.p1Score ?? 0 : gameState?.p2Score ?? 0;
-  const oppScore      = isP1Online ? gameState?.p2Score ?? 0 : gameState?.p1Score ?? 0;
-  const bothRevealed  = gameState?.status === 'reveal' || gameState?.status === 'finished';
+  // VS PARTNER
+  const myScore      = isP1Online ? gameState?.p1Score ?? 0 : gameState?.p2Score ?? 0;
+  const oppScore     = isP1Online ? gameState?.p2Score ?? 0 : gameState?.p1Score ?? 0;
+  const bothRevealed = gameState?.status === 'reveal' || gameState?.status === 'finished';
 
   return (
     <div className="min-h-screen p-4">
@@ -311,7 +341,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
           <button onClick={resetOnline} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
         </div>
 
@@ -343,9 +373,9 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
                 {myOnlineChoice ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 size={16} className="animate-spin text-purple-400" />
-                    Waiting for partner…
+                    Waiting for partner\u2026
                   </span>
-                ) : "Pick your move — partner won't see until both have chosen!"}
+                ) : "Pick your move \u2014 partner won't see until both have chosen!"}
               </p>
               {!myOnlineChoice && (
                 <div className="grid grid-cols-3 gap-3">
@@ -365,27 +395,27 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             <>
               <div className="flex justify-between items-center mb-6">
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c=>c.value===myOnlineChoice)!.emoji : '❓'}</div>
+                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c=>c.value===myOnlineChoice)!.emoji : '\u2753'}</div>
                   <p className="text-sm text-gray-500 mt-2">You</p>
                 </div>
-                <div className="text-3xl">⚔️</div>
+                <div className="text-3xl">\u2694\ufe0f</div>
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c=>c.value===oppOnlineChoice)!.emoji : '❓'}</div>
+                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c=>c.value===oppOnlineChoice)!.emoji : '\u2753'}</div>
                   <p className="text-sm text-gray-500 mt-2">Partner</p>
                 </div>
               </div>
               <button onClick={nextRoundOnline}
                 className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
-                Next Round →
+                Next Round \u2192
               </button>
             </>
           )}
 
           {gameState?.status === 'finished' && (
             <div className="text-center">
-              <div className="text-5xl mb-3">{myScore > oppScore ? '🏆' : myScore < oppScore ? '💔' : '🤝'}</div>
+              <div className="text-5xl mb-3">{myScore > oppScore ? '\ud83c\udfc6' : myScore < oppScore ? '\ud83d\udc94' : '\ud83e\udd1d'}</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
-                {myScore > oppScore ? 'You Win! 🏆' : myScore < oppScore ? 'Partner Wins!' : "It's a Tie! 🤝"}
+                {myScore > oppScore ? 'You Win! \ud83c\udfc6' : myScore < oppScore ? 'Partner Wins!' : "It's a Tie! \ud83e\udd1d"}
               </h2>
               <button onClick={resetOnline}
                 className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition">
