@@ -3,19 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { APP_CONFIG, getPlayerEmoji } from '@/lib/auth-config';
-import { LogOut, User, Home, Sun, Moon, Volume2, VolumeX, LogIn } from 'lucide-react';
+import { Home, Sun, Moon, Volume2, VolumeX, LogIn } from 'lucide-react';
 import { toggleSound, isSoundEnabled } from '@/utils/sounds';
 
 export const Navbar: React.FC = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const navigate = useNavigate();
   const [soundEnabled, setSoundEnabled] = useState(isSoundEnabled());
-
-  const handleSignOut = async () => {
-    try { await signOut(); navigate('/login'); }
-    catch (error) { console.error('Sign out error:', error); }
-  };
 
   const handleSoundToggle = () => {
     const newState = toggleSound();
@@ -71,7 +65,7 @@ export const Navbar: React.FC = () => {
                   <span className="hidden sm:inline text-sm">Home</span>
                 </Link>
 
-                {/* Profile — shows avatar if Google user, else emoji */}
+                {/* Profile avatar/name — click to go to /profile */}
                 <Link to="/profile"
                   className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition">
                   {user.photoURL ? (
@@ -81,16 +75,9 @@ export const Navbar: React.FC = () => {
                   )}
                   <span className="hidden sm:inline text-sm font-medium">{user.displayName}</span>
                 </Link>
-
-                {/* Sign Out */}
-                <button onClick={handleSignOut}
-                  className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-red-500 hover:text-red-600 transition">
-                  <LogOut size={18} />
-                  <span className="hidden sm:inline text-sm">Sign Out</span>
-                </button>
               </>
             ) : (
-              /* ── NOT LOGGED IN ── */
+              /* NOT LOGGED IN */
               <Link
                 to="/login"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold text-sm transition-all hover:scale-[1.03] active:scale-[0.97] shadow-md shadow-pink-200/50 dark:shadow-pink-900/30"
