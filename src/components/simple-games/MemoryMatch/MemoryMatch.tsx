@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGameStats } from '@/hooks/useGameStats';
 import { Celebration, MiniCelebration } from '@/components/shared/Celebration';
 import { playClick, playFlip, playMatch, playWrong, playWin } from '@/utils/sounds';
 import { Brain, Trophy, Users, RotateCcw, ArrowLeft, Loader2 } from 'lucide-react';
@@ -15,6 +16,7 @@ interface MemoryMatchGameState {
   status: 'waiting' | 'active' | 'finished';
   gridSize: 4 | 6;
   gameMode: 'solo' | 'versus';
+  recorded?: boolean;
 }
 
 const EMOJI_SETS = {
@@ -38,13 +40,13 @@ const generateCards = (gridSize: 4 | 6, theme: keyof typeof EMOJI_SETS = 'romant
 
 export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const [gridSize, setGridSize] = useState<4 | 6>(4);
   const [theme, setTheme] = useState<keyof typeof EMOJI_SETS>('romantic');
   const [showCelebration, setShowCelebration] = useState(false);
   const [showMini, setShowMini] = useState(false);
 
   const userKey     = user?.email ?? null;
-  // Always use sanitized key as the Firebase object key
   const safeUserKey = userKey ? sanitizeFirebasePath(userKey) : null;
 
   const initialState: MemoryMatchGameState = {
@@ -55,6 +57,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     status: 'waiting',
     gridSize: 4,
     gameMode: 'solo',
+    recorded: false,
   };
 
   const { gameState, updateGameState, loading } = useRealtimeGame<MemoryMatchGameState>(
@@ -66,6 +69,20 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const safeCards   = Array.isArray(gameState?.cards) ? gameState!.cards : [];
   const safeFlipped = Array.isArray(gameState?.flippedCards) ? gameState!.flippedCards : [];
 
+  // Record when game finishes (once)
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey || !safeUserKey) return;
+    const pd = safePlayers[safeUserKey] ?? EMPTY_PLAYER;
+    recordGame({
+      gameType:    'memorymatch',
+      playerEmail: userKey,
+      result:      'win', // solo — always a win when all pairs found
+      score:       pd.score,
+      mode:        'solo',
+    });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
+
   const startGame = () => {
     if (!safeUserKey) return;
     playClick();
@@ -75,6 +92,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
       gridSize,
       status: 'active',
       players: { [safeUserKey]: { score: 0, moves: 0 } },
+      recorded: false,
     });
   };
 
@@ -105,7 +123,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
           setTimeout(() => {
             playWin();
             setShowCelebration(true);
-            updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers, status: 'finished' });
+            updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers, status: 'finished', recorded: false });
           }, 500);
         } else {
           updateGameState({ ...gameState, cards: matched, flippedCards: [], players: updPlayers });
@@ -152,7 +170,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
         </div>
 
         <div className="glass-card p-6">
-          {/* WAITING */}
           {(!gameState || gameState.status === 'waiting') && (
             <div className="space-y-6">
               <div className="text-center">
@@ -163,7 +180,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 <p className="text-gray-500 dark:text-gray-400 mt-1">Find all the matching pairs!</p>
               </div>
 
-              {/* Grid Size */}
               <div className="glass rounded-xl p-5">
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Grid Size</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -179,7 +195,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 </div>
               </div>
 
-              {/* Theme */}
               <div className="glass rounded-xl p-5">
                 <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Theme</h3>
                 <div className="grid grid-cols-3 gap-3">
@@ -202,7 +217,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
             </div>
           )}
 
-          {/* ACTIVE */}
           {gameState?.status === 'active' && (
             <div className="space-y-5">
               <div className="flex justify-around">
@@ -237,7 +251,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
             </div>
           )}
 
-          {/* FINISHED */}
           {gameState?.status === 'finished' && (
             <div className="text-center space-y-5">
               <div className="text-6xl">\ud83c\udf89</div>
