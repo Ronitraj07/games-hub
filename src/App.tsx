@@ -5,6 +5,7 @@ import { Navbar } from './components/layout/Navbar';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
+import { Profile } from './pages/Profile';
 import { RPGHub } from './pages/RPGHub';
 import { HeartboundAdventures } from './pages/rpg/HeartboundAdventures';
 import { MysteryPartners } from './pages/rpg/MysteryPartners';
@@ -24,9 +25,7 @@ function App() {
       <AuthProvider>
         <Router>
           <div className="relative min-h-screen">
-            {/* Romantic background blobs */}
             <div className="romantic-bg" aria-hidden="true" />
-            {/* Floating hearts */}
             <div className="floating-hearts" aria-hidden="true">
               {'❤️💕💖💗💘💙💜💝💞💟'.split('').filter(c => c.trim()).map((h, i) => (
                 <span key={i} className="heart-particle">{h}</span>
@@ -35,25 +34,25 @@ function App() {
             <div className="relative z-10">
               <Navbar />
               <Routes>
+                {/* Auth */}
+                <Route path="/login"   element={<Login />} />
+                <Route path="/signup"  element={<Signup />} />
                 {/* Main */}
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-
-                {/* RPG Hub & Games */}
-                <Route path="/rpg" element={<RPGHub />} />
-                <Route path="/rpg/heartbound" element={<HeartboundAdventures />} />
-                <Route path="/rpg/mystery" element={<MysteryPartners />} />
-
+                <Route path="/"        element={<Home />} />
+                <Route path="/profile" element={<Profile />} />
+                {/* RPG */}
+                <Route path="/rpg"              element={<RPGHub />} />
+                <Route path="/rpg/heartbound"   element={<HeartboundAdventures />} />
+                <Route path="/rpg/mystery"      element={<MysteryPartners />} />
                 {/* Simple Games */}
-                <Route path="/games/tictactoe" element={<TicTacToe />} />
-                <Route path="/games/wordscramble" element={<WordScramble />} />
-                <Route path="/games/memorymatch" element={<MemoryMatch />} />
-                <Route path="/games/connect4" element={<Connect4 />} />
-                <Route path="/games/triviaquiz" element={<TriviaQuiz />} />
+                <Route path="/games/tictactoe"        element={<TicTacToe />} />
+                <Route path="/games/wordscramble"      element={<WordScramble />} />
+                <Route path="/games/memorymatch"       element={<MemoryMatch />} />
+                <Route path="/games/connect4"          element={<Connect4 />} />
+                <Route path="/games/triviaquiz"        element={<TriviaQuiz />} />
                 <Route path="/games/rockpaperscissors" element={<RockPaperScissors />} />
-                <Route path="/games/pictionary" element={<Pictionary />} />
-                <Route path="/games/mathduel" element={<MathDuel />} />
+                <Route path="/games/pictionary"        element={<Pictionary />} />
+                <Route path="/games/mathduel"          element={<MathDuel />} />
               </Routes>
             </div>
           </div>
