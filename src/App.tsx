@@ -22,6 +22,7 @@ import { TriviaQuiz } from './components/simple-games/TriviaQuiz/TriviaQuiz';
 import { RockPaperScissors } from './components/simple-games/RockPaperScissors/RockPaperScissors';
 import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
 import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
+import { TruthOrDare } from './components/simple-games/TruthOrDare/TruthOrDare';
 import './App.css';
 
 function App() {
@@ -97,6 +98,9 @@ function App() {
                     } />
                     <Route path="/games/mathduel" element={
                       <ProtectedRoute><MathDuel /></ProtectedRoute>
+                    } />
+                    <Route path="/games/truthordare" element={
+                      <ProtectedRoute><TruthOrDare /></ProtectedRoute>
                     } />
 
                     {/* ── 404 catch-all ───────────────────────── */}
