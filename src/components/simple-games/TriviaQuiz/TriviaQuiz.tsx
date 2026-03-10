@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
-import { db } from '@/lib/firebase';
+import { database } from '@/lib/firebase';
 import { ref, set, onValue, off } from 'firebase/database';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
 import {
   RefreshCw, ArrowLeft, Clock, Trophy, CheckCircle, XCircle,
-  Loader2, Plus, X, Pencil, Trash2, BookOpen, Sparkles,
+  Loader2, Plus, Pencil, Trash2, BookOpen, Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { GameMode } from '@/components/shared/GameLobby';
@@ -17,7 +17,7 @@ import type { GameMode } from '@/components/shared/GameLobby';
 export interface TriviaQuestion {
   q:        string;
   options:  [string, string, string, string];
-  answer:   number; // 0–3
+  answer:   number;
   category: string;
   custom?:  boolean;
   id?:      string;
@@ -46,7 +46,7 @@ const ALL_QUESTIONS: TriviaQuestion[] = [
   { q:'In Titanic, what is the name of the female lead?',                 options:['Rachel','Rose','Ruby','Rita'],                        answer:1, category:'🎬 Romance Films' },
   { q:"Which Shakespeare play features the balcony scene?",               options:["A Midsummer Night's Dream",'Othello','Romeo & Juliet','Hamlet'], answer:2, category:'🎬 Romance Films' },
   { q:'In "The Notebook", where do Noah and Allie share their first kiss?', options:['On a bridge','In the rain','In a boat','On a ferris wheel'], answer:3, category:'🎬 Romance Films' },
-  { q:'Which Adele song starts with "Hello, it\'s me"?',                  options:['Someone Like You','Rolling in the Deep','Hello','Skyfall'], answer:2, category:'🎬 Romance Films' },
+  { q:"Which Adele song starts with 'Hello, it's me'?",                   options:['Someone Like You','Rolling in the Deep','Hello','Skyfall'], answer:2, category:'🎬 Romance Films' },
   { q:'Which romantic movie takes place mostly on a cruise ship?',         options:['Ghost','Titanic','Out of Africa','Grease'],           answer:1, category:'🎬 Romance Films' },
   // 💑 Relationships
   { q:'What hormone is known as the "love hormone"?',                     options:['Serotonin','Dopamine','Oxytocin','Adrenaline'],       answer:2, category:'💑 Relationships' },
@@ -73,12 +73,10 @@ const CUSTOM_CATEGORY    = '✏️ Custom';
 const TIME_PER = 20;
 const TOTAL_Q  = 10;
 
-// ───────────────── Blank draft ─────────────────
-const BLANK_DRAFT = (): Omit<TriviaQuestion,'id'|'custom'> => ({
+const BLANK_DRAFT = (): Omit<TriviaQuestion, 'id' | 'custom'> => ({
   q: '', options: ['', '', '', ''], answer: 0, category: CUSTOM_CATEGORY,
 });
 
-// ───────────────── Online game state ─────────────────
 interface OnlineState {
   questions:   TriviaQuestion[];
   current:     number;
@@ -92,16 +90,14 @@ interface OnlineState {
   mode:        GameMode;
 }
 
-// ───────────────── Component ─────────────────
 export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const userKey  = user?.email ?? null;
 
-  // ─ Views ─
   type View = 'lobby' | 'builder' | 'game' | 'results';
-  const [view,      setView]      = useState<View>('lobby');
-  const [gameMode,  setGameMode]  = useState<GameMode | null>(null);
-  const [category,  setCategory]  = useState<string>('⭐ All');
+  const [view,     setView]     = useState<View>('lobby');
+  const [gameMode, setGameMode] = useState<GameMode | null>(null);
+  const [category, setCategory] = useState<string>('⭐ All');
 
   // ─ Custom questions from Firebase ─
   const customDbPath = userKey
@@ -111,10 +107,9 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [customQs,    setCustomQs]    = useState<TriviaQuestion[]>([]);
   const [loadingCust, setLoadingCust] = useState(true);
 
-  // Subscribe to custom questions
   useEffect(() => {
     if (!customDbPath) { setLoadingCust(false); return; }
-    const r = ref(db, customDbPath);
+    const r = ref(database, customDbPath);
     const unsub = onValue(r, snap => {
       const val = snap.val();
       if (val) {
@@ -127,23 +122,23 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   }, [customDbPath]);
 
   // ─ Builder state ─
-  const [draft,       setDraft]       = useState<Omit<TriviaQuestion,'id'|'custom'>>(BLANK_DRAFT());
-  const [editingId,   setEditingId]   = useState<string | null>(null);
-  const [saveError,   setSaveError]   = useState('');
+  const [draft,     setDraft]     = useState<Omit<TriviaQuestion, 'id' | 'custom'>>(BLANK_DRAFT());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState('');
 
   const saveCustomQ = async () => {
-    if (!draft.q.trim())                             return setSaveError('Question text is required.');
-    if (draft.options.some(o => !o.trim()))          return setSaveError('Fill in all 4 options.');
-    if (!customDbPath)                               return setSaveError('You must be logged in.');
+    if (!draft.q.trim())                    return setSaveError('Question text is required.');
+    if (draft.options.some(o => !o.trim())) return setSaveError('Fill in all 4 options.');
+    if (!customDbPath)                      return setSaveError('You must be logged in.');
     setSaveError('');
     const id = editingId ?? `q-${Date.now()}`;
-    await set(ref(db, `${customDbPath}/${id}`), { ...draft, custom: true });
+    await set(ref(database, `${customDbPath}/${id}`), { ...draft, custom: true });
     setDraft(BLANK_DRAFT()); setEditingId(null);
   };
 
   const deleteCustomQ = async (id: string) => {
     if (!customDbPath) return;
-    await set(ref(db, `${customDbPath}/${id}`), null);
+    await set(ref(database, `${customDbPath}/${id}`), null);
   };
 
   const startEditQ = (q: TriviaQuestion) => {
@@ -152,7 +147,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('builder');
   };
 
-  // ─ Question pool helpers ─
+  // ─ Question pool ─
   const allCategories = [
     ...BUILTIN_CATEGORIES,
     ...(customQs.length > 0 ? [CUSTOM_CATEGORY] : []),
@@ -163,7 +158,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     if (category === CUSTOM_CATEGORY) pool = customQs;
     else if (category === '⭐ All')    pool = [...ALL_QUESTIONS, ...customQs];
     else                              pool = ALL_QUESTIONS.filter(q => q.category === category);
-    if (pool.length === 0) pool = ALL_QUESTIONS; // fallback
+    if (pool.length === 0) pool = ALL_QUESTIONS;
     return [...pool].sort(() => Math.random() - 0.5).slice(0, TOTAL_Q);
   }, [category, customQs]);
 
@@ -217,7 +212,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }, 1200);
   }, [selected, showResult, current, activeQ, timeLeft]);
 
-  // ─ Online answer ─
   const handleOnlineAnswer = (idx: number) => {
     if (!gameState || gameState.status !== 'active' || !curOnlineQ) return;
     const myAnswered = isP1 ? gameState.p1Answered : gameState.p2Answered;
@@ -247,18 +241,12 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('game');
   };
 
-  const resetToLobby = () => {
-    setView('lobby'); setGameMode(null);
-  };
+  const resetToLobby = () => { setView('lobby'); setGameMode(null); };
 
-  // ───────────────────────────────────
-  // VIEW: BUILDER
-  // ───────────────────────────────────
+  // ───────────────── VIEW: BUILDER ─────────────────
   if (view === 'builder') return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
-
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <button onClick={() => { setView('lobby'); setDraft(BLANK_DRAFT()); setEditingId(null); setSaveError(''); }}
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
@@ -270,24 +258,21 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <div className="w-10"/>
         </div>
 
-        {/* Form */}
         <div className="glass-card p-5 mb-5">
-          {/* Question text */}
           <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Question</label>
-          <textarea
-            rows={3} value={draft.q}
+          <textarea rows={3} value={draft.q}
             onChange={e => setDraft(d => ({ ...d, q: e.target.value }))}
             placeholder="e.g. When is our anniversary?"
             className="w-full glass border-0 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none mb-4"
           />
 
-          {/* Options */}
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Options <span className="font-normal text-gray-400">(click the circle to mark correct answer)</span></label>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            Options <span className="font-normal text-gray-400">(tap circle to mark correct answer)</span>
+          </label>
           <div className="space-y-2 mb-4">
             {draft.options.map((opt, i) => (
               <div key={i} className="flex items-center gap-3">
-                <button
-                  onClick={() => setDraft(d => ({ ...d, answer: i }))}
+                <button onClick={() => setDraft(d => ({ ...d, answer: i }))}
                   className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
                     draft.answer === i
                       ? 'bg-gradient-to-r from-pink-500 to-rose-500 border-transparent text-white scale-110'
@@ -295,8 +280,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                   }`}>
                   {['A','B','C','D'][i]}
                 </button>
-                <input
-                  value={opt}
+                <input value={opt}
                   onChange={e => {
                     const next = [...draft.options] as [string,string,string,string];
                     next[i] = e.target.value;
@@ -305,9 +289,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                   placeholder={`Option ${['A','B','C','D'][i]}`}
                   className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
-                {draft.answer === i && (
-                  <CheckCircle size={16} className="text-green-500 shrink-0"/>
-                )}
+                {draft.answer === i && <CheckCircle size={16} className="text-green-500 shrink-0"/>}
               </div>
             ))}
           </div>
@@ -320,7 +302,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </button>
         </div>
 
-        {/* Existing custom questions */}
         {customQs.length > 0 && (
           <div className="glass-card p-4">
             <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Your Questions ({customQs.length})</h3>
@@ -343,18 +324,14 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
 
-  // ───────────────────────────────────
-  // VIEW: LOBBY
-  // ───────────────────────────────────
+  // ───────────────── VIEW: LOBBY ─────────────────
   if (view === 'lobby') return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
-
         <div className="flex items-center justify-between mb-6">
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20}/> Back
@@ -362,25 +339,22 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
             💕 Romantic Trivia
           </h1>
-          <button onClick={() => setView('builder')}
-            title="Create custom questions"
+          <button onClick={() => setView('builder')} title="Custom questions"
             className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <Sparkles size={20}/>
           </button>
         </div>
 
-        {/* Category picker */}
         <div className="glass-card p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">Category</p>
             {customQs.length > 0 && (
-              <span className="text-xs text-pink-500 font-medium">{customQs.length} custom question{customQs.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-pink-500 font-medium">{customQs.length} custom</span>
             )}
           </div>
           {loadingCust ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm py-1">
-              <Loader2 size={14} className="animate-spin"/>
-              Loading…
+              <Loader2 size={14} className="animate-spin"/> Loading…
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -390,15 +364,12 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                     category === c
                       ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
                       : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}>
-                  {c}
-                </button>
+                  }`}>{c}</button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Custom questions info banner */}
         {customQs.length === 0 && (
           <button onClick={() => setView('builder')}
             className="w-full glass-card p-3 mb-4 flex items-center gap-3 hover:ring-2 hover:ring-pink-300 transition text-left">
@@ -430,15 +401,13 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     </div>
   );
 
-  // ───────────────────────────────────
-  // VIEW: RESULTS
-  // ───────────────────────────────────
+  // ───────────────── VIEW: RESULTS ─────────────────
   if (view === 'results' || gameState?.status === 'finished') {
     const isOnline = gameMode === 'vs-partner';
     const myFinal  = isOnline ? (isP1 ? gameState!.p1Score : gameState!.p2Score) : score;
     const oppFinal = isOnline ? (isP1 ? gameState!.p2Score : gameState!.p1Score) : 0;
     const correct  = answers.filter((a, i) => a === activeQ[i]?.answer).length;
-    const pct = (myFinal / (TOTAL_Q * 15)) * 100;
+    const pct      = (myFinal / (TOTAL_Q * 15)) * 100;
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md w-full text-center">
@@ -450,7 +419,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             <p className="text-5xl font-bold text-pink-600 dark:text-pink-400">{myFinal}</p>
             <p className="text-gray-500 mt-1">Your Score</p>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mt-3">
-              <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-3 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
+              <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-3 rounded-full" style={{ width: `${Math.min(pct,100)}%` }} />
             </div>
           </div>
           {!isOnline && (
@@ -481,9 +450,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     );
   }
 
-  // ───────────────────────────────────
-  // VIEW: GAME
-  // ───────────────────────────────────
+  // ───────────────── VIEW: GAME ─────────────────
   const isOnlineActive = gameMode === 'vs-partner' && gameState?.status === 'active';
   const q          = isOnlineActive ? curOnlineQ : activeQ[current];
   const myAnswered = isOnlineActive ? (isP1 ? gameState?.p1Answered : gameState?.p2Answered) : false;
@@ -491,11 +458,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const timerColor = timeLeft > 12 ? 'bg-green-500' : timeLeft > 6 ? 'bg-yellow-500' : 'bg-red-500';
   const qNum       = isOnlineActive ? (gameState?.current ?? 0) + 1 : current + 1;
 
-  if (!q) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Loader2 className="animate-spin text-pink-500" size={32}/>
-    </div>
-  );
+  if (!q) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin text-pink-500" size={32}/></div>;
 
   return (
     <div className="min-h-screen p-4">
@@ -561,9 +524,9 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               {q.options.map((option, i) => {
                 let style = 'glass-btn border-0 hover:ring-2 hover:ring-pink-400';
                 if (showResult && !isOnlineActive) {
-                  if (i === q.answer)    style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
+                  if (i === q.answer)      style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
                   else if (i === selected) style = 'bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
-                  else                    style = 'opacity-40 glass-btn border-0';
+                  else                     style = 'opacity-40 glass-btn border-0';
                 }
                 return (
                   <button key={i}
