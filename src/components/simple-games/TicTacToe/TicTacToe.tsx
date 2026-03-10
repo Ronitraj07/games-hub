@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { Board } from './Board';
 import { InviteModal } from '@/components/games/InviteModal';
+import { useGameStats } from '@/hooks/useGameStats';
 import { RotateCcw, ArrowLeft, Bot, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getAIMove } from '@/lib/tictactoe-ai';
@@ -20,6 +21,7 @@ interface TicTacToeGameState {
   isDraw: boolean;
   mode: 'vs-human' | 'vs-ai';
   aiDifficulty: AIDifficulty;
+  recorded?: boolean;
 }
 
 const safeBoard = (board: BoardState | null | undefined): BoardState =>
@@ -38,6 +40,7 @@ const calculateWinner = (board: BoardState): { winner: CellValue; cells: number[
 
 export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
   const aiThinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showInvite,   setShowInvite]   = React.useState(false);
@@ -58,6 +61,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     isDraw:       false,
     mode:         'vs-human',
     aiDifficulty: 'medium',
+    recorded:     false,
   };
 
   const { gameState, updateGameState, loading } = useRealtimeGame<TicTacToeGameState>(
@@ -68,11 +72,28 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isMyTurn = gameState?.currentPlayer === mySymbol;
   const currentBoard = safeBoard(gameState?.board);
 
+  // Record result when game finishes (once)
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const isAI   = gameState.mode === 'vs-ai';
+    const isWin  = gameState.winner === mySymbol;
+    const result = gameState.isDraw ? 'draw' : isWin ? 'win' : 'loss';
+    recordGame({
+      gameType:   'tictactoe',
+      playerEmail: userKey,
+      result,
+      score:       isWin ? 10 : 0,
+      mode:        isAI ? 'vs-ai' : 'vs-partner',
+      opponentEmail: isAI ? undefined : (gameState.players.player2 ?? undefined),
+    });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
+
   // AI move effect
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai') return;
     if (gameState.status !== 'active') return;
-    if (gameState.currentPlayer !== 'O') return; // AI is always 'O'
+    if (gameState.currentPlayer !== 'O') return;
 
     const board = safeBoard(gameState.board);
     aiThinkTimer.current = setTimeout(() => {
@@ -92,15 +113,15 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
         isDraw,
         status: winner || isDraw ? 'finished' : 'active',
         currentPlayer: winner || isDraw ? 'O' : 'X',
+        recorded: false,
       });
-    }, 500); // slight delay so AI feels natural
+    }, 500);
 
     return () => { if (aiThinkTimer.current) clearTimeout(aiThinkTimer.current); };
   }, [gameState?.currentPlayer, gameState?.status, gameState?.mode]);
 
   const handleCellClick = (index: number) => {
     if (!gameState || gameState.status !== 'active') return;
-    // In vs-AI mode, player is always 'X'
     if (gameState.mode === 'vs-ai' && gameState.currentPlayer !== 'X') return;
     if (gameState.mode === 'vs-human' && !isMyTurn) return;
     if (index < 0 || index > 8) return;
@@ -123,6 +144,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       isDraw,
       status: winner || isDraw ? 'finished' : 'active',
       currentPlayer: winner || isDraw ? gameState.currentPlayer : nextPlayer,
+      recorded: false,
     });
   };
 
@@ -136,7 +158,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     });
   };
 
-  const startVsHuman = (roomId?: string) => {
+  const startVsHuman = () => {
     updateGameState({
       ...initialState,
       players: { player1: userKey ?? '', player2: 'opponent' },
@@ -147,23 +169,19 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const resetGame = () => updateGameState(initialState);
 
-  const handleInviteReady = (roomId: string, isHost: boolean) => {
+  const handleInviteReady = (_roomId: string, _isHost: boolean) => {
     setShowInvite(false);
-    startVsHuman(roomId);
+    startVsHuman();
   };
 
-  // Turn label
   const turnLabel = () => {
     if (!gameState || gameState.status !== 'active') return '';
     if (gameState.mode === 'vs-ai') {
-      return gameState.currentPlayer === 'X'
-        ? 'Your turn — you are ❌'
-        : '🤖 AI is thinking…';
+      return gameState.currentPlayer === 'X' ? 'Your turn — you are ❌' : '🤖 AI is thinking…';
     }
     return isMyTurn ? `Your turn — you are ${mySymbol}` : "Opponent's turn…";
   };
 
-  // Result label
   const resultLabel = () => {
     if (!gameState || gameState.status !== 'finished') return '';
     if (gameState.isDraw) return '🤝 Draw!';
@@ -185,7 +203,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
@@ -198,7 +215,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </button>
         </div>
 
-        {/* Mode selector (waiting screen) */}
         {(!gameState || gameState.status === 'waiting') && (
           <div className="space-y-4">
             <div className="glass-card p-8 text-center">
@@ -207,7 +223,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               <p className="text-gray-500 dark:text-gray-400 mb-8">Choose how you want to play</p>
 
               <div className="grid grid-cols-1 gap-3">
-                {/* VS Human */}
                 <button
                   onClick={() => setShowInvite(true)}
                   disabled={!userKey}
@@ -222,7 +237,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                   </div>
                 </button>
 
-                {/* VS AI */}
                 <div className="glass-btn px-5 py-4 rounded-2xl">
                   <div className="flex items-center gap-4 mb-3">
                     <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white">
@@ -233,7 +247,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                       <p className="text-sm text-gray-500 dark:text-gray-400">Challenge the computer</p>
                     </div>
                   </div>
-                  {/* Difficulty selector */}
                   <div className="flex gap-2 mt-1">
                     {(['easy','medium','hard'] as AIDifficulty[]).map(d => (
                       <button key={d} onClick={() => startVsAI(d)}
@@ -252,11 +265,8 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </div>
         )}
 
-        {/* Active / Finished game */}
         {gameState && gameState.status !== 'waiting' && (
           <div className="space-y-4">
-
-            {/* Mode badge */}
             <div className="flex justify-center">
               <span className={`glass px-3 py-1 rounded-full text-xs font-semibold ${
                 gameState.mode === 'vs-ai'
@@ -269,7 +279,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               </span>
             </div>
 
-            {/* Status banner */}
             <div className="glass-card p-4 text-center">
               {gameState.status === 'active' && (
                 <p className={`font-semibold text-lg ${
@@ -285,7 +294,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               )}
             </div>
 
-            {/* Board */}
             <Board
               board={currentBoard}
               onCellClick={handleCellClick}
@@ -303,7 +311,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
         )}
       </div>
 
-      {/* Invite modal */}
       {showInvite && (
         <InviteModal
           gameType="TicTacToe"
