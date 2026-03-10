@@ -1,189 +1,129 @@
-import React, { useEffect, useState } from 'react';
-import { Board } from './Board';
-import { TicTacToeProps, TicTacToeGameState, Player, BoardState } from './types';
+import React from 'react';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-import { Celebration } from '@/components/shared/Celebration';
-import { playClick, playWin, playLoss, playDraw } from '@/utils/sounds';
+import { Board } from './Board';
+import { RotateCcw, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-const WINNING_COMBINATIONS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6]
-];
+interface TicTacToeGameState {
+  board: (string | null)[];
+  currentPlayer: string;
+  players: { player1: string; player2: string | null };
+  winner: string | null;
+  winningCells: number[] | null;
+  status: 'waiting' | 'active' | 'finished';
+  isDraw: boolean;
+}
 
-const checkWinner = (board: BoardState): { winner: Player | 'draw' | null; winningCells: number[] } => {
-  for (const combo of WINNING_COMBINATIONS) {
-    const [a, b, c] = combo;
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { winner: board[a] as Player, winningCells: combo };
-    }
+const calculateWinner = (board: (string | null)[]): { winner: string | null; cells: number[] | null } => {
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for (const [a,b,c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c])
+      return { winner: board[a]!, cells: [a,b,c] };
   }
-  
-  if (board.every(cell => cell !== null)) {
-    return { winner: 'draw', winningCells: [] };
-  }
-  
-  return { winner: null, winningCells: [] };
+  return { winner: null, cells: null };
 };
 
-export const TicTacToe: React.FC<TicTacToeProps> = ({ sessionId }) => {
+export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
-  const [winningCells, setWinningCells] = useState<number[]>([]);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [userPlayer, setUserPlayer] = useState<Player | null>(null);
-  
+
   const initialState: TicTacToeGameState = {
     board: Array(9).fill(null),
-    currentTurn: 'X',
-    winner: null,
-    status: 'active'
+    currentPlayer: user?.email || '',
+    players: { player1: user?.email || '', player2: null },
+    winner: null, winningCells: null, status: 'waiting', isDraw: false,
   };
 
-  const { gameState, updateGameState, loading, error } = useRealtimeGame<TicTacToeGameState>(
-    sessionId || 'tictactoe-game',
-    'tictactoe',
-    initialState
+  const { gameState, updateGameState, loading } = useRealtimeGame<TicTacToeGameState>(
+    sessionId || 'tictactoe-game', 'tictactoe', initialState
   );
 
-  useEffect(() => {
-    if (user && !userPlayer) {
-      setUserPlayer('X');
-    }
-  }, [user, userPlayer]);
-
-  useEffect(() => {
-    if (gameState) {
-      const { winner, winningCells: cells } = checkWinner(gameState.board);
-      if (winner && gameState.winner !== winner) {
-        setWinningCells(cells);
-        updateGameState({
-          ...gameState,
-          winner,
-          status: 'finished'
-        });
-
-        if (winner === 'draw') {
-          playDraw();
-        } else if (winner === userPlayer) {
-          playWin();
-          setShowCelebration(true);
-        } else {
-          playLoss();
-        }
-      }
-    }
-  }, [gameState?.board, userPlayer]);
-
   const handleCellClick = (index: number) => {
-    if (!gameState || gameState.winner || gameState.board[index]) return;
-
-    playClick();
-
+    if (!gameState || gameState.status !== 'active' || gameState.currentPlayer !== user?.email) return;
+    if (gameState.board[index]) return;
     const newBoard = [...gameState.board];
-    newBoard[index] = gameState.currentTurn;
-    
+    newBoard[index] = user?.email || '';
+    const { winner, cells } = calculateWinner(newBoard);
+    const isDraw = !winner && newBoard.every(c => c !== null);
+    const nextPlayer = gameState.currentPlayer === gameState.players.player1 ? gameState.players.player2 : gameState.players.player1;
     updateGameState({
-      ...gameState,
-      board: newBoard,
-      currentTurn: gameState.currentTurn === 'X' ? 'O' : 'X'
+      ...gameState, board: newBoard,
+      winner: winner || null, winningCells: cells,
+      isDraw, status: winner || isDraw ? 'finished' : 'active',
+      currentPlayer: winner || isDraw ? gameState.currentPlayer : nextPlayer || '',
     });
   };
 
-  const handleReset = () => {
-    playClick();
-    setWinningCells([]);
-    setShowCelebration(false);
-    updateGameState(initialState);
-  };
+  const startGame = () => updateGameState({
+    ...initialState,
+    players: { player1: user?.email || '', player2: 'opponent@example.com' },
+    status: 'active',
+  });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+  const resetGame = () => updateGameState(initialState);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-600 dark:text-red-400 text-center">
-          <p className="text-xl font-bold">Error loading game</p>
-          <p className="text-sm mt-2">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>;
 
-  if (!gameState) return null;
-
-  const isWinner = gameState.winner && gameState.winner === userPlayer;
-  const isDraw = gameState.winner === 'draw';
+  const isMyTurn = gameState?.currentPlayer === user?.email;
+  const mySymbol = gameState?.players.player1 === user?.email ? '❌' : '⭕';
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {isWinner && (
-        <Celebration
-          show={showCelebration}
-          type="win"
-          message="Victory! 🎉"
-          onComplete={() => setShowCelebration(false)}
-        />
-      )}
+    <div className="min-h-screen p-4">
+      <div className="max-w-lg mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+            <ArrowLeft size={20} /> Back
+          </Link>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">❌ Tic Tac Toe ⭕</h1>
+          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
+            <RotateCcw size={20} />
+          </button>
+        </div>
 
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Tic Tac Toe</h1>
-        <p className="text-gray-600 dark:text-gray-400">Classic game for two players</p>
-      </div>
-
-      <div className="mb-6 text-center">
-        {gameState.winner ? (
-          <div className="space-y-2">
-            {isDraw ? (
-              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">It's a Draw! 🤝</p>
-            ) : isWinner ? (
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                You Win! 🎉
-              </p>
-            ) : (
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                You Lose! 😢
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xl font-semibold text-gray-700 dark:text-gray-300">
-              Current Turn: <span className={gameState.currentTurn === 'X' ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}>
-                {gameState.currentTurn}
-              </span>
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              You are: <span className="font-bold">{userPlayer}</span>
-            </p>
+        {gameState?.status === 'waiting' && (
+          <div className="glass-card p-8 text-center">
+            <div className="text-6xl mb-4">❌⭕</div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Tic Tac Toe</h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">Challenge your partner to a classic game!</p>
+            <button onClick={startGame} className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold py-3 px-8 rounded-xl transition hover:scale-105">
+              Start Game
+            </button>
           </div>
         )}
-      </div>
 
-      <Board
-        board={gameState.board}
-        onCellClick={handleCellClick}
-        disabled={gameState.status === 'finished'}
-        winningCells={winningCells}
-      />
+        {gameState && gameState.status !== 'waiting' && (
+          <div className="space-y-4">
+            {/* Status bar */}
+            <div className="glass-card p-4 text-center">
+              {gameState.status === 'active' && (
+                <p className={`font-semibold text-lg ${
+                  isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500 dark:text-gray-400'
+                }`}>
+                  {isMyTurn ? `Your turn — you are ${mySymbol}` : "Opponent's turn..."}
+                </p>
+              )}
+              {gameState.status === 'finished' && (
+                <p className="font-bold text-xl text-gray-900 dark:text-white">
+                  {gameState.isDraw ? "🤝 It's a Draw!" : gameState.winner === user?.email ? '🏆 You Win!' : '💔 You Lost!'}
+                </p>
+              )}
+            </div>
 
-      <button
-        onClick={handleReset}
-        className="mt-8 px-8 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95"
-      >
-        New Game
-      </button>
+            <Board
+              board={gameState.board}
+              onCellClick={handleCellClick}
+              disabled={!isMyTurn || gameState.status !== 'active'}
+              winningCells={gameState.winningCells || []}
+            />
 
-      <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>Playing as: {user?.email}</p>
-        <p className="mt-1 text-xs">Session: {sessionId || 'default'}</p>
+            {gameState.status === 'finished' && (
+              <button onClick={resetGame} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02] active:scale-[0.98]">
+                Play Again 💕
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

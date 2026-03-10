@@ -1,53 +1,45 @@
 import React from 'react';
-import { Clock, Users, TrendingUp } from 'lucide-react';
+import { Clock, Users, Zap } from 'lucide-react';
 
 interface GameCardProps {
-  id: string;
   name: string;
   description: string;
   icon: string;
-  route: string;
   difficulty: string;
-  players: '1' | '2' | '1-2';
+  players: '1' | '2' | '1-2' | '2-4';
   estimatedTime: string;
 }
 
-export const GameCard: React.FC<GameCardProps> = ({
-  name,
-  description,
-  icon,
-  difficulty,
-  players,
-  estimatedTime
-}) => {
-  const difficultyColor = {
-    Easy: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    Medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    Hard: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-  }[difficulty] || 'bg-gray-100 text-gray-800';
-
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm hover:shadow-lg transition-all duration-300 p-6 cursor-pointer hover:scale-105">
-      <div className="text-5xl mb-4 text-center">{icon}</div>
-      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{name}</h3>
-      <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">{description}</p>
-      
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <Users className="w-4 h-4" />
-          <span>{players} Player{players === '1' ? '' : 's'}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <Clock className="w-4 h-4" />
-          <span>{estimatedTime}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <TrendingUp className="w-4 h-4" />
-          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${difficultyColor}`}>
-            {difficulty}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+const DIFFICULTY_STYLES: Record<string, string> = {
+  Easy:   'bg-green-100  dark:bg-green-900/30  text-green-700  dark:text-green-400',
+  Medium: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+  Hard:   'bg-red-100    dark:bg-red-900/30    text-red-700    dark:text-red-400',
 };
+
+export const GameCard: React.FC<GameCardProps> = ({ name, description, icon, difficulty, players, estimatedTime }) => (
+  <div className="glass-card p-5 h-full flex flex-col group cursor-pointer">
+    {/* Icon */}
+    <div className="w-14 h-14 glass rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform duration-300 shadow-sm">
+      {icon}
+    </div>
+
+    {/* Content */}
+    <div className="flex-1">
+      <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-1 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">{name}</h3>
+      <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 leading-relaxed">{description}</p>
+    </div>
+
+    {/* Footer tags */}
+    <div className="flex items-center gap-2 flex-wrap mt-auto">
+      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${DIFFICULTY_STYLES[difficulty] || DIFFICULTY_STYLES.Medium}`}>
+        <Zap size={10} className="inline mr-1" />{difficulty}
+      </span>
+      <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 flex items-center gap-1">
+        <Users size={10} />{players}P
+      </span>
+      <span className="text-xs text-gray-400 flex items-center gap-1 ml-auto">
+        <Clock size={10} />{estimatedTime}
+      </span>
+    </div>
+  </div>
+);

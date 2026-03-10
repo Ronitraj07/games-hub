@@ -4,89 +4,24 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { useGameHistory } from '@/hooks/supabase/useGameHistory';
 import { GameCard } from '@/components/games/GameCard';
-import { Trophy, Clock, Target, Swords } from 'lucide-react';
+import { Trophy, Clock, Target, Swords, Sparkles } from 'lucide-react';
 
 const SIMPLE_GAMES = [
-  {
-    id: 'tictactoe',
-    name: 'Tic Tac Toe',
-    description: 'Classic 3x3 grid game',
-    icon: '❌⭕',
-    route: '/games/tictactoe',
-    difficulty: 'Easy',
-    players: '2' as const,
-    estimatedTime: '2-5 min'
-  },
-  {
-    id: 'wordscramble',
-    name: 'Word Scramble',
-    description: 'Unscramble words against time',
-    icon: '🔤',
-    route: '/games/wordscramble',
-    difficulty: 'Medium',
-    players: '1-2' as const,
-    estimatedTime: '5-10 min'
-  },
-  {
-    id: 'memorymatch',
-    name: 'Memory Match',
-    description: 'Find matching pairs',
-    icon: '🃏',
-    route: '/games/memorymatch',
-    difficulty: 'Medium',
-    players: '1-2' as const,
-    estimatedTime: '5-10 min'
-  },
-  {
-    id: 'connect4',
-    name: 'Connect 4',
-    description: 'Connect four in a row',
-    icon: '🔴🔵',
-    route: '/games/connect4',
-    difficulty: 'Medium',
-    players: '2' as const,
-    estimatedTime: '5-10 min'
-  },
-  {
-    id: 'triviaquiz',
-    name: 'Trivia Quiz',
-    description: 'Test your knowledge',
-    icon: '❓',
-    route: '/games/triviaquiz',
-    difficulty: 'Medium',
-    players: '1-2' as const,
-    estimatedTime: '10-15 min'
-  },
-  {
-    id: 'rockpaperscissors',
-    name: 'Rock Paper Scissors',
-    description: 'Best of 5 rounds',
-    icon: '✊✋✌️',
-    route: '/games/rockpaperscissors',
-    difficulty: 'Easy',
-    players: '2' as const,
-    estimatedTime: '2-5 min'
-  },
-  {
-    id: 'pictionary',
-    name: 'Pictionary',
-    description: 'Draw and guess',
-    icon: '🎨',
-    route: '/games/pictionary',
-    difficulty: 'Hard',
-    players: '2' as const,
-    estimatedTime: '10-15 min'
-  },
-  {
-    id: 'mathduel',
-    name: 'Math Duel',
-    description: 'Quick math challenges',
-    icon: '🧮',
-    route: '/games/mathduel',
-    difficulty: 'Medium',
-    players: '1-2' as const,
-    estimatedTime: '5-10 min'
-  }
+  { id: 'tictactoe',        name: 'Tic Tac Toe',         description: 'Classic 3×3 grid battle',       icon: '❌⭕', route: '/games/tictactoe',        difficulty: 'Easy',   players: '2' as const,   estimatedTime: '2-5 min'   },
+  { id: 'wordscramble',     name: 'Word Scramble',        description: 'Unscramble words vs the clock',  icon: '🔤',  route: '/games/wordscramble',     difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
+  { id: 'memorymatch',      name: 'Memory Match',         description: 'Find matching pairs',            icon: '🃏',  route: '/games/memorymatch',      difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
+  { id: 'connect4',         name: 'Connect 4',            description: 'Connect four in a row',          icon: '🔴🔵', route: '/games/connect4',        difficulty: 'Medium', players: '2' as const,   estimatedTime: '5-10 min'  },
+  { id: 'triviaquiz',       name: 'Trivia Quiz',          description: 'Test your knowledge together',   icon: '❓',  route: '/games/triviaquiz',       difficulty: 'Medium', players: '1-2' as const, estimatedTime: '10-15 min' },
+  { id: 'rockpaperscissors',name: 'Rock Paper Scissors',  description: 'Best of 5 rounds',               icon: '✊✋✌️', route: '/games/rockpaperscissors', difficulty: 'Easy', players: '2' as const,   estimatedTime: '2-5 min'   },
+  { id: 'pictionary',       name: 'Pictionary',           description: 'Draw and guess the word',        icon: '🎨',  route: '/games/pictionary',       difficulty: 'Hard',   players: '2' as const,   estimatedTime: '10-15 min' },
+  { id: 'mathduel',         name: 'Math Duel',            description: 'Quick-fire math challenges',     icon: '🧮',  route: '/games/mathduel',         difficulty: 'Medium', players: '1-2' as const, estimatedTime: '5-10 min'  },
+];
+
+const STAT_CARDS = [
+  { icon: Trophy,  color: 'text-yellow-500', label: 'Total Games', key: 'totalGames' as const },
+  { icon: Target,  color: 'text-pink-500',   label: 'Win Rate',    key: 'winRate'    as const },
+  { icon: Swords,  color: 'text-purple-500', label: 'Wins',        key: 'wins'       as const },
+  { icon: Clock,   color: 'text-rose-400',   label: 'Favourite',   key: 'favoriteGame' as const },
 ];
 
 export const Home: React.FC = () => {
@@ -95,118 +30,113 @@ export const Home: React.FC = () => {
   const { history, loading: historyLoading } = useGameHistory();
   const [filter, setFilter] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
 
-  const filteredGames = SIMPLE_GAMES.filter(game => 
-    filter === 'all' || game.difficulty.toLowerCase() === filter
-  );
-
+  const filteredGames = SIMPLE_GAMES.filter(g => filter === 'all' || g.difficulty.toLowerCase() === filter);
   const totalGames = stats.totalGames;
-  const winRate = totalGames > 0 ? ((stats.wins / totalGames) * 100).toFixed(1) : '0.0';
+  const winRate    = totalGames > 0 ? ((stats.wins / totalGames) * 100).toFixed(1) : '0.0';
+
+  const statValues: Record<string, string | number> = {
+    totalGames,
+    winRate: `${winRate}%`,
+    wins:    stats.wins,
+    favoriteGame: stats.favoriteGame || '—',
+  };
+
+  const filterColors: Record<string, string> = {
+    all:    'from-pink-500 to-purple-500',
+    easy:   'from-green-400 to-emerald-500',
+    medium: 'from-yellow-400 to-orange-500',
+    hard:   'from-red-400 to-pink-500',
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome, {user?.displayName || 'Player'}! 🎉
+
+        {/* Hero greeting */}
+        <div className="mb-10 text-center">
+          <div className="inline-flex items-center gap-2 glass px-5 py-2 rounded-full text-sm text-pink-600 dark:text-pink-300 font-medium mb-4">
+            <Sparkles size={14} className="animate-pulse" />
+            Your couple gaming space
+          </div>
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-pink-500 via-rose-400 to-purple-500 bg-clip-text text-transparent mb-3">
+            Welcome, {user?.displayName?.split(' ')[0] || 'Player'} 💕
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">Choose a game to play with your partner</p>
+          <p className="text-gray-500 dark:text-gray-400 text-lg">Choose a game to play with your partner</p>
         </div>
 
+        {/* Stats */}
         {!statsLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Trophy className="w-8 h-8 text-yellow-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Games</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalGames}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            {STAT_CARDS.map(({ icon: Icon, color, label, key }) => (
+              <div key={key} className="glass-card p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 glass rounded-xl">
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{statValues[key]}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Target className="w-8 h-8 text-green-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Win Rate</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{winRate}%</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Swords className="w-8 h-8 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Wins</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.wins}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Clock className="w-8 h-8 text-purple-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Favorite</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{stats.favoriteGame}</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         )}
 
-        <div className="mb-6 flex gap-2">
+        {/* Filter tabs */}
+        <div className="mb-6 flex gap-2 flex-wrap">
           {(['all', 'easy', 'medium', 'hard'] as const).map((level) => (
-            <button
-              key={level}
-              onClick={() => setFilter(level)}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
+            <button key={level} onClick={() => setFilter(level)}
+              className={`px-5 py-2 rounded-full font-semibold text-sm transition-all ${
                 filter === level
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
+                  ? `bg-gradient-to-r ${filterColors[level]} text-white shadow-lg shadow-pink-200/50 dark:shadow-pink-900/30 scale-105`
+                  : 'glass-btn text-gray-600 dark:text-gray-300 hover:scale-105'
+              }`}>
               {level.charAt(0).toUpperCase() + level.slice(1)}
             </button>
           ))}
         </div>
 
+        {/* Game grid */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Games</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-5 flex items-center gap-2">
+            🎮 <span className="bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Games</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {filteredGames.map((game) => (
-              <Link key={game.id} to={game.route}>
+              <Link key={game.id} to={game.route} className="block group">
                 <GameCard {...game} />
               </Link>
             ))}
           </div>
         </div>
 
+        {/* Recent history */}
         {!historyLoading && history.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Recent Games</h2>
-            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm overflow-hidden">
-              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-5 flex items-center gap-2">
+              🕐 <span className="bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Recent Games</span>
+            </h2>
+            <div className="glass-card overflow-hidden">
+              <div className="divide-y divide-white/30 dark:divide-white/10">
                 {history.slice(0, 5).map((game) => (
-                  <div key={game.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                  <div key={game.id} className="p-4 hover:bg-white/30 dark:hover:bg-white/5 transition">
                     <div className="flex justify-between items-center">
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-white">{game.game_type}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          vs {game.player_2_email}
-                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">vs {game.player_2_email}</p>
                       </div>
                       <div className="text-right">
-                        <p className={`font-semibold ${
+                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${
                           game.winner_email === user?.email
-                            ? 'text-green-600 dark:text-green-400'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                             : game.winner_email === null
-                            ? 'text-yellow-600 dark:text-yellow-400'
-                            : 'text-red-600 dark:text-red-400'
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                         }`}>
-                          {game.winner_email === user?.email ? 'Won' : game.winner_email === null ? 'Draw' : 'Lost'}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {new Date(game.created_at).toLocaleDateString()}
-                        </p>
+                          {game.winner_email === user?.email ? '🏆 Won' : game.winner_email === null ? '🤝 Draw' : '💔 Lost'}
+                        </span>
+                        <p className="text-xs text-gray-400 mt-1">{new Date(game.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                   </div>
