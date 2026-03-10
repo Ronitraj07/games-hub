@@ -69,7 +69,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     ? gameState?.currentPlayer === gameState?.players.player1
     : gameState?.currentPlayer === userKey;
 
-  // Record result when game finishes (once)
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     const isAI  = gameState.mode === 'vs-ai';
@@ -86,7 +85,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
 
-  // AI move effect
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai' || gameState.status !== 'active') return;
     if (gameState.currentPlayer === gameState.players.player1) return;
@@ -169,7 +167,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">\ud83d\udd34 Connect 4</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">💎 Connect 4</h1>
           <button onClick={reset} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
         </div>
 
@@ -177,14 +175,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <div className="flex items-center justify-center min-h-[60vh]">
             <GameLobby
               gameName="Connect 4"
-              gameIcon="\ud83d\udd34"
+              gameIcon="💎"
               gradient="from-pink-500 to-purple-500"
               description="Drop pieces and connect four in a row!"
               supportsAI
               aiLabels={{
                 easy:   'random moves mostly',
                 medium: 'blocks your wins',
-                hard:   'minimax depth-4 \u2014 good luck',
+                hard:   'minimax depth-4 — good luck',
               }}
               gameType="Connect4"
               onStartVsAI={startVsAI}
@@ -204,12 +202,12 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 <p className={`font-semibold text-lg ${
                   isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'
                 }`}>
-                  {isMyTurn ? 'Your turn!' : isAIMode ? '\ud83e\udd16 AI thinking\u2026' : "Opponent's turn\u2026"}
+                  {isMyTurn ? 'Your turn!' : isAIMode ? '🤖 AI thinking…' : "Opponent's turn…"}
                 </p>
               )}
               {gameState.status === 'finished' && (
                 <p className="font-bold text-xl text-gray-900 dark:text-white">
-                  {gameState.isDraw ? '\ud83e\udd1d Draw!' : gameState.winner === userKey ? '\ud83c\udfc6 You Win!' : isAIMode ? '\ud83e\udd16 AI Wins!' : '\ud83d\udc94 You Lost!'}
+                  {gameState.isDraw ? '🤝 Draw!' : gameState.winner === userKey ? '🏆 You Win!' : isAIMode ? '🤖 AI Wins!' : '💔 You Lost!'}
                 </p>
               )}
             </div>
@@ -268,7 +266,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             {gameState.status === 'finished' && (
               <button onClick={reset}
                 className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
-                Play Again \ud83d\udc95
+                Play Again 💕
               </button>
             )}
           </div>
