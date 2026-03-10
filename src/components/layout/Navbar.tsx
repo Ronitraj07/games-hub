@@ -36,7 +36,7 @@ export const Navbar: React.FC = () => {
           >
             <span className="text-2xl">🎮</span>
             <span className="hidden sm:inline">{APP_CONFIG.APP_NAME}</span>
-            <span className="sm:hidden">CGH</span>
+            <span className="sm:hidden">GH</span>
           </Link>
 
           <div className="flex items-center gap-2">
