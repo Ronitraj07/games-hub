@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { playSound } from '@/utils/sounds';
+import { playCorrect, playWrong } from '@/utils/sounds';
 import { RefreshCw, Clock, Trophy, Star, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -51,17 +51,13 @@ export const WordScramble: React.FC = () => {
   const TOTAL_ROUNDS = 10;
 
   const words = React.useMemo(() => {
-    const shuffled = [...WORD_LIST].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, TOTAL_ROUNDS);
+    return [...WORD_LIST].sort(() => Math.random() - 0.5).slice(0, TOTAL_ROUNDS);
   }, []);
 
   const loadWord = useCallback((index: number) => {
     if (index < TOTAL_ROUNDS) {
       setScrambled(scrambleWord(words[index].word));
-      setInput('');
-      setTimeLeft(30);
-      setShowHint(false);
-      setFeedback(null);
+      setInput(''); setTimeLeft(30); setShowHint(false); setFeedback(null);
     }
   }, [words]);
 
@@ -71,11 +67,7 @@ export const WordScramble: React.FC = () => {
     if (gameOver) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleNext(false);
-          return 0;
-        }
+        if (prev <= 1) { clearInterval(timer); handleNext(false); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -88,18 +80,13 @@ export const WordScramble: React.FC = () => {
       const points = timeLeft > 20 ? 15 : timeLeft > 10 ? 10 : 5;
       setScore(s => s + points + (streak >= 2 ? 5 : 0));
       setStreak(s => s + 1);
-      playSound('success');
+      playCorrect();
     } else {
       setStreak(0);
-      playSound('error');
+      playWrong();
     }
-    if (next >= TOTAL_ROUNDS) {
-      setGameOver(true);
-    } else {
-      setCurrentIndex(next);
-      setRound(next + 1);
-      loadWord(next);
-    }
+    if (next >= TOTAL_ROUNDS) setGameOver(true);
+    else { setCurrentIndex(next); setRound(next + 1); loadWord(next); }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -110,12 +97,7 @@ export const WordScramble: React.FC = () => {
   };
 
   const handleRestart = () => {
-    setCurrentIndex(0);
-    setScore(0);
-    setRound(1);
-    setStreak(0);
-    setGameOver(false);
-    loadWord(0);
+    setCurrentIndex(0); setScore(0); setRound(1); setStreak(0); setGameOver(false); loadWord(0);
   };
 
   const timerColor = timeLeft > 15 ? 'text-green-500' : timeLeft > 8 ? 'text-yellow-500' : 'text-red-500';
@@ -124,23 +106,23 @@ export const WordScramble: React.FC = () => {
     const maxScore = TOTAL_ROUNDS * 20;
     const pct = (score / maxScore) * 100;
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-purple-950 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="glass-card p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">{pct >= 80 ? '🏆' : pct >= 50 ? '⭐' : '💪'}</div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Game Over!</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">Well played, {user?.displayName || 'Player'}!</p>
-          <div className="bg-purple-50 dark:bg-purple-900/30 rounded-xl p-6 mb-6">
-            <p className="text-5xl font-bold text-purple-600 dark:text-purple-400">{score}</p>
+          <div className="bg-pink-50 dark:bg-pink-900/20 rounded-xl p-6 mb-6">
+            <p className="text-5xl font-bold text-pink-600 dark:text-pink-400">{score}</p>
             <p className="text-gray-600 dark:text-gray-400 mt-1">out of {maxScore} points</p>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mt-3">
-              <div className="bg-purple-500 h-3 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              <div className="bg-pink-500 h-3 rounded-full transition-all" style={{ width: `${pct}%` }} />
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={handleRestart} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
+            <button onClick={handleRestart} className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <RefreshCw size={18} /> Play Again
             </button>
-            <Link to="/" className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
+            <Link to="/" className="flex-1 glass-btn text-gray-700 dark:text-gray-300 font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <ArrowLeft size={18} /> Home
             </Link>
           </div>
@@ -150,25 +132,23 @@ export const WordScramble: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-purple-950 p-4">
+    <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🔤 Word Scramble</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
           <div className="flex items-center gap-1 text-yellow-600">
-            <Trophy size={18} />
-            <span className="font-bold">{score}</span>
+            <Trophy size={18} /><span className="font-bold">{score}</span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-4">
+        <div className="glass-card p-6 mb-4">
           <div className="flex justify-between items-center mb-4">
             <span className="text-sm text-gray-500 dark:text-gray-400">Round {round}/{TOTAL_ROUNDS}</span>
             <div className={`flex items-center gap-1 font-bold text-lg ${timerColor}`}>
-              <Clock size={18} />
-              {timeLeft}s
+              <Clock size={18} />{timeLeft}s
             </div>
             {streak >= 2 && (
               <div className="flex items-center gap-1 text-orange-500">
@@ -179,16 +159,16 @@ export const WordScramble: React.FC = () => {
           </div>
 
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-6">
-            <div className="bg-purple-500 h-2 rounded-full transition-all" style={{ width: `${(timeLeft / 30) * 100}%` }} />
+            <div className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all" style={{ width: `${(timeLeft / 30) * 100}%` }} />
           </div>
 
           <div className={`text-center mb-6 p-6 rounded-xl transition-all ${
             feedback === 'correct' ? 'bg-green-50 dark:bg-green-900/30' :
-            feedback === 'wrong' ? 'bg-red-50 dark:bg-red-900/30' :
-            'bg-purple-50 dark:bg-purple-900/20'
+            feedback === 'wrong'   ? 'bg-red-50 dark:bg-red-900/30' :
+            'bg-pink-50/50 dark:bg-pink-900/10'
           }`}>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Unscramble this word:</p>
-            <p className="text-5xl font-bold tracking-widest text-purple-600 dark:text-purple-400">
+            <p className="text-5xl font-bold tracking-widest bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
               {scrambled.split('').join(' ')}
             </p>
             {feedback && (
@@ -210,19 +190,16 @@ export const WordScramble: React.FC = () => {
               value={input}
               onChange={e => setInput(e.target.value.toUpperCase())}
               placeholder="Type your answer..."
-              className="flex-1 border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 text-lg font-semibold uppercase tracking-widest bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="flex-1 glass border-0 rounded-xl px-4 py-3 text-lg font-semibold uppercase tracking-widest text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
               autoFocus
             />
-            <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition">
+            <button type="submit" className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold px-6 py-3 rounded-xl transition">
               Go!
             </button>
           </form>
 
-          <button
-            onClick={() => setShowHint(true)}
-            className="w-full mt-3 text-sm text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition"
-          >
-            💡 Show Hint (-3 pts)
+          <button onClick={() => setShowHint(true)} className="w-full mt-3 text-sm text-gray-500 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition">
+            💡 Show Hint
           </button>
         </div>
       </div>

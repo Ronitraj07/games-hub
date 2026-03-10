@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { playSound } from '@/utils/sounds';
+import { playCorrect, playWrong, playClick } from '@/utils/sounds';
 import { RefreshCw, ArrowLeft, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -8,9 +8,9 @@ type Choice = 'rock' | 'paper' | 'scissors';
 type Result = 'win' | 'lose' | 'draw';
 
 const CHOICES: { value: Choice; emoji: string; label: string; beats: Choice }[] = [
-  { value: 'rock', emoji: '✊', label: 'Rock', beats: 'scissors' },
-  { value: 'paper', emoji: '✋', label: 'Paper', beats: 'rock' },
-  { value: 'scissors', emoji: '✌️', label: 'Scissors', beats: 'paper' },
+  { value: 'rock',     emoji: '✊', label: 'Rock',     beats: 'scissors' },
+  { value: 'paper',    emoji: '✋', label: 'Paper',    beats: 'rock'     },
+  { value: 'scissors', emoji: '✌️', label: 'Scissors', beats: 'paper'    },
 ];
 
 const TOTAL_ROUNDS = 5;
@@ -18,19 +18,18 @@ const TOTAL_ROUNDS = 5;
 export const RockPaperScissors: React.FC = () => {
   const { user } = useAuth();
   const [playerChoice, setPlayerChoice] = useState<Choice | null>(null);
-  const [cpuChoice, setCpuChoice] = useState<Choice | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  const [playerScore, setPlayerScore] = useState(0);
-  const [cpuScore, setCpuScore] = useState(0);
-  const [round, setRound] = useState(1);
-  const [gameOver, setGameOver] = useState(false);
-  const [animating, setAnimating] = useState(false);
-  const [history, setHistory] = useState<{ player: Choice; cpu: Choice; result: Result }[]>([]);
+  const [cpuChoice, setCpuChoice]       = useState<Choice | null>(null);
+  const [result, setResult]             = useState<Result | null>(null);
+  const [playerScore, setPlayerScore]   = useState(0);
+  const [cpuScore, setCpuScore]         = useState(0);
+  const [round, setRound]               = useState(1);
+  const [gameOver, setGameOver]         = useState(false);
+  const [animating, setAnimating]       = useState(false);
+  const [history, setHistory]           = useState<{ player: Choice; cpu: Choice; result: Result }[]>([]);
 
   const getResult = (player: Choice, cpu: Choice): Result => {
     if (player === cpu) return 'draw';
-    const playerData = CHOICES.find(c => c.value === player)!;
-    return playerData.beats === cpu ? 'win' : 'lose';
+    return CHOICES.find(c => c.value === player)!.beats === cpu ? 'win' : 'lose';
   };
 
   const handleChoice = (choice: Choice) => {
@@ -47,13 +46,12 @@ export const RockPaperScissors: React.FC = () => {
       setResult(res);
       setHistory(h => [...h, { player: choice, cpu, result: res }]);
 
-      if (res === 'win') { setPlayerScore(s => s + 1); playSound('success'); }
-      else if (res === 'lose') { setCpuScore(s => s + 1); playSound('error'); }
-      else { playSound('click'); }
+      if (res === 'win')  { setPlayerScore(s => s + 1); playCorrect(); }
+      else if (res === 'lose') { setCpuScore(s => s + 1); playWrong(); }
+      else { playClick(); }
 
       if (round >= TOTAL_ROUNDS) setGameOver(true);
       else setRound(r => r + 1);
-
       setAnimating(false);
     }, 800);
   };
@@ -65,34 +63,27 @@ export const RockPaperScissors: React.FC = () => {
   };
 
   const resultColors = {
-    win: 'text-green-600 dark:text-green-400',
+    win:  'text-green-600 dark:text-green-400',
     lose: 'text-red-600 dark:text-red-400',
     draw: 'text-yellow-600 dark:text-yellow-400',
   };
 
-  const resultMessages = {
-    win: ['🎉 You Win!', '🔥 Crushing it!', '⚡ Unstoppable!', '🌟 Brilliant!'],
-    lose: ['😅 CPU Wins!', '💪 Try Again!', '🤖 CPU got you!', '😬 So close!'],
-    draw: ['🤝 Draw!', '😲 Same choice!', '⚖️ Tied!'],
-  };
-
-  const finalWinner = playerScore > cpuScore ? 'You Win! 🏆' : playerScore < cpuScore ? 'CPU Wins! 🤖' : 'It\'s a Tie! 🤝';
+  const finalWinner = playerScore > cpuScore ? 'You Win! 🏆' : playerScore < cpuScore ? 'CPU Wins! 🤖' : "It's a Tie! 🤝";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 dark:from-gray-900 dark:to-red-950 p-4">
+    <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">✊ Rock Paper Scissors</h1>
-          <button onClick={handleRestart} className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
+          <button onClick={handleRestart} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
             <RefreshCw size={20} />
           </button>
         </div>
 
-        {/* Scoreboard */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-4 mb-4">
+        <div className="glass-card p-4 mb-4">
           <div className="flex justify-between items-center">
             <div className="text-center flex-1">
               <p className="text-sm text-gray-500 dark:text-gray-400">{user?.displayName || 'You'}</p>
@@ -109,8 +100,7 @@ export const RockPaperScissors: React.FC = () => {
           </div>
         </div>
 
-        {/* Battle Area */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-4">
+        <div className="glass-card p-6 mb-4">
           <div className="flex justify-between items-center mb-6">
             <div className="text-center flex-1">
               <div className={`text-8xl transition-all duration-300 ${animating ? 'animate-bounce' : ''}`}>
@@ -129,19 +119,15 @@ export const RockPaperScissors: React.FC = () => {
 
           {result && !gameOver && (
             <div className={`text-center text-2xl font-bold mb-4 ${resultColors[result]}`}>
-              {resultMessages[result][Math.floor(Math.random() * resultMessages[result].length)]}
+              {result === 'win' ? '🎉 You Win!' : result === 'lose' ? '😅 CPU Wins!' : '🤝 Draw!'}
             </div>
           )}
 
           {!gameOver && (
             <div className="grid grid-cols-3 gap-3">
               {CHOICES.map(choice => (
-                <button
-                  key={choice.value}
-                  onClick={() => handleChoice(choice.value)}
-                  disabled={animating}
-                  className="bg-gray-50 dark:bg-gray-700 hover:bg-orange-50 dark:hover:bg-orange-900/30 border-2 border-gray-200 dark:border-gray-600 hover:border-orange-400 rounded-xl p-4 text-center transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50"
-                >
+                <button key={choice.value} onClick={() => handleChoice(choice.value)} disabled={animating}
+                  className="glass-btn rounded-xl p-4 text-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50">
                   <div className="text-4xl mb-1">{choice.emoji}</div>
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{choice.label}</div>
                 </button>
@@ -154,27 +140,24 @@ export const RockPaperScissors: React.FC = () => {
               <div className="text-5xl mb-3">{playerScore > cpuScore ? '🏆' : playerScore < cpuScore ? '🤖' : '🤝'}</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{finalWinner}</h2>
               <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} - {cpuScore} after {TOTAL_ROUNDS} rounds</p>
-              <button onClick={handleRestart} className="bg-orange-600 hover:bg-orange-700 text-white font-semibold px-8 py-3 rounded-xl transition flex items-center gap-2 mx-auto">
+              <button onClick={handleRestart} className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition flex items-center gap-2 mx-auto">
                 <RefreshCw size={18} /> Play Again
               </button>
             </div>
           )}
         </div>
 
-        {/* Round History */}
         {history.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-4">
+          <div className="glass-card p-4">
             <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Round History</h3>
             <div className="flex gap-2 flex-wrap">
               {history.map((h, i) => (
                 <div key={i} className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
-                  h.result === 'win' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                  h.result === 'win'  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
                   h.result === 'lose' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
                   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                 }`}>
-                  {CHOICES.find(c => c.value === h.player)!.emoji}
-                  <span>vs</span>
-                  {CHOICES.find(c => c.value === h.cpu)!.emoji}
+                  {CHOICES.find(c => c.value === h.player)!.emoji} vs {CHOICES.find(c => c.value === h.cpu)!.emoji}
                 </div>
               ))}
             </div>
