@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useGameStats } from '@/hooks/useGameStats';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
@@ -39,7 +40,6 @@ const generateProblem = (difficulty: Difficulty): Problem => {
 
 const TOTAL_Q = 10;
 const TIME_PER: Record<Difficulty,number> = {easy:15,medium:12,hard:8};
-// AI answer delay in seconds per difficulty
 const AI_DELAY: Record<AIDifficulty,number> = {easy:10,medium:5,hard:1.5};
 const AI_ERROR:  Record<AIDifficulty,number> = {easy:.3,medium:.1,hard:0};
 
@@ -51,16 +51,17 @@ interface OnlineState {
   p1Answered: boolean; p2Answered: boolean;
   status: 'waiting'|'active'|'finished';
   mode: GameMode;
+  recorded?: boolean;
 }
 
 export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
 
   const [gameMode, setGameMode] = useState<GameMode|null>(null);
   const [aiDiff,   setAiDiff]   = useState<AIDifficulty>('medium');
 
-  // ─── Solo / vs-AI state ───
   const [problem,     setProblem]     = useState<Problem|null>(null);
   const [score,       setScore]       = useState(0);
   const [round,       setRound]       = useState(1);
@@ -71,13 +72,12 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [streak,      setStreak]      = useState(0);
   const [showFb,      setShowFb]      = useState(false);
   const [diff,        setDiff]        = useState<Difficulty>('medium');
-  // AI race
   const [aiScore,    setAiScore]    = useState(0);
   const [aiAnswered, setAiAnswered] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
+  const [localRecorded, setLocalRecorded] = useState(false);
+  const timerRef   = useRef<ReturnType<typeof setInterval>|null>(null);
   const aiTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  // ─── Online state ───
   const safeSession = sessionId
     ? sanitizeFirebasePath(sessionId)
     : `mathduel-${userKey?sanitizeFirebasePath(userKey):'guest'}`;
@@ -87,17 +87,28 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     p1Score:0, p2Score:0,
     p1Answered:false, p2Answered:false,
     status:'waiting', mode:'vs-partner',
+    recorded: false,
   };
   const { gameState, updateGameState } = useRealtimeGame<OnlineState>(safeSession,'mathduel',initialOnline);
   const isP1 = gameState?.p1Email === userKey;
   const curQ = gameState?.questions?.[gameState.current];
+
+  // Record online result when finished (once)
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const myScore  = isP1 ? gameState.p1Score : gameState.p2Score;
+    const oppScore = isP1 ? gameState.p2Score : gameState.p1Score;
+    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp      = isP1 ? (gameState.p2Email || undefined) : gameState.p1Email;
+    recordGame({ gameType: 'mathduel', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
 
   const nextLocalQ = useCallback((d: Difficulty) => {
     setProblem(generateProblem(d));
     setSelected(null); setShowFb(false); setTimeLeft(TIME_PER[d]); setAiAnswered(false);
   },[]);
 
-  // Local timer
   useEffect(()=>{
     if(!gameMode||gameMode==='vs-partner'||gameOver||showFb||!problem)return;
     timerRef.current=setInterval(()=>{
@@ -109,7 +120,6 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return()=>clearInterval(timerRef.current!);
   },[round,gameMode,gameOver,showFb]);
 
-  // AI timer
   useEffect(()=>{
     if(gameMode!=='vs-ai'||showFb||!problem)return;
     const delay = AI_DELAY[aiDiff]*1000;
@@ -119,11 +129,10 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       if(!showFb){
         if(aiAns===problem.answer){setAiScore(s=>s+5);}
         setAiAnswered(true);
-        // If AI beat player
-        if(!selected)handleLocalAnswer(-998); // timeout for player
+        if(!selected)handleLocalAnswer(-998);
       }
     },delay);
-    return()=>{if(aiTimerRef.current)clearTimeout(aiTimerRef.current);};
+    return()=>{if(aiTimerRef.current)clearTimeout(aiTimerRef.current!);};
   },[gameMode,round,showFb]);
 
   const handleLocalAnswer=useCallback((option:number)=>{
@@ -140,7 +149,20 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     },800);
   },[showFb,problem,timeLeft,diff,streak,round,nextLocalQ]);
 
-  // Online answer
+  // Record local/AI result when game ends
+  useEffect(() => {
+    if (!gameOver || localRecorded || !userKey || gameMode === 'vs-partner') return;
+    setLocalRecorded(true);
+    const result = score > aiScore ? 'win' : score < aiScore ? 'loss' : 'draw';
+    recordGame({
+      gameType:    'mathduel',
+      playerEmail: userKey,
+      result:      gameMode === 'vs-ai' ? result : 'win',
+      score,
+      mode:        gameMode ?? 'solo',
+    });
+  }, [gameOver]);
+
   const handleOnlineAnswer=(option:number)=>{
     if(!gameState||gameState.status!=='active'||!curQ)return;
     const myAnswered=isP1?gameState.p1Answered:gameState.p2Answered;
@@ -152,7 +174,7 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       :{...gameState,p2Score:gameState.p2Score+pts,p2Answered:true};
     const bothDone=(isP1?gameState.p2Answered:gameState.p1Answered)||true;
     if(bothDone&&gameState.current+1>=TOTAL_Q){
-      updateGameState({...updated,status:'finished'});
+      updateGameState({...updated,status:'finished',recorded:false});
     } else if(bothDone){
       updateGameState({...updated,current:gameState.current+1,p1Answered:false,p2Answered:false});
     } else {
@@ -162,7 +184,7 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const startLocal=(d:Difficulty,mode:GameMode)=>{
     setDiff(d); setGameMode(mode);
-    setScore(0);setRound(1);setCorrect(0);setGameOver(false);setStreak(0);setAiScore(0);
+    setScore(0);setRound(1);setCorrect(0);setGameOver(false);setStreak(0);setAiScore(0);setLocalRecorded(false);
     nextLocalQ(d);
   };
 
