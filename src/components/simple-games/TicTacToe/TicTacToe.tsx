@@ -8,14 +8,23 @@ import { Link } from 'react-router-dom';
 import type { CellValue, BoardState } from './types';
 
 interface TicTacToeGameState {
-  board: BoardState;                 // ('X' | 'O' | null)[]
+  board: BoardState;
   currentPlayer: 'X' | 'O';
-  players: { player1: string; player2: string | null }; // emails
+  players: { player1: string; player2: string | null };
   winner: 'X' | 'O' | null;
   winningCells: number[] | null;
   status: 'waiting' | 'active' | 'finished';
   isDraw: boolean;
 }
+
+/** Always returns a safe 9-element board — Firebase omits all-null arrays */
+const safeBoard = (board: BoardState | null | undefined): BoardState => {
+  const b = Array.isArray(board) ? board : [];
+  // Pad to 9, replacing any undefined slot (Firebase-omitted null) with null
+  return Array.from({ length: 9 }, (_, i) =>
+    i < b.length && b[i] !== undefined ? b[i] : null
+  ) as BoardState;
+};
 
 const calculateWinner = (
   board: BoardState
@@ -55,15 +64,20 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     safeSession, 'tictactoe', initialState
   );
 
-  // Current user plays 'X' if they are player1, otherwise 'O'
-  const mySymbol: CellValue = gameState?.players.player1 === userKey ? 'X' : 'O';
+  const mySymbol: CellValue = gameState?.players?.player1 === userKey ? 'X' : 'O';
   const isMyTurn = gameState?.currentPlayer === mySymbol;
+
+  // Always use a safe board — never trust raw Firebase board directly
+  const currentBoard = safeBoard(gameState?.board);
 
   const handleCellClick = (index: number) => {
     if (!gameState || gameState.status !== 'active' || !isMyTurn) return;
-    if (gameState.board[index]) return;
+    if (index < 0 || index > 8) return;
 
-    const newBoard: BoardState = [...gameState.board];
+    const board = safeBoard(gameState.board);
+    if (board[index]) return; // cell already taken
+
+    const newBoard: BoardState = [...board] as BoardState;
     newBoard[index] = mySymbol;
 
     const { winner, cells } = calculateWinner(newBoard);
@@ -165,9 +179,9 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               )}
             </div>
 
-            {/* Board */}
+            {/* Board — always pass the safe 9-element board */}
             <Board
-              board={gameState.board}
+              board={currentBoard}
               onCellClick={handleCellClick}
               disabled={!isMyTurn || gameState.status !== 'active'}
               winningCells={gameState.winningCells || []}
