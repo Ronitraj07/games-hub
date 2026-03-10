@@ -1,107 +1,186 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { db } from '@/lib/firebase';
+import { ref, set, onValue, off } from 'firebase/database';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
-import { RefreshCw, ArrowLeft, Clock, Trophy, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import {
+  RefreshCw, ArrowLeft, Clock, Trophy, CheckCircle, XCircle,
+  Loader2, Plus, X, Pencil, Trash2, BookOpen, Sparkles,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { GameMode } from '@/components/shared/GameLobby';
 
-// ───────────────── Romantic Question Bank ─────────────────
-const ALL_QUESTIONS = [
-  // 💕 Anniversaries & Traditions
-  { q: 'What is the traditional gift for a 1st wedding anniversary?',      options: ['Paper','Cotton','Leather','Wood'],                    answer: 0, category: '💕 Anniversaries' },
-  { q: 'What is the traditional gift for a 5th wedding anniversary?',      options: ['Wood','Silver','Gold','Wood'],                        answer: 0, category: '💕 Anniversaries' },
-  { q: 'What is the traditional gift for a 25th wedding anniversary?',     options: ['Gold','Silver','Diamond','Pearl'],                    answer: 1, category: '💕 Anniversaries' },
-  { q: 'What is the traditional gift for a 50th wedding anniversary?',     options: ['Silver','Ruby','Gold','Diamond'],                     answer: 2, category: '💕 Anniversaries' },
-  { q: 'What is the traditional gift for a 10th wedding anniversary?',     options: ['Tin/Aluminium','Copper','Bronze','Iron'],             answer: 0, category: '💕 Anniversaries' },
-  { q: 'Valentine\'s Day is celebrated on which date?',                     options: ['12 Feb','13 Feb','14 Feb','15 Feb'],                  answer: 2, category: '💕 Anniversaries' },
-  { q: 'Who is the patron saint of love?',                                 options: ['St. George','St. Valentine','St. Nicholas','St. Andrew'], answer: 1, category: '💕 Anniversaries' },
+// ───────────────── Types ─────────────────
+export interface TriviaQuestion {
+  q:        string;
+  options:  [string, string, string, string];
+  answer:   number; // 0–3
+  category: string;
+  custom?:  boolean;
+  id?:      string;
+}
 
-  // 🌹 Romance & Flowers
-  { q: 'Which flower is most associated with romantic love?',              options: ['Tulip','Lily','Rose','Daisy'],                        answer: 2, category: '🌹 Romance' },
-  { q: 'What colour rose traditionally means "I love you"?',              options: ['White','Yellow','Pink','Red'],                        answer: 3, category: '🌹 Romance' },
-  { q: 'What colour rose symbolises new beginnings?',                     options: ['Red','White','Orange','Purple'],                      answer: 1, category: '🌹 Romance' },
-  { q: 'What is the language of flowers called?',                         options: ['Floristry','Floriography','Botany','Phytology'],      answer: 1, category: '🌹 Romance' },
-  { q: 'Which flower means "You are on my mind"?',                        options: ['Sunflower','Pansy','Orchid','Tulip'],                 answer: 1, category: '🌹 Romance' },
-  { q: 'Which gemstone is traditionally given on a proposal?',            options: ['Ruby','Emerald','Diamond','Sapphire'],                answer: 2, category: '🌹 Romance' },
-  { q: 'Which city is most famous as the "City of Love"?',               options: ['Venice','Rome','Paris','Barcelona'],                  answer: 2, category: '🌹 Romance' },
-
-  // 🎬 Romantic Movies & Songs
-  { q: 'Which film features the line "You had me at hello"?',             options: ['Pretty Woman','Jerry Maguire','Titanic','Notting Hill'], answer: 1, category: '🎬 Romance Films' },
-  { q: 'In Titanic, what is the name of the female lead?',                options: ['Rachel','Rose','Ruby','Rita'],                        answer: 1, category: '🎬 Romance Films' },
-  { q: 'Which Shakespeare play features the balcony scene?',              options: ['A Midsummer Night\'s Dream','Othello','Romeo & Juliet','Hamlet'], answer: 2, category: '🎬 Romance Films' },
-  { q: 'In "The Notebook", where do Noah and Allie share their first kiss?', options: ['On a bridge','In the rain','In a boat','On a ferris wheel'], answer: 3, category: '🎬 Romance Films' },
-  { q: 'Which Adele song starts with "Hello, it\'s me"?',                 options: ['Someone Like You','Rolling in the Deep','Hello','Skyfall'], answer: 2, category: '🎬 Romance Films' },
-  { q: 'Which romantic movie takes place mostly on a cruise ship?',        options: ['Ghost','Titanic','Out of Africa','Grease'],          answer: 1, category: '🎬 Romance Films' },
-
-  // 💑 Relationship Knowledge
-  { q: 'According to researchers, how long does it typically take to fall in love?', options: ['A few seconds','A few minutes','A few days','A few weeks'], answer: 0, category: '💑 Relationships' },
-  { q: 'What hormone is known as the "love hormone"?',                    options: ['Serotonin','Dopamine','Oxytocin','Adrenaline'],       answer: 2, category: '💑 Relationships' },
-  { q: 'Which country has the highest rate of marriage in the world?',    options: ['USA','India','Egypt','Maldives'],                     answer: 2, category: '💑 Relationships' },
-  { q: 'What does the word "soulmate" most closely mean?',                options: ['Best friend','Perfect romantic partner','Twin','Companion'], answer: 1, category: '💑 Relationships' },
-  { q: 'In psychology, what are the three components of love according to Sternberg?', options: ['Trust, Respect, Loyalty','Passion, Intimacy, Commitment','Attraction, Affection, Communication','Care, Trust, Honesty'], answer: 1, category: '💑 Relationships' },
-  { q: 'What is a "honeymoon phase" in a relationship?',                  options: ['The wedding ceremony','Early blissful stage of romance','A holiday tradition','Anniversary celebration'], answer: 1, category: '💑 Relationships' },
-
-  // 🗺️ Romantic Destinations
-  { q: 'Which Italian city is famous for gondola rides with loved ones?', options: ['Rome','Florence','Venice','Milan'],                   answer: 2, category: '🗺️ Romantic Places' },
-  { q: 'The Taj Mahal was built as a symbol of what?',                    options: ['Military power','Eternal love','Religious faith','Royal wealth'], answer: 1, category: '🗺️ Romantic Places' },
-  { q: 'Which Greek island is famous for white buildings and sunsets?',   options: ['Crete','Rhodes','Corfu','Santorini'],                 answer: 3, category: '🗺️ Romantic Places' },
-  { q: 'Which city has the famous "love locks" bridge (Pont des Arts)?',  options: ['London','Paris','Rome','Prague'],                     answer: 1, category: '🗺️ Romantic Places' },
-  { q: 'Which South Asian country is the top honeymoon destination?',     options: ['Sri Lanka','Nepal','Maldives','Bhutan'],             answer: 2, category: '🗺️ Romantic Places' },
-
+// ───────────────── Built-in romantic bank ─────────────────
+const ALL_QUESTIONS: TriviaQuestion[] = [
+  // 💕 Anniversaries
+  { q:'What is the traditional gift for a 1st wedding anniversary?',      options:['Paper','Cotton','Leather','Wood'],                    answer:0, category:'💕 Anniversaries' },
+  { q:'What is the traditional gift for a 5th wedding anniversary?',      options:['Wood','Silver','Gold','Silk'],                        answer:0, category:'💕 Anniversaries' },
+  { q:'What is the traditional gift for a 25th wedding anniversary?',     options:['Gold','Silver','Diamond','Pearl'],                    answer:1, category:'💕 Anniversaries' },
+  { q:'What is the traditional gift for a 50th wedding anniversary?',     options:['Silver','Ruby','Gold','Diamond'],                     answer:2, category:'💕 Anniversaries' },
+  { q:'What is the traditional gift for a 10th wedding anniversary?',     options:['Tin/Aluminium','Copper','Bronze','Iron'],             answer:0, category:'💕 Anniversaries' },
+  { q:"Valentine's Day is celebrated on which date?",                     options:['12 Feb','13 Feb','14 Feb','15 Feb'],                  answer:2, category:'💕 Anniversaries' },
+  { q:'Who is the patron saint of love?',                                 options:['St. George','St. Valentine','St. Nicholas','St. Andrew'], answer:1, category:'💕 Anniversaries' },
+  // 🌹 Romance
+  { q:'Which flower is most associated with romantic love?',              options:['Tulip','Lily','Rose','Daisy'],                        answer:2, category:'🌹 Romance' },
+  { q:'What colour rose traditionally means "I love you"?',              options:['White','Yellow','Pink','Red'],                        answer:3, category:'🌹 Romance' },
+  { q:'What colour rose symbolises new beginnings?',                      options:['Red','White','Orange','Purple'],                      answer:1, category:'🌹 Romance' },
+  { q:'What is the language of flowers called?',                          options:['Floristry','Floriography','Botany','Phytology'],      answer:1, category:'🌹 Romance' },
+  { q:'Which flower means "You are on my mind"?',                         options:['Sunflower','Pansy','Orchid','Tulip'],                 answer:1, category:'🌹 Romance' },
+  { q:'Which gemstone is traditionally given on a proposal?',             options:['Ruby','Emerald','Diamond','Sapphire'],                answer:2, category:'🌹 Romance' },
+  { q:'Which city is most famous as the "City of Love"?',                options:['Venice','Rome','Paris','Barcelona'],                  answer:2, category:'🌹 Romance' },
+  // 🎬 Romance Films
+  { q:'Which film features the line "You had me at hello"?',              options:['Pretty Woman','Jerry Maguire','Titanic','Notting Hill'], answer:1, category:'🎬 Romance Films' },
+  { q:'In Titanic, what is the name of the female lead?',                 options:['Rachel','Rose','Ruby','Rita'],                        answer:1, category:'🎬 Romance Films' },
+  { q:"Which Shakespeare play features the balcony scene?",               options:["A Midsummer Night's Dream",'Othello','Romeo & Juliet','Hamlet'], answer:2, category:'🎬 Romance Films' },
+  { q:'In "The Notebook", where do Noah and Allie share their first kiss?', options:['On a bridge','In the rain','In a boat','On a ferris wheel'], answer:3, category:'🎬 Romance Films' },
+  { q:'Which Adele song starts with "Hello, it\'s me"?',                  options:['Someone Like You','Rolling in the Deep','Hello','Skyfall'], answer:2, category:'🎬 Romance Films' },
+  { q:'Which romantic movie takes place mostly on a cruise ship?',         options:['Ghost','Titanic','Out of Africa','Grease'],           answer:1, category:'🎬 Romance Films' },
+  // 💑 Relationships
+  { q:'What hormone is known as the "love hormone"?',                     options:['Serotonin','Dopamine','Oxytocin','Adrenaline'],       answer:2, category:'💑 Relationships' },
+  { q:'What does the word "soulmate" most closely mean?',                 options:['Best friend','Perfect romantic partner','Twin','Companion'], answer:1, category:'💑 Relationships' },
+  { q:'What are the three components of love according to Sternberg?',    options:['Trust, Respect, Loyalty','Passion, Intimacy, Commitment','Attraction, Affection, Communication','Care, Trust, Honesty'], answer:1, category:'💑 Relationships' },
+  { q:'What is a "honeymoon phase" in a relationship?',                   options:['The wedding ceremony','Early blissful stage of romance','A holiday tradition','Anniversary celebration'], answer:1, category:'💑 Relationships' },
+  { q:'How many love languages are there according to Gary Chapman?',      options:['3','4','5','6'],                                     answer:2, category:'💑 Relationships' },
+  { q:'Which of these is NOT one of the 5 love languages?',               options:['Words of Affirmation','Gift Giving','Eye Contact','Quality Time'], answer:2, category:'💑 Relationships' },
+  // 🗺️ Romantic Places
+  { q:'Which Italian city is famous for gondola rides with loved ones?',  options:['Rome','Florence','Venice','Milan'],                   answer:2, category:'🗺️ Romantic Places' },
+  { q:'The Taj Mahal was built as a symbol of what?',                     options:['Military power','Eternal love','Religious faith','Royal wealth'], answer:1, category:'🗺️ Romantic Places' },
+  { q:'Which Greek island is famous for white buildings and sunsets?',    options:['Crete','Rhodes','Corfu','Santorini'],                 answer:3, category:'🗺️ Romantic Places' },
+  { q:'Which city has the famous "love locks" bridge (Pont des Arts)?',   options:['London','Paris','Rome','Prague'],                     answer:1, category:'🗺️ Romantic Places' },
+  { q:'Which South Asian country is the top honeymoon destination?',      options:['Sri Lanka','Nepal','Maldives','Bhutan'],             answer:2, category:'🗺️ Romantic Places' },
   // 🧠 Love Trivia
-  { q: 'Which organ is traditionally associated with love in art?',       options: ['Brain','Lungs','Heart','Stomach'],                   answer: 2, category: '🧠 Love Trivia' },
-  { q: 'What does "XOXO" stand for?',                                     options: ['Love & Hugs','Kisses & Hugs','Hugs & Kisses','Love & Kisses'], answer: 2, category: '🧠 Love Trivia' },
-  { q: 'In which country did chocolate become associated with Valentine\'s Day gifts?', options: ['Belgium','Switzerland','USA','France'], answer: 2, category: '🧠 Love Trivia' },
-  { q: 'How many love languages are there according to Gary Chapman?',     options: ['3','4','5','6'],                                     answer: 2, category: '🧠 Love Trivia' },
-  { q: 'Which of these is NOT one of the 5 love languages?',             options: ['Words of Affirmation','Gift Giving','Eye Contact','Quality Time'], answer: 2, category: '🧠 Love Trivia' },
-  { q: 'What is the Roman god of love called?',                           options: ['Eros','Cupid','Venus','Apollo'],                      answer: 1, category: '🧠 Love Trivia' },
-  { q: 'What is the Greek goddess of love called?',                       options: ['Hera','Athena','Aphrodite','Persephone'],            answer: 2, category: '🧠 Love Trivia' },
+  { q:'What does "XOXO" stand for?',                                      options:['Love & Hugs','Kisses & Hugs','Hugs & Kisses','Love & Kisses'], answer:2, category:'🧠 Love Trivia' },
+  { q:'What is the Roman god of love called?',                            options:['Eros','Cupid','Venus','Apollo'],                      answer:1, category:'🧠 Love Trivia' },
+  { q:'What is the Greek goddess of love called?',                        options:['Hera','Athena','Aphrodite','Persephone'],             answer:2, category:'🧠 Love Trivia' },
+  { q:'Which organ is traditionally associated with love in art?',        options:['Brain','Lungs','Heart','Stomach'],                    answer:2, category:'🧠 Love Trivia' },
 ];
 
-const CATEGORIES = ['⭐ All', '💕 Anniversaries', '🌹 Romance', '🎬 Romance Films', '💑 Relationships', '🗺️ Romantic Places', '🧠 Love Trivia'];
+const BUILTIN_CATEGORIES = ['⭐ All', '💕 Anniversaries', '🌹 Romance', '🎬 Romance Films', '💑 Relationships', '🗺️ Romantic Places', '🧠 Love Trivia'];
+const CUSTOM_CATEGORY    = '✏️ Custom';
 const TIME_PER = 20;
 const TOTAL_Q  = 10;
 
+// ───────────────── Blank draft ─────────────────
+const BLANK_DRAFT = (): Omit<TriviaQuestion,'id'|'custom'> => ({
+  q: '', options: ['', '', '', ''], answer: 0, category: CUSTOM_CATEGORY,
+});
+
+// ───────────────── Online game state ─────────────────
 interface OnlineState {
-  questions: typeof ALL_QUESTIONS;
-  current: number;
-  p1Email: string; p2Email: string;
-  p1Score: number; p2Score: number;
-  p1Answered: boolean; p2Answered: boolean;
-  status: 'waiting'|'active'|'finished';
-  mode: GameMode;
+  questions:   TriviaQuestion[];
+  current:     number;
+  p1Email:     string;
+  p2Email:     string;
+  p1Score:     number;
+  p2Score:     number;
+  p1Answered:  boolean;
+  p2Answered:  boolean;
+  status:      'waiting' | 'active' | 'finished';
+  mode:        GameMode;
 }
 
+// ───────────────── Component ─────────────────
 export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const userKey  = user?.email ?? null;
 
-  const [gameMode,  setGameMode]  = useState<GameMode|null>(null);
-  const [category,  setCategory]  = useState('⭐ All');
+  // ─ Views ─
+  type View = 'lobby' | 'builder' | 'game' | 'results';
+  const [view,      setView]      = useState<View>('lobby');
+  const [gameMode,  setGameMode]  = useState<GameMode | null>(null);
+  const [category,  setCategory]  = useState<string>('⭐ All');
 
-  // ─── Solo state ───
-  const [current,    setCurrent]    = useState(0);
-  const [selected,   setSelected]   = useState<number|null>(null);
-  const [score,      setScore]      = useState(0);
-  const [timeLeft,   setTimeLeft]   = useState(TIME_PER);
-  const [gameOver,   setGameOver]   = useState(false);
-  const [answers,    setAnswers]    = useState<(number|null)[]>([]);
-  const [showResult, setShowResult] = useState(false);
+  // ─ Custom questions from Firebase ─
+  const customDbPath = userKey
+    ? `trivia-custom/${sanitizeFirebasePath(userKey)}`
+    : null;
+
+  const [customQs,    setCustomQs]    = useState<TriviaQuestion[]>([]);
+  const [loadingCust, setLoadingCust] = useState(true);
+
+  // Subscribe to custom questions
+  useEffect(() => {
+    if (!customDbPath) { setLoadingCust(false); return; }
+    const r = ref(db, customDbPath);
+    const unsub = onValue(r, snap => {
+      const val = snap.val();
+      if (val) {
+        const arr = Object.entries(val).map(([id, v]) => ({ ...(v as TriviaQuestion), id, custom: true }));
+        setCustomQs(arr);
+      } else setCustomQs([]);
+      setLoadingCust(false);
+    });
+    return () => off(r, 'value', unsub);
+  }, [customDbPath]);
+
+  // ─ Builder state ─
+  const [draft,       setDraft]       = useState<Omit<TriviaQuestion,'id'|'custom'>>(BLANK_DRAFT());
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [saveError,   setSaveError]   = useState('');
+
+  const saveCustomQ = async () => {
+    if (!draft.q.trim())                             return setSaveError('Question text is required.');
+    if (draft.options.some(o => !o.trim()))          return setSaveError('Fill in all 4 options.');
+    if (!customDbPath)                               return setSaveError('You must be logged in.');
+    setSaveError('');
+    const id = editingId ?? `q-${Date.now()}`;
+    await set(ref(db, `${customDbPath}/${id}`), { ...draft, custom: true });
+    setDraft(BLANK_DRAFT()); setEditingId(null);
+  };
+
+  const deleteCustomQ = async (id: string) => {
+    if (!customDbPath) return;
+    await set(ref(db, `${customDbPath}/${id}`), null);
+  };
+
+  const startEditQ = (q: TriviaQuestion) => {
+    setDraft({ q: q.q, options: [...q.options] as [string,string,string,string], answer: q.answer, category: q.category });
+    setEditingId(q.id ?? null);
+    setView('builder');
+  };
+
+  // ─ Question pool helpers ─
+  const allCategories = [
+    ...BUILTIN_CATEGORIES,
+    ...(customQs.length > 0 ? [CUSTOM_CATEGORY] : []),
+  ];
 
   const filteredQ = useCallback(() => {
-    const pool = category === '⭐ All' ? ALL_QUESTIONS : ALL_QUESTIONS.filter(q => q.category === category);
-    return [...pool].sort(() => Math.random() - .5).slice(0, TOTAL_Q);
-  }, [category]);
+    let pool: TriviaQuestion[];
+    if (category === CUSTOM_CATEGORY) pool = customQs;
+    else if (category === '⭐ All')    pool = [...ALL_QUESTIONS, ...customQs];
+    else                              pool = ALL_QUESTIONS.filter(q => q.category === category);
+    if (pool.length === 0) pool = ALL_QUESTIONS; // fallback
+    return [...pool].sort(() => Math.random() - 0.5).slice(0, TOTAL_Q);
+  }, [category, customQs]);
 
-  const [activeQ, setActiveQ] = useState<typeof ALL_QUESTIONS>(() => filteredQ());
+  // ─ Solo game state ─
+  const [activeQ,    setActiveQ]    = useState<TriviaQuestion[]>([]);
+  const [current,    setCurrent]    = useState(0);
+  const [selected,   setSelected]   = useState<number | null>(null);
+  const [score,      setScore]      = useState(0);
+  const [timeLeft,   setTimeLeft]   = useState(TIME_PER);
+  const [answers,    setAnswers]    = useState<(number | null)[]>([]);
+  const [showResult, setShowResult] = useState(false);
 
-  // ─── Online state ───
+  // ─ Online state ─
   const safeSession = sessionId
     ? sanitizeFirebasePath(sessionId)
     : `trivia-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
+
   const initialOnline: OnlineState = {
     questions: [], current: 0,
     p1Email: userKey ?? '', p2Email: '',
@@ -110,12 +189,12 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     status: 'waiting', mode: 'vs-partner',
   };
   const { gameState, updateGameState } = useRealtimeGame<OnlineState>(safeSession, 'trivia', initialOnline);
-  const isP1 = gameState?.p1Email === userKey;
+  const isP1       = gameState?.p1Email === userKey;
   const curOnlineQ = gameState?.questions?.[gameState.current];
 
-  // Solo timer
+  // ─ Solo timer ─
   useEffect(() => {
-    if (gameMode !== 'solo' || gameOver || showResult) return;
+    if (view !== 'game' || gameMode !== 'solo' || showResult) return;
     const t = setInterval(() => {
       setTimeLeft(p => {
         if (p <= 1) { clearInterval(t); handleSoloAnswer(null); return 0; }
@@ -123,7 +202,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [current, gameMode, gameOver, showResult]);
+  }, [current, view, gameMode, showResult]);
 
   const handleSoloAnswer = useCallback((idx: number | null) => {
     if (selected !== null || showResult) return;
@@ -133,16 +212,17 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     else playWrong();
     setAnswers(a => [...a, idx]);
     setTimeout(() => {
-      if (current + 1 >= TOTAL_Q) setGameOver(true);
+      if (current + 1 >= TOTAL_Q) setView('results');
       else { setCurrent(c => c + 1); setSelected(null); setShowResult(false); setTimeLeft(TIME_PER); }
     }, 1200);
   }, [selected, showResult, current, activeQ, timeLeft]);
 
+  // ─ Online answer ─
   const handleOnlineAnswer = (idx: number) => {
     if (!gameState || gameState.status !== 'active' || !curOnlineQ) return;
     const myAnswered = isP1 ? gameState.p1Answered : gameState.p2Answered;
     if (myAnswered) return;
-    const pts = idx === curOnlineQ.answer ? 10 : 0;
+    const pts     = idx === curOnlineQ.answer ? 10 : 0;
     const updated = isP1
       ? { ...gameState, p1Score: gameState.p1Score + pts, p1Answered: true }
       : { ...gameState, p2Score: gameState.p2Score + pts, p2Answered: true };
@@ -156,48 +236,189 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const startOnline = () => {
     const qs = filteredQ();
     updateGameState({ ...initialOnline, questions: qs, p2Email: 'opponent', status: 'active', mode: 'vs-partner' });
+    setView('game');
   };
 
   const handleStartSolo = () => {
     const qs = filteredQ();
     setActiveQ(qs); setGameMode('solo');
     setCurrent(0); setSelected(null); setScore(0);
-    setTimeLeft(TIME_PER); setGameOver(false); setAnswers([]); setShowResult(false);
+    setTimeLeft(TIME_PER); setAnswers([]); setShowResult(false);
+    setView('game');
   };
 
-  // ─── LOBBY ───
-  if (!gameMode) return (
+  const resetToLobby = () => {
+    setView('lobby'); setGameMode(null);
+  };
+
+  // ───────────────────────────────────
+  // VIEW: BUILDER
+  // ───────────────────────────────────
+  if (view === 'builder') return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">💕 Romantic Trivia</h1>
+          <button onClick={() => { setView('lobby'); setDraft(BLANK_DRAFT()); setEditingId(null); setSaveError(''); }}
+            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+            <ArrowLeft size={20}/> Back
+          </button>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+            {editingId ? 'Edit Question' : 'New Question'}
+          </h1>
           <div className="w-10"/>
+        </div>
+
+        {/* Form */}
+        <div className="glass-card p-5 mb-5">
+          {/* Question text */}
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Question</label>
+          <textarea
+            rows={3} value={draft.q}
+            onChange={e => setDraft(d => ({ ...d, q: e.target.value }))}
+            placeholder="e.g. When is our anniversary?"
+            className="w-full glass border-0 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none mb-4"
+          />
+
+          {/* Options */}
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Options <span className="font-normal text-gray-400">(click the circle to mark correct answer)</span></label>
+          <div className="space-y-2 mb-4">
+            {draft.options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <button
+                  onClick={() => setDraft(d => ({ ...d, answer: i }))}
+                  className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
+                    draft.answer === i
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 border-transparent text-white scale-110'
+                      : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-pink-400'
+                  }`}>
+                  {['A','B','C','D'][i]}
+                </button>
+                <input
+                  value={opt}
+                  onChange={e => {
+                    const next = [...draft.options] as [string,string,string,string];
+                    next[i] = e.target.value;
+                    setDraft(d => ({ ...d, options: next }));
+                  }}
+                  placeholder={`Option ${['A','B','C','D'][i]}`}
+                  className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
+                />
+                {draft.answer === i && (
+                  <CheckCircle size={16} className="text-green-500 shrink-0"/>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {saveError && <p className="text-red-500 text-sm mb-3">{saveError}</p>}
+
+          <button onClick={saveCustomQ}
+            className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition hover:opacity-90 flex items-center justify-center gap-2">
+            <Plus size={18}/> {editingId ? 'Update Question' : 'Add Question'}
+          </button>
+        </div>
+
+        {/* Existing custom questions */}
+        {customQs.length > 0 && (
+          <div className="glass-card p-4">
+            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Your Questions ({customQs.length})</h3>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {customQs.map(cq => (
+                <div key={cq.id} className="flex items-start gap-2 p-3 glass rounded-xl">
+                  <p className="flex-1 text-sm text-gray-800 dark:text-white line-clamp-2">{cq.q}</p>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => startEditQ(cq)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition">
+                      <Pencil size={14}/>
+                    </button>
+                    <button onClick={() => cq.id && deleteCustomQ(cq.id)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                      <Trash2 size={14}/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+
+  // ───────────────────────────────────
+  // VIEW: LOBBY
+  // ───────────────────────────────────
+  if (view === 'lobby') return (
+    <div className="min-h-screen p-4">
+      <div className="max-w-lg mx-auto">
+
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+            <ArrowLeft size={20}/> Back
+          </Link>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+            💕 Romantic Trivia
+          </h1>
+          <button onClick={() => setView('builder')}
+            title="Create custom questions"
+            className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+            <Sparkles size={20}/>
+          </button>
         </div>
 
         {/* Category picker */}
         <div className="glass-card p-4 mb-4">
-          <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Category</p>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map(c => (
-              <button key={c} onClick={() => setCategory(c)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  category === c
-                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
-                    : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}>
-                {c}
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">Category</p>
+            {customQs.length > 0 && (
+              <span className="text-xs text-pink-500 font-medium">{customQs.length} custom question{customQs.length !== 1 ? 's' : ''}</span>
+            )}
           </div>
+          {loadingCust ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm py-1">
+              <Loader2 size={14} className="animate-spin"/>
+              Loading…
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {allCategories.map(c => (
+                <button key={c} onClick={() => setCategory(c)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    category === c
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                      : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center justify-center min-h-[50vh]">
+        {/* Custom questions info banner */}
+        {customQs.length === 0 && (
+          <button onClick={() => setView('builder')}
+            className="w-full glass-card p-3 mb-4 flex items-center gap-3 hover:ring-2 hover:ring-pink-300 transition text-left">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center shrink-0">
+              <BookOpen size={16} className="text-white"/>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Add your own questions</p>
+              <p className="text-xs text-gray-500">Create couple-specific questions only you two can answer</p>
+            </div>
+            <Plus size={18} className="ml-auto text-pink-500 shrink-0"/>
+          </button>
+        )}
+
+        <div className="flex items-center justify-center min-h-[44vh]">
           <GameLobby
             gameName="Romantic Trivia"
             gameIcon="💕"
             gradient="from-pink-500 to-rose-500"
-            description="10 romantic questions, 20 seconds each. How well do you know love?"
+            description="10 romantic questions, 20 s each. How well do you know love?"
             supportsSolo
             supportsAI={false}
             gameType="TriviaQuiz"
@@ -209,8 +430,10 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     </div>
   );
 
-  // ─── RESULTS ───
-  if (gameOver || gameState?.status === 'finished') {
+  // ───────────────────────────────────
+  // VIEW: RESULTS
+  // ───────────────────────────────────
+  if (view === 'results' || gameState?.status === 'finished') {
     const isOnline = gameMode === 'vs-partner';
     const myFinal  = isOnline ? (isP1 ? gameState!.p1Score : gameState!.p2Score) : score;
     const oppFinal = isOnline ? (isP1 ? gameState!.p2Score : gameState!.p1Score) : 0;
@@ -239,13 +462,13 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                     : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                 }`}>
                   {answers[i] === q.answer ? <CheckCircle size={14}/> : <XCircle size={14}/>}
-                  <span>{q.category}</span>
+                  <span className="truncate">{q.custom ? '✏️ Custom' : q.category}</span>
                 </div>
               ))}
             </div>
           )}
           <div className="flex gap-3">
-            <button onClick={() => { setGameMode(null); setGameOver(false); }}
+            <button onClick={resetToLobby}
               className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <RefreshCw size={18}/> Play Again
             </button>
@@ -258,27 +481,40 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     );
   }
 
-  // ─── ACTIVE GAME ───
+  // ───────────────────────────────────
+  // VIEW: GAME
+  // ───────────────────────────────────
   const isOnlineActive = gameMode === 'vs-partner' && gameState?.status === 'active';
-  const q = isOnlineActive ? curOnlineQ : activeQ[current];
+  const q          = isOnlineActive ? curOnlineQ : activeQ[current];
   const myAnswered = isOnlineActive ? (isP1 ? gameState?.p1Answered : gameState?.p2Answered) : false;
   const timerPct   = (timeLeft / TIME_PER) * 100;
   const timerColor = timeLeft > 12 ? 'bg-green-500' : timeLeft > 6 ? 'bg-yellow-500' : 'bg-red-500';
-  const qNum = isOnlineActive ? (gameState?.current ?? 0) + 1 : current + 1;
+  const qNum       = isOnlineActive ? (gameState?.current ?? 0) + 1 : current + 1;
 
-  if (!q) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin" size={32}/></div>;
+  if (!q) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="animate-spin text-pink-500" size={32}/>
+    </div>
+  );
 
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => setGameMode(null)} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">💕 Romantic Trivia</h1>
-          <div className="flex items-center gap-1 text-pink-500"><Trophy size={18}/><span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span></div>
+          <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+            <ArrowLeft size={20}/> Back
+          </button>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+            💕 Romantic Trivia
+          </h1>
+          <div className="flex items-center gap-1 text-pink-500">
+            <Trophy size={18}/>
+            <span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span>
+          </div>
         </div>
 
         <div className="flex justify-between items-center mb-4">
-          <GameModeBadge mode={gameMode} />
+          <GameModeBadge mode={gameMode!} />
           {isOnlineActive && (
             <div className="glass px-3 py-1 rounded-full text-xs font-semibold text-gray-600 dark:text-gray-400">
               Partner: {isP1 ? gameState?.p2Score : gameState?.p1Score} pts
@@ -288,7 +524,9 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
         <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-medium text-pink-600 dark:text-pink-400">{q.category}</span>
+            <span className="text-sm font-medium text-pink-600 dark:text-pink-400">
+              {q.custom ? '✏️ Custom' : q.category}
+            </span>
             {!isOnlineActive && (
               <div className="flex items-center gap-1 font-bold text-gray-600 dark:text-gray-400">
                 <Clock size={16}/>
@@ -307,7 +545,8 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             <span className="text-xs text-gray-400">Q {qNum}/{TOTAL_Q}</span>
           </div>
           <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mb-6">
-            <div className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 rounded-full transition-all" style={{ width: `${((qNum-1) / TOTAL_Q) * 100}%` }} />
+            <div className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 rounded-full transition-all"
+              style={{ width: `${((qNum - 1) / TOTAL_Q) * 100}%` }} />
           </div>
 
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed">{q.q}</h2>
@@ -322,9 +561,9 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               {q.options.map((option, i) => {
                 let style = 'glass-btn border-0 hover:ring-2 hover:ring-pink-400';
                 if (showResult && !isOnlineActive) {
-                  if (i === q.answer) style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
+                  if (i === q.answer)    style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
                   else if (i === selected) style = 'bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
-                  else style = 'opacity-40 glass-btn border-0';
+                  else                    style = 'opacity-40 glass-btn border-0';
                 }
                 return (
                   <button key={i}
