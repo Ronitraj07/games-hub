@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGameStats } from '@/hooks/useGameStats';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
@@ -20,6 +21,7 @@ interface Connect4State {
   isDraw: boolean;
   mode: GameMode;
   aiDifficulty: AIDifficulty;
+  recorded?: boolean;
 }
 
 const ROWS = 6, COLS = 7;
@@ -38,6 +40,7 @@ const checkWinner = (board: (string|null)[][], row: number, col: number, player:
 
 export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
   const aiTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hovered, setHovered] = useState<number|null>(null);
@@ -51,6 +54,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     players: { player1: userKey ?? '', player2: null },
     winner: null, winningCells: null, status: 'waiting',
     isDraw: false, mode: 'vs-partner', aiDifficulty: 'medium',
+    recorded: false,
   };
 
   const { gameState, updateGameState, loading } = useRealtimeGame<Connect4State>(
@@ -61,15 +65,31 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const myColor  = isP1 ? 'from-pink-500 to-rose-500' : 'from-yellow-400 to-orange-500';
   const oppColor = isP1 ? 'from-yellow-400 to-orange-500' : 'from-pink-500 to-rose-500';
   const isAIMode = gameState?.mode === 'vs-ai';
-  // In AI mode player is always P1 (pink)
   const isMyTurn = isAIMode
     ? gameState?.currentPlayer === gameState?.players.player1
     : gameState?.currentPlayer === userKey;
 
+  // Record result when game finishes (once)
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const isAI  = gameState.mode === 'vs-ai';
+    const isWin = gameState.winner === userKey;
+    const result = gameState.isDraw ? 'draw' : isWin ? 'win' : 'loss';
+    recordGame({
+      gameType:    'connect4',
+      playerEmail: userKey,
+      result,
+      score:       isWin ? 10 : 0,
+      mode:        isAI ? 'vs-ai' : 'vs-partner',
+      opponentEmail: isAI ? undefined : (gameState.players.player2 ?? undefined),
+    });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
+
   // AI move effect
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai' || gameState.status !== 'active') return;
-    if (gameState.currentPlayer === gameState.players.player1) return; // human's turn
+    if (gameState.currentPlayer === gameState.players.player1) return;
 
     aiTimer.current = setTimeout(() => {
       const board = gameState.board.map(r => [...r]);
@@ -82,9 +102,9 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       const cells  = checkWinner(board, row, col, 'AI');
       const full   = board[0].every(c => c !== null);
       if (cells) {
-        updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished' });
+        updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished', recorded: false });
       } else if (full) {
-        updateGameState({ ...gameState, board, isDraw: true, status: 'finished' });
+        updateGameState({ ...gameState, board, isDraw: true, status: 'finished', recorded: false });
       } else {
         updateGameState({ ...gameState, board, currentPlayer: gameState.players.player1 });
       }
@@ -107,9 +127,9 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const full  = newBoard[0].every(c => c !== null);
 
     if (cells) {
-      updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished' });
+      updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false });
     } else if (full) {
-      updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished' });
+      updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false });
     } else {
       const next = isAIMode ? 'AI' : (
         gameState.currentPlayer === gameState.players.player1
@@ -149,7 +169,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔴 Connect 4</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">\ud83d\udd34 Connect 4</h1>
           <button onClick={reset} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
         </div>
 
@@ -157,14 +177,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           <div className="flex items-center justify-center min-h-[60vh]">
             <GameLobby
               gameName="Connect 4"
-              gameIcon="🔴"
+              gameIcon="\ud83d\udd34"
               gradient="from-pink-500 to-purple-500"
               description="Drop pieces and connect four in a row!"
               supportsAI
               aiLabels={{
                 easy:   'random moves mostly',
                 medium: 'blocks your wins',
-                hard:   'minimax depth-4 — good luck',
+                hard:   'minimax depth-4 \u2014 good luck',
               }}
               gameType="Connect4"
               onStartVsAI={startVsAI}
@@ -184,18 +204,17 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 <p className={`font-semibold text-lg ${
                   isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'
                 }`}>
-                  {isMyTurn ? 'Your turn!' : isAIMode ? '🤖 AI thinking…' : "Opponent's turn…"}
+                  {isMyTurn ? 'Your turn!' : isAIMode ? '\ud83e\udd16 AI thinking\u2026' : "Opponent's turn\u2026"}
                 </p>
               )}
               {gameState.status === 'finished' && (
                 <p className="font-bold text-xl text-gray-900 dark:text-white">
-                  {gameState.isDraw ? '🤝 Draw!' : gameState.winner === userKey ? '🏆 You Win!' : isAIMode ? '🤖 AI Wins!' : '💔 You Lost!'}
+                  {gameState.isDraw ? '\ud83e\udd1d Draw!' : gameState.winner === userKey ? '\ud83c\udfc6 You Win!' : isAIMode ? '\ud83e\udd16 AI Wins!' : '\ud83d\udc94 You Lost!'}
                 </p>
               )}
             </div>
 
             <div className="glass-card p-4">
-              {/* Drop indicators */}
               <div className="grid mb-1" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
                 {Array(COLS).fill(null).map((_,c) => (
                   <div key={c} className="flex justify-center">
@@ -206,7 +225,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                   </div>
                 ))}
               </div>
-              {/* Board */}
               <div className="grid" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
                 {Array.isArray(gameState.board) && gameState.board.map((row: (string|null)[], r: number) =>
                   row.map((cell: string|null, c: number) => (
@@ -250,7 +268,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             {gameState.status === 'finished' && (
               <button onClick={reset}
                 className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
-                Play Again 💕
+                Play Again \ud83d\udc95
               </button>
             )}
           </div>
