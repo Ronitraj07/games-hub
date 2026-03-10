@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 
-export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordguess';
+export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordscramble' | 'pictionary' | 'mathduel';
 export type GameResult = 'win' | 'loss' | 'draw';
 export type GameMode   = 'solo' | 'vs-partner' | 'vs-ai';
 
