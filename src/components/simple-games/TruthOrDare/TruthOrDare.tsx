@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ArrowLeft, RefreshCw, Plus, X, Shuffle } from 'lucide-react';
+import { ArrowLeft, Plus, X, Shuffle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 // ─────────────────── Card Decks ───────────────────
@@ -8,6 +8,7 @@ const DECKS = {
     label: '🌸 Sweet',
     color: 'from-pink-400 to-rose-400',
     bg:    'bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20',
+    adult: false,
     truths: [
       'What is your happiest memory with me?',
       'What is the nicest thing I have ever done for you?',
@@ -32,13 +33,14 @@ const DECKS = {
       'Hold my hand and tell me one thing you appreciate about me.',
       'Do your best impression of how I walk.',
       'Draw a quick portrait of me and show it.',
-      'Write “I love you” on my hand.',
+      'Write "I love you" on my hand.',
     ],
   },
   spicy: {
     label: '🌶️ Spicy',
     color: 'from-orange-500 to-red-500',
     bg:    'bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20',
+    adult: false,
     truths: [
       'What is your biggest secret that I do not know?',
       'Have you ever lied to me and regretted it?',
@@ -60,7 +62,7 @@ const DECKS = {
       'Let me style your hair any way I want for the rest of the game.',
       'Speak only in a whisper for the next 3 rounds.',
       'Let me go through your search history for 60 seconds.',
-      'Do your best “sexy walk” across the room.',
+      'Do your best "sexy walk" across the room.',
       'Let me draw a small tattoo design on your arm.',
     ],
   },
@@ -68,6 +70,7 @@ const DECKS = {
     label: '🤣 Funny',
     color: 'from-yellow-400 to-orange-400',
     bg:    'bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20',
+    adult: false,
     truths: [
       'What is the most embarrassing thing that has happened to you in front of me?',
       'What animal do I remind you of and why?',
@@ -76,7 +79,7 @@ const DECKS = {
       'What is your most embarrassing childhood memory?',
       'Have you ever walked into a glass door or wall?',
       'What is the dumbest thing you have ever done?',
-      'Have you ever accidentally called a teacher “Mum”?',
+      'Have you ever accidentally called a teacher "Mum"?',
       'What is the most ridiculous reason you have ever cried?',
       'What is a habit of yours that even you find weird?',
     ],
@@ -85,10 +88,10 @@ const DECKS = {
       'Speak in an accent of my choice for the next 3 rounds.',
       'Let me tickle you for 10 seconds without laughing.',
       'Try to lick your elbow for 10 seconds.',
-      'Do 10 star jumps while singing “Twinkle Twinkle Little Star”.',
+      'Do 10 star jumps while singing "Twinkle Twinkle Little Star".',
       'Narrate everything you do for the next 2 minutes like a nature documentary.',
       'Make the ugliest face you can and hold it for 30 seconds.',
-      'Text a friend saying “I just saw a unicorn” and wait for their reply.',
+      'Text a friend saying "I just saw a unicorn" and wait for their reply.',
       'Walk to the fridge and back while pretending to be a catwalk model.',
       'Let me write anything I want on your forehead with my finger (invisible ink).',
     ],
@@ -97,6 +100,7 @@ const DECKS = {
     label: '🏆 Challenge',
     color: 'from-purple-500 to-indigo-500',
     bg:    'bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20',
+    adult: false,
     truths: [
       'What is one goal you have been secretly working towards?',
       'What is something you wish I understood better about you?',
@@ -122,6 +126,52 @@ const DECKS = {
       'Give me control of the TV/music for the rest of the evening.',
     ],
   },
+  adult: {
+    label: '🔞 After Dark',
+    color: 'from-rose-600 to-red-700',
+    bg:    'bg-gradient-to-br from-rose-950/40 to-red-950/40 dark:from-rose-950/60 dark:to-red-950/60',
+    adult: true,
+    truths: [
+      'What is your favourite thing about our intimate life?',
+      'What is one fantasy you have never told me about?',
+      'Where is your favourite place to be kissed?',
+      'What is one thing you want me to do more of in the bedroom?',
+      'What is the most turned on you have ever been because of something I did?',
+      'What outfit of mine drives you the most crazy?',
+      'What is something new you would like us to try together?',
+      'What is your all-time favourite intimate memory of us?',
+      'What is your biggest turn-on that I might not know about?',
+      'If you could design our perfect intimate evening, what would it look like?',
+      'What body part of mine do you find most attractive?',
+      'What is something you have always wanted to say to me in the moment but held back?',
+      'What is the most seductive thing I have ever done without knowing it?',
+      'Have you ever thought about me at an inappropriate time? When?',
+      'What is one word that best describes our chemistry?',
+      'What is something you secretly love that I do during a kiss?',
+      'If we had the house completely to ourselves for 24 hours, what would you plan?',
+      'What is one thing about your body you want me to appreciate more?',
+    ],
+    dares: [
+      'Give me the most passionate kiss you can right now.',
+      'Whisper the most attractive thing about me into my ear.',
+      'Give me a 3-minute shoulder and neck massage.',
+      'Look into my eyes without laughing or looking away for 60 seconds.',
+      'Describe in detail what you find most physically attractive about me.',
+      'Send me a flirty text right now as if we just met.',
+      'Let me blindfold you with a scarf for 2 minutes — I choose what happens.',
+      'Kiss me somewhere unexpected (not the lips).',
+      'Act out what you would do if you were trying to seduce me from scratch.',
+      'Slow dance with me for one full song with no phones.',
+      'Whisper something you have always wanted to do with me.',
+      'Feed me something sweet without using your hands.',
+      'Let me choose a compliment you have to say to me with full eye contact.',
+      'Take a photo of just us right now and set it as your lock screen.',
+      'Tell me exactly what you are thinking about me right now — no filter.',
+      'Let me trace a shape on your back with my finger and guess what it is.',
+      'Give me a kiss that lasts at least 10 seconds.',
+      'Tell me the hottest dream you have ever had about me.',
+    ],
+  },
 } as const;
 
 type DeckKey = keyof typeof DECKS;
@@ -132,15 +182,34 @@ interface Card { type: CardType; text: string; deck: DeckKey; }
 const pickRandom = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export const TruthOrDare: React.FC = () => {
-  const [activeDeck,  setActiveDeck]  = useState<DeckKey>('sweet');
-  const [card,        setCard]        = useState<Card | null>(null);
-  const [flipping,    setFlipping]    = useState(false);
-  const [history,     setHistory]     = useState<Card[]>([]);
-  const [showCustom,  setShowCustom]  = useState(false);
-  const [customTruths,setCustomTruths]= useState<string[]>([]);
-  const [customDares, setCustomDares] = useState<string[]>([]);
-  const [newCustom,   setNewCustom]   = useState('');
-  const [customType,  setCustomType]  = useState<CardType>('truth');
+  const [activeDeck,   setActiveDeck]   = useState<DeckKey>('sweet');
+  const [card,         setCard]         = useState<Card | null>(null);
+  const [flipping,     setFlipping]     = useState(false);
+  const [history,      setHistory]      = useState<Card[]>([]);
+  const [showCustom,   setShowCustom]   = useState(false);
+  const [customTruths, setCustomTruths] = useState<string[]>([]);
+  const [customDares,  setCustomDares]  = useState<string[]>([]);
+  const [newCustom,    setNewCustom]    = useState('');
+  const [customType,   setCustomType]   = useState<CardType>('truth');
+  // Age-gate state
+  const [adultUnlocked, setAdultUnlocked] = useState(false);
+  const [showAgeGate,   setShowAgeGate]   = useState(false);
+
+  const handleDeckSelect = (d: DeckKey) => {
+    if (DECKS[d].adult && !adultUnlocked) {
+      setShowAgeGate(true);
+      return;
+    }
+    setActiveDeck(d);
+    setCard(null);
+  };
+
+  const confirmAge = () => {
+    setAdultUnlocked(true);
+    setShowAgeGate(false);
+    setActiveDeck('adult');
+    setCard(null);
+  };
 
   const drawCard = useCallback((type?: CardType) => {
     if (flipping) return;
@@ -163,7 +232,7 @@ export const TruthOrDare: React.FC = () => {
   const addCustomCard = () => {
     if (!newCustom.trim()) return;
     if (customType === 'truth') setCustomTruths(t => [...t, newCustom.trim()]);
-    else                         setCustomDares(d  => [...d, newCustom.trim()]);
+    else                        setCustomDares(d  => [...d, newCustom.trim()]);
     setNewCustom('');
   };
 
@@ -172,6 +241,32 @@ export const TruthOrDare: React.FC = () => {
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
+
+        {/* Age-gate modal */}
+        {showAgeGate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="glass-card max-w-sm w-full p-8 text-center animate-in zoom-in-95 duration-200">
+              <div className="text-6xl mb-4">🔞</div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Adults Only</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+                The <span className="font-bold text-rose-500">After Dark</span> deck contains mature content intended for couples aged 18+.
+                By continuing you confirm that both players are 18 or older.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowAgeGate(false)}
+                  className="flex-1 glass-btn py-3 rounded-xl font-semibold text-gray-600 dark:text-gray-300">
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAge}
+                  className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-rose-600 to-red-700 shadow-lg hover:scale-105 transition-transform">
+                  I am 18+ ✓
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -188,15 +283,20 @@ export const TruthOrDare: React.FC = () => {
         </div>
 
         {/* Deck selector */}
-        <div className="grid grid-cols-4 gap-2 mb-6">
+        <div className="grid grid-cols-5 gap-2 mb-6">
           {(Object.keys(DECKS) as DeckKey[]).map(d => (
-            <button key={d} onClick={() => { setActiveDeck(d); setCard(null); }}
-              className={`py-2.5 rounded-xl text-xs font-bold transition-all ${
+            <button key={d} onClick={() => handleDeckSelect(d)}
+              className={`relative py-2.5 rounded-xl text-xs font-bold transition-all ${
                 activeDeck === d
                   ? `bg-gradient-to-r ${DECKS[d].color} text-white shadow-md scale-105`
                   : 'glass text-gray-600 dark:text-gray-400 hover:scale-105'
               }`}>
-              {DECKS[d].label}
+              {DECKS[d].label.split(' ').slice(0,1)}
+              {DECKS[d].adult && !adultUnlocked && (
+                <span className="absolute -top-1 -right-1">
+                  <Lock size={10} className="text-rose-400"/>
+                </span>
+              )}
             </button>
           ))}
         </div>
