@@ -11,6 +11,7 @@ import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { RPGHub } from './pages/RPGHub';
 import { GameLobby } from './pages/GameLobby';
+import { Leaderboard } from './pages/Leaderboard';
 import { HeartboundAdventures } from './pages/rpg/HeartboundAdventures';
 import { MysteryPartners } from './pages/rpg/MysteryPartners';
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
@@ -56,6 +57,9 @@ function App() {
                     } />
                     <Route path="/lobby" element={
                       <ProtectedRoute><GameLobby /></ProtectedRoute>
+                    } />
+                    <Route path="/leaderboard" element={
+                      <ProtectedRoute><Leaderboard /></ProtectedRoute>
                     } />
 
                     {/* RPG */}
