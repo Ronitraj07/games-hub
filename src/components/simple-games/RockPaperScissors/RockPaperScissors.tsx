@@ -12,9 +12,9 @@ import type { RPSChoice, RPSDifficulty } from '@/lib/rps-ai';
 import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
 
 const CHOICES: { value: RPSChoice; emoji: string; label: string; beats: RPSChoice }[] = [
-  { value: 'rock',     emoji: '\u270a', label: 'Rock',     beats: 'scissors' },
-  { value: 'paper',   emoji: '\u270b', label: 'Paper',    beats: 'rock'     },
-  { value: 'scissors',emoji: '\u270c\ufe0f', label: 'Scissors', beats: 'paper'    },
+  { value: 'rock',     emoji: '✊', label: 'Rock',     beats: 'scissors' },
+  { value: 'paper',   emoji: '✋', label: 'Paper',    beats: 'rock'     },
+  { value: 'scissors',emoji: '✌️', label: 'Scissors', beats: 'paper'    },
 ];
 
 const TOTAL_ROUNDS = 5;
@@ -79,7 +79,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
   const myOnlineChoice  = isP1Online ? gameState?.p1Choice : gameState?.p2Choice;
   const oppOnlineChoice = isP1Online ? gameState?.p2Choice : gameState?.p1Choice;
 
-  // Record AI game result
   const recordAIResult = (pScore: number, aScore: number) => {
     if (aiRecorded || !userKey) return;
     setAiRecorded(true);
@@ -87,7 +86,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     recordGame({ gameType: 'rps', playerEmail: userKey, result, score: pScore, mode: 'vs-ai' });
   };
 
-  // Record online game result
   const recordOnlineResult = (gs: RPSOnlineState) => {
     if (gs.recorded || !userKey) return;
     const myScore  = isP1Online ? gs.p1Score : gs.p2Score;
@@ -204,20 +202,20 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
           <div className="w-10" />
         </div>
         <div className="flex items-center justify-center min-h-[60vh]">
           <GameLobby
             gameName="Rock Paper Scissors"
-            gameIcon="\u270a"
+            gameIcon="✊"
             gradient="from-orange-500 to-pink-500"
-            description="5 rounds \u2014 best score wins!"
+            description="5 rounds — best score wins!"
             supportsAI
             aiLabels={{
-              easy:   'pure random \u2014 unpredictable',
+              easy:   'pure random — unpredictable',
               medium: '50% chance to counter your last move',
-              hard:   'analyses your pattern \u2014 adapts',
+              hard:   'analyses your pattern — adapts',
             }}
             gameType="RPS"
             onStartVsAI={handleStartVsAI}
@@ -236,7 +234,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <button onClick={() => setMode(null)} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
           <button onClick={resetAI} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
         </div>
 
@@ -255,7 +253,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
               <p className="text-2xl font-bold text-gray-400">VS</p>
             </div>
             <div className="text-center flex-1">
-              <p className="text-sm text-gray-500">AI \ud83e\udd16</p>
+              <p className="text-sm text-gray-500">AI 🤖</p>
               <p className="text-4xl font-bold text-red-600 dark:text-red-400">{aiScore}</p>
             </div>
           </div>
@@ -265,21 +263,21 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           <div className="flex justify-between items-center mb-6">
             <div className="text-center flex-1">
               <div className={`text-8xl transition-all duration-300 ${animating ? 'animate-bounce' : ''}`}>
-                {playerChoice ? CHOICES.find(c => c.value === playerChoice)!.emoji : '\u2753'}
+                {playerChoice ? CHOICES.find(c => c.value === playerChoice)!.emoji : '❓'}
               </div>
               <p className="text-sm text-gray-500 mt-2">Your choice</p>
             </div>
-            <div className="text-3xl">\u2694\ufe0f</div>
+            <div className="text-3xl">⚔️</div>
             <div className="text-center flex-1">
               <div className={`text-8xl transition-all duration-300 ${animating ? 'animate-bounce' : ''}`}>
-                {animating ? '\ud83e\udd14' : aiChoice ? CHOICES.find(c => c.value === aiChoice)!.emoji : '\u2753'}
+                {animating ? '🤔' : aiChoice ? CHOICES.find(c => c.value === aiChoice)!.emoji : '❓'}
               </div>
               <p className="text-sm text-gray-500 mt-2">AI choice</p>
             </div>
           </div>
           {result && !gameOver && (
             <div className={`text-center text-2xl font-bold mb-4 ${resultColors[result]}`}>
-              {result === 'win' ? '\ud83c\udf89 You Win!' : result === 'lose' ? '\ud83d\ude05 AI Wins!' : '\ud83e\udd1d Draw!'}
+              {result === 'win' ? '🎉 You Win!' : result === 'lose' ? '😅 AI Wins!' : '🤝 Draw!'}
             </div>
           )}
           {!gameOver && (
@@ -295,11 +293,11 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           )}
           {gameOver && (
             <div className="text-center">
-              <div className="text-5xl mb-3">{playerScore > aiScore ? '\ud83c\udfc6' : playerScore < aiScore ? '\ud83e\udd16' : '\ud83e\udd1d'}</div>
+              <div className="text-5xl mb-3">{playerScore > aiScore ? '🏆' : playerScore < aiScore ? '🤖' : '🤝'}</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                {playerScore > aiScore ? 'You Win! \ud83c\udfc6' : playerScore < aiScore ? 'AI Wins! \ud83e\udd16' : "It's a Tie! \ud83e\udd1d"}
+                {playerScore > aiScore ? 'You Win! 🏆' : playerScore < aiScore ? 'AI Wins! 🤖' : "It's a Tie! 🤝"}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} \u2013 {aiScore} after {TOTAL_ROUNDS} rounds</p>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} – {aiScore} after {TOTAL_ROUNDS} rounds</p>
               <button onClick={resetAI}
                 className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition flex items-center gap-2 mx-auto">
                 <RefreshCw size={18} /> Play Again
@@ -341,7 +339,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">\u270a Rock Paper Scissors</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
           <button onClick={resetOnline} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
         </div>
 
@@ -373,9 +371,9 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
                 {myOnlineChoice ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 size={16} className="animate-spin text-purple-400" />
-                    Waiting for partner\u2026
+                    Waiting for partner…
                   </span>
-                ) : "Pick your move \u2014 partner won't see until both have chosen!"}
+                ) : "Pick your move — partner won't see until both have chosen!"}
               </p>
               {!myOnlineChoice && (
                 <div className="grid grid-cols-3 gap-3">
@@ -395,27 +393,27 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             <>
               <div className="flex justify-between items-center mb-6">
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c=>c.value===myOnlineChoice)!.emoji : '\u2753'}</div>
+                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c=>c.value===myOnlineChoice)!.emoji : '❓'}</div>
                   <p className="text-sm text-gray-500 mt-2">You</p>
                 </div>
-                <div className="text-3xl">\u2694\ufe0f</div>
+                <div className="text-3xl">⚔️</div>
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c=>c.value===oppOnlineChoice)!.emoji : '\u2753'}</div>
+                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c=>c.value===oppOnlineChoice)!.emoji : '❓'}</div>
                   <p className="text-sm text-gray-500 mt-2">Partner</p>
                 </div>
               </div>
               <button onClick={nextRoundOnline}
                 className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
-                Next Round \u2192
+                Next Round →
               </button>
             </>
           )}
 
           {gameState?.status === 'finished' && (
             <div className="text-center">
-              <div className="text-5xl mb-3">{myScore > oppScore ? '\ud83c\udfc6' : myScore < oppScore ? '\ud83d\udc94' : '\ud83e\udd1d'}</div>
+              <div className="text-5xl mb-3">{myScore > oppScore ? '🏆' : myScore < oppScore ? '💔' : '🤝'}</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
-                {myScore > oppScore ? 'You Win! \ud83c\udfc6' : myScore < oppScore ? 'Partner Wins!' : "It's a Tie! \ud83e\udd1d"}
+                {myScore > oppScore ? 'You Win! 🏆' : myScore < oppScore ? 'Partner Wins!' : "It's a Tie! 🤝"}
               </h2>
               <button onClick={resetOnline}
                 className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition">

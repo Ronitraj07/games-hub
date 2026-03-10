@@ -20,9 +20,9 @@ interface MemoryMatchGameState {
 }
 
 const EMOJI_SETS = {
-  romantic: ['\u2764\ufe0f','\ud83d\udc95','\ud83d\udc96','\ud83d\udc97','\ud83d\udc98','\ud83d\udc99','\ud83d\udc9a','\ud83d\udc9b','\ud83d\udc9c','\ud83d\udc9d','\ud83d\udc9e','\ud83d\udc9f','\ud83d\udc8b','\ud83d\udc8c','\ud83d\udc8d','\ud83d\udc8e','\ud83d\udc90','\ud83c\udf39'],
-  nature:   ['\ud83c\udf3a','\ud83c\udf3b','\ud83c\udf3c','\ud83c\udf37','\ud83c\udf38','\ud83c\udf3f','\ud83c\udf40','\ud83c\udf41','\ud83c\udf42','\ud83c\udf43','\ud83c\udf44','\ud83c\udf3e','\ud83c\udf31','\ud83c\udf32','\ud83c\udf33','\ud83c\udf34','\ud83c\udf35','\ud83c\udf3d'],
-  animals:  ['\ud83d\udc36','\ud83d\udc31','\ud83d\udc2d','\ud83d\udc39','\ud83d\udc30','\ud83e\udd8a','\ud83d\udc3b','\ud83d\udc3c','\ud83d\udc28','\ud83d\udc2f','\ud83e\udd81','\ud83d\udc2e','\ud83d\udc37','\ud83d\udc38','\ud83d\udc35','\ud83d\udc12','\ud83d\udc14','\ud83d\udc27'],
+  romantic: ['❤️','💕','💖','💗','💘','💙','💚','💛','💜','💝','💞','💟','💋','💌','💍','💎','💐','🌹'],
+  nature:   ['🌺','🌻','🌼','🌷','🌸','🌿','🍀','🍁','🍂','🍃','🍄','🌾','🌱','🌲','🌳','🌴','🌵','🌽'],
+  animals:  ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐒','🐔','🐧'],
 };
 
 const EMPTY_PLAYER = { score: 0, moves: 0 };
@@ -69,14 +69,13 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const safeCards   = Array.isArray(gameState?.cards) ? gameState!.cards : [];
   const safeFlipped = Array.isArray(gameState?.flippedCards) ? gameState!.flippedCards : [];
 
-  // Record when game finishes (once)
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey || !safeUserKey) return;
     const pd = safePlayers[safeUserKey] ?? EMPTY_PLAYER;
     recordGame({
       gameType:    'memorymatch',
       playerEmail: userKey,
-      result:      'win', // solo — always a win when all pairs found
+      result:      'win',
       score:       pd.score,
       mode:        'solo',
     });
@@ -155,7 +154,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
   return (
     <div className="min-h-screen p-4">
-      <Celebration show={showCelebration} type="win" message="All Pairs Found! \ud83c\udf89" onComplete={() => setShowCelebration(false)} />
+      <Celebration show={showCelebration} type="win" message="All Pairs Found! 🎉" onComplete={() => setShowCelebration(false)} />
       <MiniCelebration show={showMini} message="Match!" icon="heart" />
 
       <div className="max-w-4xl mx-auto">
@@ -163,7 +162,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
           <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">\ud83c\udccf Memory Match</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">🧠 Memory Match</h1>
           <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
             <RotateCcw size={20} />
           </button>
@@ -188,8 +187,8 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                       className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
                         gridSize === s ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
                       }`}>
-                      <p className="font-bold text-gray-900 dark:text-white">{s}\u00d7{s}</p>
-                      <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs \u00b7 Easy' : '18 pairs \u00b7 Hard'}</p>
+                      <p className="font-bold text-gray-900 dark:text-white">{s}×{s}</p>
+                      <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs · Easy' : '18 pairs · Hard'}</p>
                     </button>
                   ))}
                 </div>
@@ -253,7 +252,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
           {gameState?.status === 'finished' && (
             <div className="text-center space-y-5">
-              <div className="text-6xl">\ud83c\udf89</div>
+              <div className="text-6xl">🎉</div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Congratulations!</h2>
               <div className="glass rounded-xl p-6 space-y-3">
                 <div>
@@ -275,7 +274,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
               </div>
               <button onClick={resetGame}
                 className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
-                Play Again \ud83d\udc95
+                Play Again 💕
               </button>
             </div>
           )}
