@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useGameStats } from '@/hooks/useGameStats';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
@@ -46,10 +47,12 @@ interface OnlineState {
   p1Done:boolean; p2Done:boolean;
   status:'waiting'|'active'|'finished';
   seed: string;
+  recorded?: boolean;
 }
 
 export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
 
   const [gameMode, setGameMode] = useState<GameMode|null>(null);
@@ -69,6 +72,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const [round,       setRound]      = useState(1);
   const [aiScore,     setAiScore]    = useState(0);
   const [aiSolved,    setAiSolved]   = useState(false);
+  const [localRecorded, setLocalRecorded] = useState(false);
 
   // ─── Online state ───
   const safeSession = sessionId
@@ -79,10 +83,22 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     p1Email:userKey??'',p2Email:'',
     p1Score:0,p2Score:0,p1Done:false,p2Done:false,
     status:'waiting',
+    recorded: false,
   };
   const { gameState, updateGameState } = useRealtimeGame<OnlineState>(safeSession,'wordscramble',initialOnline);
   const isP1 = gameState?.p1Email === userKey;
   const curOnlineWord = gameState?.words?.[gameState.current];
+
+  // ─── Record online result when finished (once) ───
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const myScore  = isP1 ? gameState.p1Score : gameState.p2Score;
+    const oppScore = isP1 ? gameState.p2Score : gameState.p1Score;
+    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp      = isP1 ? (gameState.p2Email || undefined) : gameState.p1Email;
+    recordGame({ gameType: 'wordscramble', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
 
   const loadWord = useCallback((idx:number,wordList=words)=>{
     if(idx<TOTAL){setScrambled(scramble(wordList[idx].word));setInput('');setTimeLeft(30);setShowHint(false);setFeedback(null);setAiSolved(false);}
@@ -127,6 +143,20 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     setTimeout(()=>handleNext(ok),600);
   };
 
+  // Record local/AI result when game ends
+  useEffect(() => {
+    if (!gameOver || localRecorded || !userKey || gameMode === 'vs-partner') return;
+    setLocalRecorded(true);
+    const result = score > aiScore ? 'win' : score < aiScore ? 'loss' : 'draw';
+    recordGame({
+      gameType:    'wordscramble',
+      playerEmail: userKey,
+      result:      gameMode === 'vs-ai' ? result : 'win',
+      score,
+      mode:        gameMode ?? 'solo',
+    });
+  }, [gameOver]);
+
   // Online submit
   const handleOnlineSubmit=(e:React.FormEvent)=>{
     e.preventDefault();
@@ -138,7 +168,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
       :{...gameState,p2Score:gameState.p2Score+pts,p2Done:true};
     const otherDone=isP1?gameState.p2Done:gameState.p1Done;
     if(otherDone){
-      if(gameState.current+1>=TOTAL)updateGameState({...updated,status:'finished'});
+      if(gameState.current+1>=TOTAL)updateGameState({...updated,status:'finished',recorded:false});
       else updateGameState({...updated,current:gameState.current+1,p1Done:false,p2Done:false});
     } else updateGameState(updated);
     setInput('');
@@ -200,7 +230,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={()=>{setGameMode(null);setGameOver(false);setCurIdx(0);setRound(1);setScore(0);setStreak(0);setAiScore(0);}}
+            <button onClick={()=>{setGameMode(null);setGameOver(false);setCurIdx(0);setRound(1);setScore(0);setStreak(0);setAiScore(0);setLocalRecorded(false);}}
               className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <RefreshCw size={18}/> Play Again
             </button>

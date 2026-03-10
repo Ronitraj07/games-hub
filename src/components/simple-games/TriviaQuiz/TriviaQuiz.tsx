@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useGameStats } from '@/hooks/useGameStats';
 import { database } from '@/lib/firebase';
 import { ref, set, onValue, off } from 'firebase/database';
 import { GameLobby } from '@/components/shared/GameLobby';
@@ -88,10 +89,12 @@ interface OnlineState {
   p2Answered:  boolean;
   status:      'waiting' | 'active' | 'finished';
   mode:        GameMode;
+  recorded?:   boolean;
 }
 
 export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
 
   type View = 'lobby' | 'builder' | 'game' | 'results';
@@ -170,6 +173,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [timeLeft,   setTimeLeft]   = useState(TIME_PER);
   const [answers,    setAnswers]    = useState<(number | null)[]>([]);
   const [showResult, setShowResult] = useState(false);
+  const [localRecorded, setLocalRecorded] = useState(false);
 
   // ─ Online state ─
   const safeSession = sessionId
@@ -182,10 +186,22 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     p1Score: 0, p2Score: 0,
     p1Answered: false, p2Answered: false,
     status: 'waiting', mode: 'vs-partner',
+    recorded: false,
   };
   const { gameState, updateGameState } = useRealtimeGame<OnlineState>(safeSession, 'trivia', initialOnline);
   const isP1       = gameState?.p1Email === userKey;
   const curOnlineQ = gameState?.questions?.[gameState.current];
+
+  // ─ Record online result when finished (once) ─
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const myScore  = isP1 ? gameState.p1Score : gameState.p2Score;
+    const oppScore = isP1 ? gameState.p2Score : gameState.p1Score;
+    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp      = isP1 ? (gameState.p2Email || undefined) : gameState.p1Email;
+    recordGame({ gameType: 'trivia', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
 
   // ─ Solo timer ─
   useEffect(() => {
@@ -212,6 +228,15 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }, 1200);
   }, [selected, showResult, current, activeQ, timeLeft]);
 
+  // ─ Record solo result when results screen shown ─
+  useEffect(() => {
+    if (view !== 'results' || localRecorded || !userKey || gameMode !== 'solo') return;
+    setLocalRecorded(true);
+    const correct = answers.filter((a, i) => a === activeQ[i]?.answer).length;
+    const result = correct >= TOTAL_Q * 0.6 ? 'win' : 'loss';
+    recordGame({ gameType: 'trivia', playerEmail: userKey, result, score, mode: 'solo' });
+  }, [view]);
+
   const handleOnlineAnswer = (idx: number) => {
     if (!gameState || gameState.status !== 'active' || !curOnlineQ) return;
     const myAnswered = isP1 ? gameState.p1Answered : gameState.p2Answered;
@@ -222,7 +247,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       : { ...gameState, p2Score: gameState.p2Score + pts, p2Answered: true };
     const otherDone = isP1 ? gameState.p2Answered : gameState.p1Answered;
     if (otherDone) {
-      if (gameState.current + 1 >= TOTAL_Q) updateGameState({ ...updated, status: 'finished' });
+      if (gameState.current + 1 >= TOTAL_Q) updateGameState({ ...updated, status: 'finished', recorded: false });
       else updateGameState({ ...updated, current: gameState.current + 1, p1Answered: false, p2Answered: false });
     } else updateGameState(updated);
   };
@@ -238,6 +263,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setActiveQ(qs); setGameMode('solo');
     setCurrent(0); setSelected(null); setScore(0);
     setTimeLeft(TIME_PER); setAnswers([]); setShowResult(false);
+    setLocalRecorded(false);
     setView('game');
   };
 

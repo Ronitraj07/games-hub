@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
+import { useGameStats } from '@/hooks/useGameStats';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
@@ -35,10 +36,12 @@ interface PictionaryOnlineState {
   drawerReady: boolean;
   guesserReady: boolean;
   status:      'waiting' | 'active' | 'finished';
+  recorded?:   boolean;
 }
 
 export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
+  const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
 
   const [gameMode, setGameMode] = useState<GameMode|null>(null);
@@ -61,6 +64,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [score,      setScore]      = useState(0);
   const [round,      setRound]      = useState(1);
   const [usedWords,  setUsedWords]  = useState<string[]>([]);
+  const [localRecorded, setLocalRecorded] = useState(false);
 
   // ─── Online state ───
   const safeSession = sessionId
@@ -72,6 +76,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     canvasData:'', guess:'', phase:'waiting', result:null,
     p1Score:0, p2Score:0, round:1,
     drawerReady:false, guesserReady:false, status:'waiting',
+    recorded: false,
   };
 
   const { gameState, updateGameState, loading } =
@@ -79,6 +84,17 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const isDrawer  = gameState?.drawerEmail  === userKey;
   const isGuesser = gameState?.guesserEmail === userKey;
+
+  // ─── Record online result when finished (once) ───
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    const myScore  = gameState.drawerEmail === userKey ? gameState.p1Score : gameState.p2Score;
+    const oppScore = gameState.drawerEmail === userKey ? gameState.p2Score : gameState.p1Score;
+    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp      = gameState.drawerEmail === userKey ? gameState.guesserEmail : gameState.drawerEmail;
+    recordGame({ gameType: 'pictionary', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp || undefined });
+    updateGameState({ ...gameState, recorded: true });
+  }, [gameState?.status, gameState?.recorded]);
 
   // ─── Canvas helpers ───
   const getCanvas = () => canvasRef.current;
@@ -180,8 +196,21 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     } else playWrong();
   };
 
+  // Record solo result at result screen
+  useEffect(() => {
+    if (phase !== 'result' || localRecorded || !userKey || gameMode !== 'solo') return;
+    setLocalRecorded(true);
+    recordGame({
+      gameType:    'pictionary',
+      playerEmail: userKey,
+      result:      result === 'correct' ? 'win' : 'loss',
+      score,
+      mode:        'solo',
+    });
+  }, [phase]);
+
   const nextRound = () => {
-    setRound(r=>r+1); clearCanvas(); startSolo();
+    setRound(r=>r+1); clearCanvas(); startSolo(); setLocalRecorded(false);
   };
 
   // ─── Online game funcs ───
