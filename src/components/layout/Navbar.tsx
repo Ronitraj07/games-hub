@@ -1,21 +1,24 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getPlayerEmoji } from '@/lib/auth-config';
-import { Home, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { Home, Sun, Moon, Volume2, VolumeX, Sword } from 'lucide-react';
 import { toggleSound, isSoundEnabled } from '@/utils/sounds';
 import { GamesHubLogo } from '@/components/shared/GamesHubLogo';
 
 export const Navbar: React.FC = () => {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
   const [soundEnabled, setSoundEnabled] = useState(isSoundEnabled());
 
   const handleSoundToggle = () => {
     const newState = toggleSound();
     setSoundEnabled(newState);
   };
+
+  const isRPG = location.pathname.startsWith('/rpg');
 
   return (
     <nav className="sticky top-0 z-50 glass border-b border-white/30 dark:border-white/10">
@@ -52,16 +55,37 @@ export const Navbar: React.FC = () => {
                 : <Sun  size={18} className="text-yellow-400" />}
             </button>
 
-            {user ? (
+            {user && (
               <>
+                {/* Home */}
                 <Link to="/"
-                  className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400 transition">
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                    location.pathname === '/'
+                      ? 'text-pink-600 dark:text-pink-400 bg-pink-50/50 dark:bg-pink-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400'
+                  }`}>
                   <Home size={18} />
                   <span className="hidden sm:inline text-sm">Home</span>
                 </Link>
 
+                {/* RPG */}
+                <Link to="/rpg"
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                    isRPG
+                      ? 'text-purple-600 dark:text-purple-400 bg-purple-50/50 dark:bg-purple-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400'
+                  }`}>
+                  <Sword size={18} />
+                  <span className="hidden sm:inline text-sm">RPG</span>
+                </Link>
+
+                {/* Profile */}
                 <Link to="/profile"
-                  className="glass-btn flex items-center gap-2 px-3 py-2 rounded-xl text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition">
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                    location.pathname === '/profile'
+                      ? 'text-purple-600 dark:text-purple-400 bg-purple-50/50 dark:bg-purple-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400'
+                  }`}>
                   {user.photoURL ? (
                     <img src={user.photoURL} alt="avatar" className="w-6 h-6 rounded-full object-cover" />
                   ) : (
@@ -70,7 +94,9 @@ export const Navbar: React.FC = () => {
                   <span className="hidden sm:inline text-sm font-medium">{user.displayName}</span>
                 </Link>
               </>
-            ) : (
+            )}
+
+            {!user && (
               <Link
                 to="/login"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold text-sm transition-all hover:scale-[1.03] active:scale-[0.97] shadow-md shadow-pink-200/50 dark:shadow-pink-900/30"
