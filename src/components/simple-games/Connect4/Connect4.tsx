@@ -27,7 +27,7 @@ interface Connect4State {
 const ROWS = 6, COLS = 7;
 const emptyBoard = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 
-// Firebase can return null for empty array rows — normalise the whole board
+// Firebase strips all-null rows — always rebuild a full 6×7 grid
 const safeBoard = (board: (string | null)[][] | null | undefined): (string | null)[][] =>
   Array.from({ length: ROWS }, (_, r) => {
     const row = board?.[r];
@@ -115,14 +115,18 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     pendingInit.current = null;
   }, [activeRoomId, isHost, safeSession]);
 
-  const isP1    = gameState?.players.player1 === userKey;
+  const isP1     = gameState?.players.player1 === userKey;
   const isAIMode = gameState?.mode === 'vs-ai';
   const myColor  = isP1 ? 'from-pink-500 to-rose-500' : 'from-yellow-400 to-orange-500';
   const oppColor = isP1 ? 'from-yellow-400 to-orange-500' : 'from-pink-500 to-rose-500';
+  const partnerReady = !!(gameState?.players?.player2);
+
+  // Fix: in vs-partner mode P1 cannot move until P2 has joined
   const isMyTurn = isAIMode
     ? gameState?.currentPlayer === gameState?.players.player1
-    : gameState?.currentPlayer === userKey;
-  const partnerReady = !!(gameState?.players?.player2);
+    : (!isAIMode && !partnerReady)
+      ? false
+      : gameState?.currentPlayer === userKey;
 
   // Stats recording
   useEffect(() => {
@@ -169,7 +173,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     if (!gameState || gameState.status !== 'active') return;
     if (isAIMode  && gameState.currentPlayer !== gameState.players.player1) return;
     if (!isAIMode && !isMyTurn) return;
-    // Use normalised board
     let row = -1;
     for (let r = ROWS - 1; r >= 0; r--) { if (!board[r][col]) { row = r; break; } }
     if (row === -1) return;
@@ -237,16 +240,20 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
   if (loading) return <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>;
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20} /> Back
+    // Reduced outer padding on mobile so the board fits without scrolling
+    <div className="min-h-screen px-2 py-3 sm:p-4">
+      <div className="max-w-sm sm:max-w-lg mx-auto">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <Link to="/" className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition text-sm">
+            <ArrowLeft size={16} /> Back
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">💎 Connect 4</h1>
-          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">💎 Connect 4</h1>
+          <button onClick={resetGame} className="glass-btn p-1.5 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={16} /></button>
         </div>
 
+        {/* ── LOBBY ── */}
         {!inSession && (
           <div className="flex items-center justify-center min-h-[60vh]">
             <GameLobby
@@ -262,8 +269,11 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
           </div>
         )}
 
+        {/* ── GAME ── */}
         {inSession && gameState && (
-          <div className="space-y-4">
+          <div className="space-y-2">
+
+            {/* Badges */}
             <div className="flex justify-center gap-2 flex-wrap">
               <GameModeBadge mode={gameState.mode} difficulty={gameState.mode === 'vs-ai' ? (gameState.aiDifficulty as AIDifficulty) : undefined} />
               {activeRoomId && (
@@ -273,9 +283,12 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
               )}
             </div>
 
-            <div className="glass-card p-4 text-center">
+            {/* Status */}
+            <div className="glass-card px-3 py-2 text-center">
               {gameState.status === 'active' && (
-                <p className={`font-semibold text-lg ${isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'}`}>
+                <p className={`font-semibold text-sm sm:text-base ${
+                  isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'
+                }`}>
                   {!partnerReady && gameState.mode === 'vs-partner'
                     ? 'Waiting for partner to join…'
                     : isMyTurn ? 'Your turn!'
@@ -284,7 +297,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
                 </p>
               )}
               {gameState.status === 'finished' && (
-                <p className="font-bold text-xl text-gray-900 dark:text-white">
+                <p className="font-bold text-base sm:text-xl text-gray-900 dark:text-white">
                   {gameState.isDraw
                     ? '🤝 Draw!'
                     : gameState.winner === userKey ? '🏆 You Win!'
@@ -294,23 +307,37 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
               )}
             </div>
 
-            <div className="glass-card p-4">
-              {/* Drop indicator row */}
-              <div className="grid mb-1" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
+            {/* Board
+                Sizing strategy:
+                - w-full keeps it fluid inside max-w-sm/lg
+                - gap-1 (4px) on mobile, gap-1.5 (6px) on sm+
+                - aspect-square on cells auto-sizes everything
+            */}
+            <div className="glass-card p-2 sm:p-3">
+              {/* Drop indicator */}
+              <div
+                className="grid mb-1"
+                style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '4px' }}
+              >
                 {Array(COLS).fill(null).map((_, c) => (
                   <div key={c} className="flex justify-center">
-                    <div className={`w-4 h-4 rounded-full transition-all duration-200 ${
+                    <div className={`w-3 h-3 rounded-full transition-all duration-200 ${
                       hovered === c && isMyTurn && gameState.status === 'active'
                         ? `bg-gradient-to-b ${myColor} opacity-80` : 'opacity-0'
                     }`} />
                   </div>
                 ))}
               </div>
-              {/* Board cells — use normalised `board`, never raw gameState.board */}
-              <div className="grid" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
+
+              {/* Cells */}
+              <div
+                className="grid w-full"
+                style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '4px' }}
+              >
                 {board.map((row, r) =>
                   row.map((cell, c) => (
-                    <button key={`${r}-${c}`}
+                    <button
+                      key={`${r}-${c}`}
                       onClick={() => handleColumnClick(c)}
                       onMouseEnter={() => setHovered(c)}
                       onMouseLeave={() => setHovered(null)}
@@ -326,9 +353,9 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
                           : 'rgba(255,255,255,0.3)',
                         boxShadow: cell
                           ? isWinCell(r, c)
-                            ? '0 0 16px rgba(251,191,36,.8),inset 0 2px 4px rgba(255,255,255,.3)'
+                            ? '0 0 12px rgba(251,191,36,.8),inset 0 2px 4px rgba(255,255,255,.3)'
                             : 'inset 0 2px 4px rgba(0,0,0,.1)'
-                          : 'inset 0 2px 8px rgba(0,0,0,.15)',
+                          : 'inset 0 2px 6px rgba(0,0,0,.15)',
                       }}
                     />
                   ))
@@ -336,29 +363,32 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
               </div>
             </div>
 
-            <div className="glass-card p-3 flex justify-around">
+            {/* Colour legend */}
+            <div className="glass-card px-3 py-2 flex justify-around">
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${myColor}`} />
-                <span className="text-sm text-gray-700 dark:text-gray-300">You</span>
+                <div className={`w-4 h-4 rounded-full bg-gradient-to-br ${myColor}`} />
+                <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">You</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${oppColor}`} />
-                <span className="text-sm text-gray-700 dark:text-gray-300">{isAIMode ? 'AI 🤖' : 'Partner'}</span>
+                <div className={`w-4 h-4 rounded-full bg-gradient-to-br ${oppColor}`} />
+                <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">{isAIMode ? 'AI 🤖' : 'Partner'}</span>
               </div>
             </div>
 
+            {/* Play Again / Leave */}
             {gameState.status === 'finished' && (
               <div className="flex gap-3">
                 <button onClick={playAgain}
-                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
+                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-2.5 rounded-xl hover:scale-[1.02] transition text-sm sm:text-base">
                   Play Again 💕
                 </button>
                 <button onClick={resetGame}
-                  className="glass-btn px-5 py-3 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
+                  className="glass-btn px-4 py-2.5 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
                   Leave
                 </button>
               </div>
             )}
+
           </div>
         )}
       </div>
