@@ -39,30 +39,29 @@ const calculateWinner = (board: BoardState): { winner: CellValue; cells: number[
 };
 
 export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSession }) => {
-  const { user } = useAuth();
+  const { user }    = useAuth();
   const { recordGame } = useGameStats();
-  const location = useLocation();
-  const userKey = user?.email ?? null;
+  const location    = useLocation();
+  const userKey     = user?.email ?? null;
   const aiThinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showInvite,   setShowInvite]   = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isHost,       setIsHost]       = useState(false);
-  const [gameMode,     setGameMode]     = useState<'vs-human' | 'vs-ai' | null>(null);
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('medium');
+  const pendingInitRef = useRef<TicTacToeGameState | null>(null);
 
-  // Read ?room=CODE from URL (e.g. when partner clicks the invite link)
+  // Read ?room=CODE from URL (partner clicked invite link)
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
+    const params    = new URLSearchParams(location.search);
     const roomParam = params.get('room');
     if (roomParam && !activeRoomId) {
       setActiveRoomId(roomParam.toUpperCase());
       setIsHost(false);
-      setGameMode('vs-human');
     }
   }, [location.search]);
 
-  // The shared Firebase session key — uses the invite room code so BOTH players point to same node
+  // Shared Firebase path — keyed by room code so BOTH players hit the same node
   const safeSession = activeRoomId
     ? `tictactoe-room-${sanitizeFirebasePath(activeRoomId)}`
     : propSession
@@ -75,7 +74,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     players:       { player1: p1, player2: null },
     winner:        null,
     winningCells:  null,
-    status:        'waiting',
+    status:        'active',   // start immediately — no waiting screen mid-session
     isDraw:        false,
     mode:          'vs-human',
     aiDifficulty:  'medium',
@@ -86,23 +85,21 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     useRealtimeGame<TicTacToeGameState>(safeSession, 'tictactoe', makeInitialState(userKey ?? ''));
 
   // --- Player 2 registration ---
-  // When the room already exists and this user isn't player1, register as player2
   useEffect(() => {
     if (!gameState || !userKey) return;
     if (gameState.mode !== 'vs-human') return;
-    if (gameState.players.player1 === userKey) return;  // I'm host, skip
-    if (gameState.players.player2 === userKey) return;  // already registered
-    // Register as player2 using patch (won't overwrite anything else)
+    if (gameState.players.player1 === userKey) return;
+    if (gameState.players.player2 === userKey) return;
+    // Register as player2 — patch only this field, never overwrite full state
     patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
   }, [gameState?.players?.player1, gameState?.players?.player2, userKey, gameState?.mode]);
 
-  // Derive role AFTER player2 may have been registered
   const amPlayer1  = gameState?.players?.player1 === userKey;
   const mySymbol: CellValue = amPlayer1 ? 'X' : 'O';
   const isMyTurn   = gameState?.mode === 'vs-human'
     ? gameState?.currentPlayer === mySymbol
-    : gameState?.currentPlayer === 'X'; // vs-ai: human is always X
-  const currentBoard = safeBoard(gameState?.board);
+    : gameState?.currentPlayer === 'X';
+  const currentBoard      = safeBoard(gameState?.board);
   const partnerRegistered = !!(gameState?.players?.player2);
 
   // Record result
@@ -137,8 +134,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
       updateGameState({
         ...gameState, board: newBoard, winner, winningCells: cells, isDraw,
         status: winner || isDraw ? 'finished' : 'active',
-        currentPlayer: winner || isDraw ? 'O' : 'X',
-        recorded: false,
+        currentPlayer: winner || isDraw ? 'O' : 'X', recorded: false,
       });
     }, 500);
     return () => { if (aiThinkTimer.current) clearTimeout(aiThinkTimer.current); };
@@ -165,7 +161,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
   };
 
   const startVsAI = (diff: AIDifficulty) => {
-    setGameMode('vs-ai');
     setAiDifficulty(diff);
     setActiveRoomId(null);
     updateGameState({
@@ -175,43 +170,49 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     });
   };
 
-  // Called when InviteModal handshake completes
-  // roomId is the 6-letter code — use it as shared Firebase key
+  // InviteModal done — roomId is the shared key
   const handleInviteReady = (roomId: string, hostFlag: boolean) => {
     setShowInvite(false);
-    setActiveRoomId(roomId);
     setIsHost(hostFlag);
-    setGameMode('vs-human');
-    // Only the HOST writes the initial game state — guest will register via patchGameState
+    setActiveRoomId(roomId);  // triggers safeSession to update
     if (hostFlag) {
-      const newState: TicTacToeGameState = {
+      // Store initial state to write once safeSession settles
+      pendingInitRef.current = {
         ...makeInitialState(userKey ?? ''),
         status: 'active',
         mode:   'vs-human',
       };
-      // Use the room-specific path
-      const roomSession = `tictactoe-room-${sanitizeFirebasePath(roomId)}`;
-      // We update via updateGameState but safeSession hasn't updated yet (state async),
-      // so write directly using the correct path key by forcing a re-render via state update
-      // The useEffect above will pick up the new safeSession on next render.
-      // We store the desired initial state in a ref and write it after session key updates.
-      pendingInitRef.current = newState;
     }
   };
 
-  // After host sets activeRoomId, write initial state once
-  const pendingInitRef = useRef<TicTacToeGameState | null>(null);
+  // After host sets activeRoomId, write initial game state once
   useEffect(() => {
-    if (!pendingInitRef.current) return;
-    if (!activeRoomId || !isHost) return;
+    if (!pendingInitRef.current || !activeRoomId || !isHost) return;
     updateGameState(pendingInitRef.current);
     pendingInitRef.current = null;
   }, [activeRoomId, isHost, safeSession]);
 
+  // Play Again — reset board but KEEP the same roomId and players
+  const playAgain = () => {
+    if (!gameState) return;
+    // Preserve player registrations, just reset board state
+    updateGameState({
+      ...makeInitialState(gameState.players.player1),
+      players: gameState.players,   // keep both emails
+      mode:    gameState.mode,
+      aiDifficulty: gameState.aiDifficulty,
+      status: 'active',
+    });
+  };
+
+  // Full reset — go back to lobby
   const resetGame = () => {
     setActiveRoomId(null);
-    setGameMode(null);
-    updateGameState(makeInitialState(userKey ?? ''));
+    setIsHost(false);
+    updateGameState({
+      ...makeInitialState(userKey ?? ''),
+      status: 'waiting',
+    });
   };
 
   const turnLabel = () => {
@@ -236,8 +237,8 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>
   );
 
-  const isAITurn = gameState?.mode === 'vs-ai' && gameState?.currentPlayer === 'O';
-  const showGame = gameState && (gameState.status !== 'waiting' || activeRoomId);
+  const isAITurn  = gameState?.mode === 'vs-ai' && gameState?.currentPlayer === 'O';
+  const inSession = !!(activeRoomId || (gameState?.mode === 'vs-ai' && gameState?.status !== 'waiting'));
 
   return (
     <div className="min-h-screen p-4">
@@ -247,13 +248,13 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
             <ArrowLeft size={20} /> Back
           </Link>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Tic Tac Toe</h1>
-          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400" title="Reset">
+          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400" title="Leave game">
             <RotateCcw size={20} />
           </button>
         </div>
 
         {/* LOBBY */}
-        {!showGame && (
+        {!inSession && (
           <div className="glass-card p-8 text-center">
             <div className="text-6xl mb-4">❌⭕</div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tic Tac Toe</h2>
@@ -291,17 +292,26 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
         )}
 
         {/* GAME BOARD */}
-        {showGame && (
+        {inSession && (
           <div className="space-y-4">
-            <div className="flex justify-center">
-              <span className={`glass px-3 py-1 rounded-full text-xs font-semibold ${
-                gameState?.mode === 'vs-ai' ? 'text-indigo-400' : 'text-pink-400'
-              }`}>
-                {gameState?.mode === 'vs-ai'
-                  ? `🤖 vs AI · ${gameState?.aiDifficulty}`
-                  : '👥 vs Partner'}
-              </span>
-            </div>
+            {/* Room code badge */}
+            {activeRoomId && (
+              <div className="flex justify-center gap-2 flex-wrap">
+                <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-pink-400">
+                  👥 vs Partner
+                </span>
+                <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
+                  Room: {activeRoomId}
+                </span>
+              </div>
+            )}
+            {!activeRoomId && (
+              <div className="flex justify-center">
+                <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-indigo-400">
+                  🤖 vs AI · {gameState?.aiDifficulty}
+                </span>
+              </div>
+            )}
 
             <div className="glass-card p-4 text-center">
               {gameState?.status === 'active' && (
@@ -330,10 +340,16 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
             />
 
             {gameState?.status === 'finished' && (
-              <button onClick={resetGame}
-                className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
-                Play Again 💕
-              </button>
+              <div className="flex gap-3">
+                <button onClick={playAgain}
+                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
+                  Play Again 💕
+                </button>
+                <button onClick={resetGame}
+                  className="glass-btn px-5 py-3 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
+                  Leave
+                </button>
+              </div>
             )}
           </div>
         )}
