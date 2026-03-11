@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -6,7 +6,7 @@ import { Board } from './Board';
 import { InviteModal } from '@/components/games/InviteModal';
 import { useGameStats } from '@/hooks/useGameStats';
 import { RotateCcw, ArrowLeft, Bot, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { getAIMove } from '@/lib/tictactoe-ai';
 import type { CellValue, BoardState } from './types';
 import type { AIDifficulty } from '@/lib/tictactoe-ai';
@@ -38,22 +38,41 @@ const calculateWinner = (board: BoardState): { winner: CellValue; cells: number[
   return { winner: null, cells: null };
 };
 
-export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
+export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSession }) => {
   const { user } = useAuth();
   const { recordGame } = useGameStats();
-  const userKey  = user?.email ?? null;
+  const location = useLocation();
+  const userKey = user?.email ?? null;
   const aiThinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showInvite,   setShowInvite]   = React.useState(false);
-  const [aiDifficulty, setAiDifficulty] = React.useState<AIDifficulty>('medium');
 
-  const safeSession = sessionId
-    ? sanitizeFirebasePath(sessionId)
-    : `tictactoe-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
+  const [showInvite,   setShowInvite]   = useState(false);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost,       setIsHost]       = useState(false);
+  const [gameMode,     setGameMode]     = useState<'vs-human' | 'vs-ai' | null>(null);
+  const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('medium');
 
-  const initialState: TicTacToeGameState = {
+  // Read ?room=CODE from URL (e.g. when partner clicks the invite link)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const roomParam = params.get('room');
+    if (roomParam && !activeRoomId) {
+      setActiveRoomId(roomParam.toUpperCase());
+      setIsHost(false);
+      setGameMode('vs-human');
+    }
+  }, [location.search]);
+
+  // The shared Firebase session key — uses the invite room code so BOTH players point to same node
+  const safeSession = activeRoomId
+    ? `tictactoe-room-${sanitizeFirebasePath(activeRoomId)}`
+    : propSession
+    ? sanitizeFirebasePath(propSession)
+    : `tictactoe-ai-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
+
+  const makeInitialState = (p1: string): TicTacToeGameState => ({
     board:         Array(9).fill(null) as BoardState,
     currentPlayer: 'X',
-    players:       { player1: userKey ?? '', player2: null },
+    players:       { player1: p1, player2: null },
     winner:        null,
     winningCells:  null,
     status:        'waiting',
@@ -61,30 +80,30 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     mode:          'vs-human',
     aiDifficulty:  'medium',
     recorded:      false,
-  };
+  });
 
   const { gameState, updateGameState, patchGameState, loading } =
-    useRealtimeGame<TicTacToeGameState>(safeSession, 'tictactoe', initialState);
+    useRealtimeGame<TicTacToeGameState>(safeSession, 'tictactoe', makeInitialState(userKey ?? ''));
 
-  // --- Player registration -------------------------------------------------
-  // When a second player opens the same session, register them as player2.
+  // --- Player 2 registration ---
+  // When the room already exists and this user isn't player1, register as player2
   useEffect(() => {
     if (!gameState || !userKey) return;
-    if (gameState.status !== 'active') return;
     if (gameState.mode !== 'vs-human') return;
-    // Already registered
-    if (gameState.players.player1 === userKey) return;
-    if (gameState.players.player2 === userKey) return;
-    // Slot is free — join as player2
-    if (!gameState.players.player2) {
-      patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
-    }
-  }, [gameState?.status, gameState?.players?.player2, userKey]);
+    if (gameState.players.player1 === userKey) return;  // I'm host, skip
+    if (gameState.players.player2 === userKey) return;  // already registered
+    // Register as player2 using patch (won't overwrite anything else)
+    patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
+  }, [gameState?.players?.player1, gameState?.players?.player2, userKey, gameState?.mode]);
 
-  // Derive my symbol AFTER player2 may have been registered
-  const mySymbol: CellValue = gameState?.players?.player1 === userKey ? 'X' : 'O';
-  const isMyTurn = gameState?.currentPlayer === mySymbol && gameState?.mode === 'vs-human';
+  // Derive role AFTER player2 may have been registered
+  const amPlayer1  = gameState?.players?.player1 === userKey;
+  const mySymbol: CellValue = amPlayer1 ? 'X' : 'O';
+  const isMyTurn   = gameState?.mode === 'vs-human'
+    ? gameState?.currentPlayer === mySymbol
+    : gameState?.currentPlayer === 'X'; // vs-ai: human is always X
   const currentBoard = safeBoard(gameState?.board);
+  const partnerRegistered = !!(gameState?.players?.player2);
 
   // Record result
   useEffect(() => {
@@ -116,11 +135,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       const { winner, cells } = calculateWinner(newBoard);
       const isDraw = !winner && newBoard.every(c => c !== null);
       updateGameState({
-        ...gameState,
-        board: newBoard,
-        winner,
-        winningCells: cells,
-        isDraw,
+        ...gameState, board: newBoard, winner, winningCells: cells, isDraw,
         status: winner || isDraw ? 'finished' : 'active',
         currentPlayer: winner || isDraw ? 'O' : 'X',
         recorded: false,
@@ -131,7 +146,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const handleCellClick = (index: number) => {
     if (!gameState || gameState.status !== 'active') return;
-    if (gameState.mode === 'vs-ai'   && gameState.currentPlayer !== 'X') return;
+    if (gameState.mode === 'vs-ai'    && gameState.currentPlayer !== 'X') return;
     if (gameState.mode === 'vs-human' && !isMyTurn) return;
     if (index < 0 || index > 8) return;
     const board = safeBoard(gameState.board);
@@ -140,13 +155,9 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     newBoard[index] = gameState.mode === 'vs-ai' ? 'X' : mySymbol;
     const { winner, cells } = calculateWinner(newBoard);
     const isDraw = !winner && newBoard.every(c => c !== null);
-    const nextPlayer: 'X'|'O' = gameState.currentPlayer === 'X' ? 'O' : 'X';
+    const nextPlayer: 'X' | 'O' = gameState.currentPlayer === 'X' ? 'O' : 'X';
     updateGameState({
-      ...gameState,
-      board: newBoard,
-      winner,
-      winningCells: cells,
-      isDraw,
+      ...gameState, board: newBoard, winner, winningCells: cells, isDraw,
       status: winner || isDraw ? 'finished' : 'active',
       currentPlayer: winner || isDraw ? gameState.currentPlayer : nextPlayer,
       recorded: false,
@@ -154,29 +165,53 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   };
 
   const startVsAI = (diff: AIDifficulty) => {
+    setGameMode('vs-ai');
+    setAiDifficulty(diff);
+    setActiveRoomId(null);
     updateGameState({
-      ...initialState,
+      ...makeInitialState(userKey ?? ''),
       players: { player1: userKey ?? '', player2: 'AI' },
-      status: 'active',
-      mode: 'vs-ai',
-      aiDifficulty: diff,
+      status: 'active', mode: 'vs-ai', aiDifficulty: diff,
     });
   };
 
-  const startVsHuman = () => {
-    updateGameState({
-      ...initialState,
-      players: { player1: userKey ?? '', player2: null },
-      status: 'active',
-      mode: 'vs-human',
-    });
-  };
-
-  const resetGame = () => updateGameState({ ...initialState, players: { player1: userKey ?? '', player2: null } });
-
-  const handleInviteReady = (_roomId: string, _isHost: boolean) => {
+  // Called when InviteModal handshake completes
+  // roomId is the 6-letter code — use it as shared Firebase key
+  const handleInviteReady = (roomId: string, hostFlag: boolean) => {
     setShowInvite(false);
-    startVsHuman();
+    setActiveRoomId(roomId);
+    setIsHost(hostFlag);
+    setGameMode('vs-human');
+    // Only the HOST writes the initial game state — guest will register via patchGameState
+    if (hostFlag) {
+      const newState: TicTacToeGameState = {
+        ...makeInitialState(userKey ?? ''),
+        status: 'active',
+        mode:   'vs-human',
+      };
+      // Use the room-specific path
+      const roomSession = `tictactoe-room-${sanitizeFirebasePath(roomId)}`;
+      // We update via updateGameState but safeSession hasn't updated yet (state async),
+      // so write directly using the correct path key by forcing a re-render via state update
+      // The useEffect above will pick up the new safeSession on next render.
+      // We store the desired initial state in a ref and write it after session key updates.
+      pendingInitRef.current = newState;
+    }
+  };
+
+  // After host sets activeRoomId, write initial state once
+  const pendingInitRef = useRef<TicTacToeGameState | null>(null);
+  useEffect(() => {
+    if (!pendingInitRef.current) return;
+    if (!activeRoomId || !isHost) return;
+    updateGameState(pendingInitRef.current);
+    pendingInitRef.current = null;
+  }, [activeRoomId, isHost, safeSession]);
+
+  const resetGame = () => {
+    setActiveRoomId(null);
+    setGameMode(null);
+    updateGameState(makeInitialState(userKey ?? ''));
   };
 
   const turnLabel = () => {
@@ -184,9 +219,10 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     if (gameState.mode === 'vs-ai') {
       return gameState.currentPlayer === 'X' ? 'Your turn — you are ❌' : '🤖 AI is thinking…';
     }
-    // vs-human
-    if (!gameState.players.player2) return 'Waiting for partner to join…';
-    return isMyTurn ? `Your turn — you are ${mySymbol === 'X' ? '❌' : '⭕'}` : "Opponent's turn…";
+    if (!partnerRegistered) return 'Waiting for partner to join…';
+    return isMyTurn
+      ? `Your turn — you are ${mySymbol === 'X' ? '❌' : '⭕'}`
+      : "Opponent's turn…";
   };
 
   const resultLabel = () => {
@@ -201,6 +237,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   );
 
   const isAITurn = gameState?.mode === 'vs-ai' && gameState?.currentPlayer === 'O';
+  const showGame = gameState && (gameState.status !== 'waiting' || activeRoomId);
 
   return (
     <div className="min-h-screen p-4">
@@ -215,7 +252,8 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </button>
         </div>
 
-        {(!gameState || gameState.status === 'waiting') && (
+        {/* LOBBY */}
+        {!showGame && (
           <div className="glass-card p-8 text-center">
             <div className="text-6xl mb-4">❌⭕</div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tic Tac Toe</h2>
@@ -252,32 +290,46 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </div>
         )}
 
-        {gameState && gameState.status !== 'waiting' && (
+        {/* GAME BOARD */}
+        {showGame && (
           <div className="space-y-4">
             <div className="flex justify-center">
               <span className={`glass px-3 py-1 rounded-full text-xs font-semibold ${
-                gameState.mode === 'vs-ai' ? 'text-indigo-400' : 'text-pink-400'
+                gameState?.mode === 'vs-ai' ? 'text-indigo-400' : 'text-pink-400'
               }`}>
-                {gameState.mode === 'vs-ai' ? `🤖 vs AI · ${gameState.aiDifficulty}` : '👥 vs Partner'}
+                {gameState?.mode === 'vs-ai'
+                  ? `🤖 vs AI · ${gameState?.aiDifficulty}`
+                  : '👥 vs Partner'}
               </span>
             </div>
+
             <div className="glass-card p-4 text-center">
-              {gameState.status === 'active' && (
+              {gameState?.status === 'active' && (
                 <p className={`font-semibold text-lg ${
-                  isMyTurn || isAITurn === false ? 'text-pink-400' : 'text-gray-500'
+                  (isMyTurn && !isAITurn) ? 'text-pink-400' : 'text-gray-500'
                 }`}>{turnLabel()}</p>
               )}
-              {gameState.status === 'finished' && (
+              {gameState?.status === 'finished' && (
                 <p className="font-bold text-xl text-white">{resultLabel()}</p>
               )}
+              {(!gameState || gameState.status === 'waiting') && (
+                <p className="text-gray-400 font-medium">Waiting for partner to join…</p>
+              )}
             </div>
+
             <Board
               board={currentBoard}
               onCellClick={handleCellClick}
-              disabled={isAITurn || gameState.status !== 'active' || (gameState.mode === 'vs-human' && !isMyTurn)}
-              winningCells={gameState.winningCells || []}
+              disabled={
+                isAITurn ||
+                !gameState ||
+                gameState.status !== 'active' ||
+                (gameState.mode === 'vs-human' && (!partnerRegistered || !isMyTurn))
+              }
+              winningCells={gameState?.winningCells || []}
             />
-            {gameState.status === 'finished' && (
+
+            {gameState?.status === 'finished' && (
               <button onClick={resetGame}
                 className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
                 Play Again 💕
@@ -286,8 +338,13 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
           </div>
         )}
       </div>
+
       {showInvite && (
-        <InviteModal gameType="TicTacToe" onClose={() => setShowInvite(false)} onReady={handleInviteReady} />
+        <InviteModal
+          gameType="TicTacToe"
+          onClose={() => setShowInvite(false)}
+          onReady={handleInviteReady}
+        />
       )}
     </div>
   );
