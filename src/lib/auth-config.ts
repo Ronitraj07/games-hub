@@ -29,22 +29,49 @@ export const APP_CONFIG = {
 };
 
 export const getDisplayNameFromEmail = (email: string): string => {
-  if (email === 'sinharonitraj@gmail.com')     return 'Ronit';
-  if (email === 'radhikadidwania567@gmail.com') return 'Radhika';
-  if (email === 'shizzandsparkles@gmail.com')   return 'Shizz';
+  if (email === 'sinharonitraj@gmail.com')      return 'Ronit';
+  if (email === 'radhikadidwania567@gmail.com')  return 'Radhika';
+  if (email === 'shizzandsparkles@gmail.com')    return 'Shizz';
   return email.split('@')[0];
 };
 
 export const getPlayerRole = (email: string): string => {
-  if (email === 'sinharonitraj@gmail.com')     return 'Player 1';
-  if (email === 'radhikadidwania567@gmail.com') return 'Player 2';
-  if (email === 'shizzandsparkles@gmail.com')   return 'Owner';
+  if (email === 'sinharonitraj@gmail.com')      return 'Player 1';
+  if (email === 'radhikadidwania567@gmail.com')  return 'Player 2';
+  if (email === 'shizzandsparkles@gmail.com')    return 'Owner';
   return 'Guest';
 };
 
 export const getPlayerEmoji = (email: string): string => {
-  if (email === 'sinharonitraj@gmail.com')     return '👨‍💻';
-  if (email === 'radhikadidwania567@gmail.com') return '👩‍🎤';
-  if (email === 'shizzandsparkles@gmail.com')   return '👑';
+  if (email === 'sinharonitraj@gmail.com')      return '👨‍💻';
+  if (email === 'radhikadidwania567@gmail.com')  return '👩‍🎤';
+  if (email === 'shizzandsparkles@gmail.com')    return '👑';
   return '👤';
+};
+
+/**
+ * Returns the partner's email for a given player.
+ * Ronit  ↔ Radhika (bidirectional)
+ * Shizz has no partner.
+ */
+export const getPartnerEmail = (email: string): string | null => {
+  if (email === 'sinharonitraj@gmail.com')      return 'radhikadidwania567@gmail.com';
+  if (email === 'radhikadidwania567@gmail.com')  return 'sinharonitraj@gmail.com';
+  return null; // Shizz / unknown — no partner
+};
+
+/**
+ * Returns the partner's display name for a given player.
+ */
+export const getPartnerName = (email: string): string | null => {
+  const partnerEmail = getPartnerEmail(email);
+  return partnerEmail ? getDisplayNameFromEmail(partnerEmail) : null;
+};
+
+/**
+ * Returns the partner's emoji for a given player.
+ */
+export const getPartnerEmoji = (email: string): string | null => {
+  const partnerEmail = getPartnerEmail(email);
+  return partnerEmail ? getPlayerEmoji(partnerEmail) : null;
 };
