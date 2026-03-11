@@ -6,7 +6,7 @@ import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
 import { RefreshCw, Clock, Trophy, Star, ArrowLeft, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
 
 const WORD_LIST = [
@@ -54,9 +54,26 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const { user } = useAuth();
   const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
+  const location = useLocation();
 
   const [gameMode, setGameMode] = useState<GameMode|null>(null);
   const [aiDiff,   setAiDiff]   = useState<AIDifficulty>('medium');
+
+  // New room-based multiplayer state
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost,       setIsHost]       = useState(false);
+  const [shouldHostStart, setShouldHostStart] = useState(false);
+
+  // Support deep-link join: /word-scramble?room=ABCDEF
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const room   = params.get('room');
+    if (room && !activeRoomId) {
+      setActiveRoomId(room.toUpperCase());
+      setIsHost(false);
+      setGameMode('vs-partner');
+    }
+  }, [location.search, activeRoomId]);
 
   // ─── Solo/AI state ───
   const [words]       = useState(()=>[...WORD_LIST].sort(()=>Math.random()-.5).slice(0,TOTAL));
@@ -75,9 +92,12 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const [localRecorded, setLocalRecorded] = useState(false);
 
   // ─── Online state ───
-  const safeSession = sessionId
+  const safeSession = activeRoomId
+    ? `wordscramble-room-${sanitizeFirebasePath(activeRoomId)}`
+    : sessionId
     ? sanitizeFirebasePath(sessionId)
     : `wordscramble-${userKey?sanitizeFirebasePath(userKey):'guest'}`;
+
   const initialOnline: OnlineState = {
     words:[],current:0,seed:'',
     p1Email:userKey??'',p2Email:'',
@@ -104,7 +124,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     if(idx<TOTAL){setScrambled(scramble(wordList[idx].word));setInput('');setTimeLeft(30);setShowHint(false);setFeedback(null);setAiSolved(false);}
   },[words]);
 
-  useEffect(()=>{if(gameMode&&gameMode!=='vs-partner')loadWord(0);},[gameMode]);
+  useEffect(()=>{if(gameMode&&gameMode!=='vs-partner')loadWord(0);},[gameMode,loadWord]);
 
   // Local timer
   useEffect(()=>{
@@ -126,7 +146,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
       setAiSolved(true);
     },AI_DELAY[aiDiff]);
     return()=>clearTimeout(t);
-  },[gameMode,curIdx,feedback]);
+  },[gameMode,curIdx,feedback,gameOver,aiDiff]);
 
   const handleNext=(correct:boolean)=>{
     const next=curIdx+1;
@@ -155,7 +175,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
       score,
       mode:        gameMode ?? 'solo',
     });
-  }, [gameOver]);
+  }, [gameOver, localRecorded, userKey, gameMode, score, aiScore, recordGame]);
 
   // Online submit
   const handleOnlineSubmit=(e:React.FormEvent)=>{
@@ -174,11 +194,19 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     setInput('');
   };
 
-  const startOnline=()=>{
+  // Host-only: create shared word order once room is set up
+  const startOnline = () => {
     const seed=Math.random().toString(36).slice(2,8);
     const shuffled=seededShuffle(WORD_LIST,seed);
     updateGameState({...initialOnline,words:shuffled,seed,p2Email:'opponent',status:'active'});
   };
+
+  // After host picks "vs partner" and roomId arrives, actually seed the game
+  useEffect(() => {
+    if (!shouldHostStart || !activeRoomId || !isHost) return;
+    startOnline();
+    setShouldHostStart(false);
+  }, [shouldHostStart, activeRoomId, isHost, safeSession]);
 
   const timerColor=timeLeft>15?'text-green-500':timeLeft>8?'text-yellow-500':'text-red-500';
 
@@ -202,7 +230,12 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
             gameType="WordScramble"
             onStartSolo={()=>{setGameMode('solo');loadWord(0);}}
             onStartVsAI={(d)=>{setAiDiff(d);setGameMode('vs-ai');}}
-            onStartVsPartner={()=>{setGameMode('vs-partner');startOnline();}}
+            onStartVsPartner={(roomId, hostFlag)=>{
+              setGameMode('vs-partner');
+              setActiveRoomId(roomId);
+              setIsHost(hostFlag);
+              if (hostFlag) setShouldHostStart(true);
+            }}
           />
         </div>
       </div>
@@ -230,7 +263,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={()=>{setGameMode(null);setGameOver(false);setCurIdx(0);setRound(1);setScore(0);setStreak(0);setAiScore(0);setLocalRecorded(false);}}
+            <button onClick={()=>{setGameMode(null);setGameOver(false);setCurIdx(0);setRound(1);setScore(0);setStreak(0);setAiScore(0);setLocalRecorded(false);setActiveRoomId(null);setIsHost(false);}}
               className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
               <RefreshCw size={18}/> Play Again
             </button>
@@ -251,7 +284,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={()=>setGameMode(null)} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition"><ArrowLeft size={20}/> Back</button>
+          <button onClick={()=>{setGameMode(null);setActiveRoomId(null);setIsHost(false);}} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition"><ArrowLeft size={20}/> Back</button>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
           <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18}/><span className="font-bold">{isOnlineActive?(isP1?gameState?.p1Score:gameState?.p2Score):score}</span></div>
         </div>

@@ -11,7 +11,7 @@ import {
   RefreshCw, ArrowLeft, Clock, Trophy, CheckCircle, XCircle,
   Loader2, Plus, Pencil, Trash2, BookOpen, Sparkles,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { GameMode } from '@/components/shared/GameLobby';
 
 // ───────────────── Types ─────────────────
@@ -96,11 +96,29 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const { recordGame } = useGameStats();
   const userKey  = user?.email ?? null;
+  const location = useLocation();
 
   type View = 'lobby' | 'builder' | 'game' | 'results';
   const [view,     setView]     = useState<View>('lobby');
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
   const [category, setCategory] = useState<string>('⭐ All');
+
+  // Room-based online state
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost,       setIsHost]       = useState(false);
+  const [shouldHostStart, setShouldHostStart] = useState(false);
+
+  // Allow direct invite links
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const room   = params.get('room');
+    if (room && !activeRoomId) {
+      setActiveRoomId(room.toUpperCase());
+      setIsHost(false);
+      setGameMode('vs-partner');
+      setView('game');
+    }
+  }, [location.search, activeRoomId]);
 
   // ─ Custom questions from Firebase ─
   const customDbPath = userKey
@@ -176,7 +194,9 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [localRecorded, setLocalRecorded] = useState(false);
 
   // ─ Online state ─
-  const safeSession = sessionId
+  const safeSession = activeRoomId
+    ? `trivia-room-${sanitizeFirebasePath(activeRoomId)}`
+    : sessionId
     ? sanitizeFirebasePath(sessionId)
     : `trivia-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
 
@@ -201,7 +221,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const opp      = isP1 ? (gameState.p2Email || undefined) : gameState.p1Email;
     recordGame({ gameType: 'trivia', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
     updateGameState({ ...gameState, recorded: true });
-  }, [gameState?.status, gameState?.recorded]);
+  }, [gameState?.status, gameState?.recorded, userKey, isP1, recordGame, updateGameState]);
 
   // ─ Solo timer ─
   useEffect(() => {
@@ -235,7 +255,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const correct = answers.filter((a, i) => a === activeQ[i]?.answer).length;
     const result = correct >= TOTAL_Q * 0.6 ? 'win' : 'loss';
     recordGame({ gameType: 'trivia', playerEmail: userKey, result, score, mode: 'solo' });
-  }, [view]);
+  }, [view, localRecorded, userKey, gameMode, answers, activeQ, score, recordGame]);
 
   const handleOnlineAnswer = (idx: number) => {
     if (!gameState || gameState.status !== 'active' || !curOnlineQ) return;
@@ -258,6 +278,13 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('game');
   };
 
+  // Host-only seed after room is ready
+  useEffect(() => {
+    if (!shouldHostStart || !activeRoomId || !isHost) return;
+    startOnline();
+    setShouldHostStart(false);
+  }, [shouldHostStart, activeRoomId, isHost, safeSession]);
+
   const handleStartSolo = () => {
     const qs = filteredQ();
     setActiveQ(qs); setGameMode('solo');
@@ -267,7 +294,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('game');
   };
 
-  const resetToLobby = () => { setView('lobby'); setGameMode(null); };
+  const resetToLobby = () => { setView('lobby'); setGameMode(null); setActiveRoomId(null); setIsHost(false); };
 
   // ───────────────── VIEW: BUILDER ─────────────────
   if (view === 'builder') return (
@@ -334,7 +361,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {customQs.map(cq => (
                 <div key={cq.id} className="flex items-start gap-2 p-3 glass rounded-xl">
-                  <p className="flex-1 text-sm text-gray-800 dark:text-white line-clamp-2">{cq.q}</p>
+                  <p className="flex-1 text-sm text-gray-800 dark:text:white line-clamp-2">{cq.q}</p>
                   <div className="flex gap-1 shrink-0">
                     <button onClick={() => startEditQ(cq)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition">
@@ -420,7 +447,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             supportsAI={false}
             gameType="TriviaQuiz"
             onStartSolo={handleStartSolo}
-            onStartVsPartner={() => { setGameMode('vs-partner'); startOnline(); }}
+            onStartVsPartner={(roomId, hostFlag) => { setGameMode('vs-partner'); setActiveRoomId(roomId); setIsHost(hostFlag); if (hostFlag) setShouldHostStart(true); setView('game'); }}
           />
         </div>
       </div>
