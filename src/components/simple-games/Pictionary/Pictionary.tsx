@@ -46,12 +46,10 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
 
-  // Room-based multiplayer state
   const [activeRoomId,     setActiveRoomId]     = useState<string | null>(null);
   const [isHost,           setIsHost]           = useState(false);
   const [shouldHostStart,  setShouldHostStart]  = useState(false);
 
-  // Deep-link join: /pictionary?room=ABCDEF
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room   = params.get('room');
@@ -62,12 +60,11 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }
   }, [location.search, activeRoomId]);
 
-  // ─── Canvas refs ───
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const lastPos   = useRef<{ x: number; y: number } | null>(null);
-  const syncTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const lastPos      = useRef<{ x: number; y: number } | null>(null);
+  const syncTimer    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ─── Solo state ───
   const [drawing,       setDrawing]       = useState(false);
   const [color,         setColor]         = useState('#1a1a1a');
   const [brushSize,     setBrushSize]     = useState(6);
@@ -82,7 +79,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [usedWords,     setUsedWords]     = useState<string[]>([]);
   const [localRecorded, setLocalRecorded] = useState(false);
 
-  // ─── Online path (room-aware) ───
   const safeSession = activeRoomId
     ? `pictionary-room-${sanitizeFirebasePath(activeRoomId)}`
     : sessionId
@@ -103,18 +99,15 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isDrawer  = gameState?.drawerEmail  === userKey;
   const isGuesser = gameState?.guesserEmail === userKey;
 
-  // ─── Guest registers as guesser once host has seeded the game ───
   useEffect(() => {
     if (!gameState || gameMode !== 'vs-partner' || !userKey) return;
-    if (gameState.status === 'waiting') return;          // not started yet
-    if (gameState.drawerEmail === userKey) return;       // I'm the drawer
-    if (gameState.guesserEmail === userKey) return;      // already registered
-    if (gameState.guesserEmail !== '') return;           // someone else took the seat
-    // Register as guesser
+    if (gameState.status === 'waiting') return;
+    if (gameState.drawerEmail === userKey) return;
+    if (gameState.guesserEmail === userKey) return;
+    if (gameState.guesserEmail !== '') return;
     patchGameState({ guesserEmail: userKey } as any);
   }, [gameState?.status, gameState?.drawerEmail, gameState?.guesserEmail, userKey, gameMode]);
 
-  // ─── Record online result when finished (once) ───
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     const myScore  = gameState.drawerEmail === userKey ? gameState.p1Score : gameState.p2Score;
@@ -125,7 +118,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
 
-  // ─── Canvas helpers ───
   const getCanvas = () => canvasRef.current;
   const getCtx    = () => getCanvas()?.getContext('2d');
 
@@ -136,7 +128,35 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   useEffect(() => { clearCanvas(); }, [phase]);
 
-  // Sync canvas to Firebase every 2s — drawer only, use patchGameState to avoid full overwrites
+  // Sync canvas size to wrapper on mount and resize
+  useEffect(() => {
+    const syncSize = () => {
+      const wrap = canvasWrapRef.current;
+      const c    = canvasRef.current;
+      if (!wrap || !c) return;
+      const w = wrap.clientWidth;
+      const h = Math.round(w * (2 / 3)); // 3:2 ratio
+      if (c.width !== w || c.height !== h) {
+        // Preserve drawing by snapshotting first
+        const snap = c.toDataURL();
+        c.width  = w;
+        c.height = h;
+        const ctx = getCtx();
+        if (!ctx) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        if (snap !== 'data:,') {
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+          img.src    = snap;
+        }
+      }
+    };
+    syncSize();
+    window.addEventListener('resize', syncSize);
+    return () => window.removeEventListener('resize', syncSize);
+  }, [phase, gameMode]);
+
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
     syncTimer.current = setInterval(() => {
@@ -147,15 +167,13 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => { if (syncTimer.current) clearInterval(syncTimer.current); };
   }, [gameMode, isDrawer, gameState?.phase]);
 
-  // Guesser: render incoming canvas data
   useEffect(() => {
     if (!isGuesser || !gameState?.canvasData || gameMode !== 'vs-partner') return;
     const img    = new Image();
-    img.onload   = () => { const ctx = getCtx(); if (!ctx) return; ctx.drawImage(img, 0, 0); };
+    img.onload   = () => { const ctx = getCtx(); if (!ctx) return; ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height); };
     img.src      = gameState.canvasData;
   }, [gameState?.canvasData]);
 
-  // ─── Solo timers ───
   useEffect(() => {
     if (gameMode !== 'solo' || phase !== 'drawing') return;
     const t = setInterval(() => {
@@ -172,7 +190,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => clearInterval(t);
   }, [phase, gameMode]);
 
-  // Online drawing timer — ONLY the drawer owns this timer to prevent dual writes
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
     setTimeLeft(DRAW_TIME);
@@ -180,7 +197,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       setTimeLeft(p => {
         if (p <= 1) {
           clearInterval(t);
-          // Flush final canvas state then transition phase
           const c = getCanvas();
           const finalData = c ? c.toDataURL('image/jpeg', 0.4) : '';
           updateGameState({ ...gameState!, phase: 'guessing', canvasData: finalData });
@@ -193,7 +209,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => clearInterval(t);
   }, [gameState?.phase, isDrawer, gameMode]);
 
-  // Online guessing timer — ONLY the guesser owns this timer to prevent dual writes
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isGuesser || gameState?.phase !== 'guessing') return;
     setTimeLeft(GUESS_TIME);
@@ -206,7 +221,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => clearInterval(t);
   }, [gameState?.phase, isGuesser, gameMode]);
 
-  // ─── Solo helpers ───
   const startSolo = () => {
     const available = WORDS.filter(w => !usedWords.includes(w));
     const newWord   = available[Math.floor(Math.random() * available.length)];
@@ -230,21 +244,19 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const nextRound = () => { setRound(r => r + 1); clearCanvas(); startSolo(); setLocalRecorded(false); };
 
-  // ─── Online helpers ───
   const startOnline = useCallback(() => {
     const newWord = [...WORDS].sort(() => Math.random() - 0.5)[0];
     updateGameState({
       ...initialOnline,
       word:         newWord,
       drawerEmail:  userKey ?? '',
-      guesserEmail: '',           // cleared so guest can register
+      guesserEmail: '',
       status:       'active',
       phase:        'drawing',
     });
     setTimeLeft(DRAW_TIME);
   }, [userKey, safeSession]);
 
-  // Host-only: seed the game once room ID is confirmed
   useEffect(() => {
     if (!shouldHostStart || !activeRoomId || !isHost) return;
     startOnline();
@@ -284,7 +296,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     clearCanvas(); setTimeLeft(DRAW_TIME); setGuess('');
   };
 
-  // ─── Draw events ───
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const c = getCanvas()!; const rect = c.getBoundingClientRect();
     const sx = c.width / rect.width, sy = c.height / rect.height;
@@ -331,9 +342,9 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setActiveRoomId(null); setIsHost(false);
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin" size={32} /></div>;
+  if (loading) return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin" size={32} /></div>;
 
-  // ─────────────── LOBBY ───────────────
+  // ─── LOBBY ───
   if (!gameMode || phase === 'idle') return (
     <div className="min-h-screen p-4">
       <div className="max-w-2xl mx-auto">
@@ -364,7 +375,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     </div>
   );
 
-  // ─────────────── ACTIVE GAME ───────────────
+  // ─── ACTIVE GAME ───
   const activePhase     = gameMode === 'vs-partner' ? gameState?.phase : phase;
   const activeWord      = gameMode === 'vs-partner' ? gameState?.word  : word;
   const activeResult    = gameMode === 'vs-partner' ? gameState?.result : result;
@@ -375,124 +386,137 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isOnlineWaiting = gameMode === 'vs-partner' && gameState?.phase === 'waiting';
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
-          <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{activeScore}</span></div>
-        </div>
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-3">
 
-        <div className="flex justify-center gap-2 flex-wrap mb-4">
-          <GameModeBadge mode={gameMode} />
-          {activeRoomId && (
-            <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
-              Room: {activeRoomId}
-            </span>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{activeScore}</span></div>
+          </div>
+
+          <div className="flex justify-center gap-2 flex-wrap mb-3">
+            <GameModeBadge mode={gameMode} />
+            {activeRoomId && (
+              <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
+                Room: {activeRoomId}
+              </span>
+            )}
+          </div>
+
+          {isOnlineWaiting && (
+            <div className="glass-card p-8 text-center">
+              <Loader2 size={32} className="animate-spin text-pink-500 mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-400">Waiting for partner to connect…</p>
+            </div>
+          )}
+
+          {(activePhase === 'drawing' || activePhase === 'guessing') && !isOnlineWaiting && (
+            <div className="space-y-2">
+              {/* Timer bar */}
+              <div className="glass-card p-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-gray-600 dark:text-gray-400 text-sm">
+                    Round {activeRound} ·
+                    {activePhase === 'drawing'
+                      ? (isDrawer || gameMode === 'solo' ? ' 🎨 Draw!' : ' Waiting for drawer…')
+                      : (isGuesser || gameMode === 'solo' ? ' 👀 Guess!' : ' Guesser is typing…')}
+                  </span>
+                  {(isDrawer || gameMode === 'solo') && activePhase === 'drawing' &&
+                    <span className="text-base font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
+                  <span className={`font-bold text-base ${timerColor}`}>{timeLeft}s</span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1.5">
+                  <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${activePhase === 'drawing' ? (timeLeft / DRAW_TIME) * 100 : (timeLeft / GUESS_TIME) * 100}%` }} />
+                </div>
+              </div>
+
+              {/* Canvas — responsive, 3:2 aspect ratio */}
+              <div className="glass-card overflow-hidden">
+                <div ref={canvasWrapRef} className="w-full">
+                  <canvas
+                    ref={canvasRef}
+                    className={`w-full block touch-none ${canDraw ? 'cursor-crosshair' : 'cursor-default'}`}
+                    style={{ background: '#ffffff', display: 'block' }}
+                    onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+                    onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+                  />
+                </div>
+              </div>
+
+              {/* Drawing toolbar */}
+              {canDraw && (
+                <div className="glass-card p-3">
+                  <div className="flex gap-2 mb-2 flex-wrap items-center">
+                    {COLORS.map(c => (
+                      <button key={c} onClick={() => { setColor(c); setErasing(false); }}
+                        className={`w-7 h-7 rounded-full border-2 transition hover:scale-110 ${
+                          color === c && !erasing ? 'border-gray-900 dark:border-white scale-110' : 'border-gray-300'
+                        }`} style={{ backgroundColor: c }} />
+                    ))}
+                    <button onClick={() => setErasing(e => !e)}
+                      className={`p-1.5 rounded-lg transition ${erasing ? 'bg-blue-500 text-white' : 'glass-btn text-gray-700 dark:text-gray-300'}`}>
+                      <Eraser size={14} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Size:</span>
+                    {BRUSH_SIZES.map(s => (
+                      <button key={s} onClick={() => setBrushSize(s)}
+                        className={`rounded-full bg-gray-800 dark:bg-white transition ${brushSize === s ? 'ring-2 ring-pink-500 ring-offset-2' : ''}`}
+                        style={{ width: s * 2 + 6, height: s * 2 + 6 }} />
+                    ))}
+                    <div className="flex-1" />
+                    <button onClick={clearCanvas}     className="p-1.5 text-gray-500 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                    <button onClick={downloadDrawing} className="p-1.5 text-gray-500 hover:text-blue-500 transition"><Download size={16} /></button>
+                  </div>
+                </div>
+              )}
+
+              {/* Guess input */}
+              {(activePhase === 'guessing' && (isGuesser || gameMode === 'solo')) && (
+                <div className="glass-card p-3">
+                  <p className="text-gray-600 dark:text-gray-400 mb-2 text-center text-sm">What did they draw?</p>
+                  <form onSubmit={gameMode === 'solo' ? handleSoloGuess : handleOnlineGuessSubmit} className="flex gap-2">
+                    <input type="text" value={guess} onChange={e => setGuess(e.target.value)}
+                      placeholder="Your guess…" autoFocus
+                      className="flex-1 glass border-0 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
+                    <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition">
+                      Guess!
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Result */}
+          {activePhase === 'result' && (
+            <div className="glass-card p-8 text-center">
+              <div className="text-6xl mb-4">{activeResult === 'correct' ? '🎉' : '⏰'}</div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                {activeResult === 'correct' ? 'Correct!' : "Time's Up!"}
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                The word was: <strong className="text-pink-600 dark:text-pink-400">{activeWord}</strong>
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={gameMode === 'solo' ? nextRound : nextOnlineRound}
+                  className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
+                  <RefreshCw size={18} /> Next Round
+                </button>
+                <button onClick={resetToLobby}
+                  className="glass-btn text-gray-700 dark:text-gray-300 font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
+                  <ArrowLeft size={18} /> Lobby
+                </button>
+              </div>
+            </div>
           )}
         </div>
-
-        {isOnlineWaiting && (
-          <div className="glass-card p-8 text-center">
-            <Loader2 size={32} className="animate-spin text-pink-500 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">Waiting for partner to connect…</p>
-          </div>
-        )}
-
-        {(activePhase === 'drawing' || activePhase === 'guessing') && !isOnlineWaiting && (
-          <div className="space-y-3">
-            <div className="glass-card p-4">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-gray-600 dark:text-gray-400">
-                  Round {activeRound} ·
-                  {activePhase === 'drawing'
-                    ? (isDrawer || gameMode === 'solo' ? ' 🎨 Draw!' : ' Waiting for drawer…')
-                    : (isGuesser || gameMode === 'solo' ? ' 👀 Guess!' : ' Guesser is typing…')}
-                </span>
-                {(isDrawer || gameMode === 'solo') && activePhase === 'drawing' &&
-                  <span className="text-lg font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
-                <span className={`font-bold text-lg ${timerColor}`}>{timeLeft}s</span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-                <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full transition-all"
-                  style={{ width: `${activePhase === 'drawing' ? (timeLeft / DRAW_TIME) * 100 : (timeLeft / GUESS_TIME) * 100}%` }} />
-              </div>
-            </div>
-
-            <div className="glass-card overflow-hidden">
-              <canvas ref={canvasRef} width={600} height={400}
-                className={`w-full touch-none ${canDraw ? 'cursor-crosshair' : 'cursor-default'}`}
-                style={{ background: '#ffffff' }}
-                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
-                onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw} />
-            </div>
-
-            {canDraw && (
-              <div className="glass-card p-4">
-                <div className="flex gap-2 mb-3 flex-wrap items-center">
-                  {COLORS.map(c => (
-                    <button key={c} onClick={() => { setColor(c); setErasing(false); }}
-                      className={`w-8 h-8 rounded-full border-2 transition hover:scale-110 ${
-                        color === c && !erasing ? 'border-gray-900 dark:border-white scale-110' : 'border-gray-300'
-                      }`} style={{ backgroundColor: c }} />
-                  ))}
-                  <button onClick={() => setErasing(e => !e)}
-                    className={`p-2 rounded-lg transition ${erasing ? 'bg-blue-500 text-white' : 'glass-btn text-gray-700 dark:text-gray-300'}`}>
-                    <Eraser size={16} />
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500">Size:</span>
-                  {BRUSH_SIZES.map(s => (
-                    <button key={s} onClick={() => setBrushSize(s)}
-                      className={`rounded-full bg-gray-800 dark:bg-white transition ${brushSize === s ? 'ring-2 ring-pink-500 ring-offset-2' : ''}`}
-                      style={{ width: s * 2 + 8, height: s * 2 + 8 }} />
-                  ))}
-                  <div className="flex-1" />
-                  <button onClick={clearCanvas}     className="p-2 text-gray-500 hover:text-red-500 transition"><Trash2 size={18} /></button>
-                  <button onClick={downloadDrawing} className="p-2 text-gray-500 hover:text-blue-500 transition"><Download size={18} /></button>
-                </div>
-              </div>
-            )}
-
-            {(activePhase === 'guessing' && (isGuesser || gameMode === 'solo')) && (
-              <div className="glass-card p-4">
-                <p className="text-gray-600 dark:text-gray-400 mb-3 text-center">What did they draw?</p>
-                <form onSubmit={gameMode === 'solo' ? handleSoloGuess : handleOnlineGuessSubmit} className="flex gap-2">
-                  <input type="text" value={guess} onChange={e => setGuess(e.target.value)}
-                    placeholder="Your guess…" autoFocus
-                    className="flex-1 glass border-0 rounded-xl px-4 py-3 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
-                  <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-6 py-3 rounded-xl transition">
-                    Guess!
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activePhase === 'result' && (
-          <div className="glass-card p-8 text-center">
-            <div className="text-6xl mb-4">{activeResult === 'correct' ? '🎉' : '⏰'}</div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              {activeResult === 'correct' ? 'Correct!' : "Time's Up!"}
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              The word was: <strong className="text-pink-600 dark:text-pink-400">{activeWord}</strong>
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={gameMode === 'solo' ? nextRound : nextOnlineRound}
-                className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
-                <RefreshCw size={18} /> Next Round
-              </button>
-              <button onClick={resetToLobby}
-                className="glass-btn text-gray-700 dark:text-gray-300 font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
-                <ArrowLeft size={18} /> Lobby
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
