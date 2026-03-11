@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHeartboundPresence } from '@/hooks/firebase/useHeartboundSync';
@@ -41,6 +41,7 @@ export const HeartboundAdventures: React.FC = () => {
   const { user }  = useAuth();
   const myEmail   = user?.email ?? '';
   const myColor   = SPRITE_COLOR[myEmail] ?? '#a78bfa';
+  const meadowRef = useRef<HTMLDivElement>(null);
 
   const [view,         setView]         = useState<View>('hub');
   const [activeIsland, setActiveIsland] = useState(0);
@@ -50,15 +51,22 @@ export const HeartboundAdventures: React.FC = () => {
   const allPlayers     = useHeartboundPresence();
   const partnerPlayers = allPlayers.filter(p => p.email !== myEmail);
 
-  const handleCollect = useCallback((total: number) => {
-    setFlowerCount(total);
+  const handleCollect = useCallback((total: number) => setFlowerCount(total), []);
+  const handleBondXP  = useCallback((xp: number) => setBondXP(prev => Math.min(100, prev + xp)), []);
+
+  // Enter meadow: switch view AND request fullscreen (user gesture = button click)
+  const enterMeadow = useCallback(() => {
+    setView('meadow');
+    // Small timeout so the meadow div mounts first
+    setTimeout(() => {
+      const el = document.querySelector('[data-meadow-container]') as HTMLElement | null;
+      if (el && !document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      }
+    }, 150);
   }, []);
 
-  const handleBondXP = useCallback((xp: number) => {
-    setBondXP(prev => Math.min(100, prev + xp));
-  }, []);
-
-  // ── MEADOW VIEW ──────────────────────────────────────────────────
+  // ── MEADOW VIEW ───────────────────────────────────────────────────
   if (view === 'meadow') {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col">
@@ -77,8 +85,7 @@ export const HeartboundAdventures: React.FC = () => {
             <span>💕 {bondXP} XP</span>
           </div>
         </div>
-
-        <div className="flex-1">
+        <div className="flex-1" data-meadow-container>
           <MeadowHaven3D
             myColor={myColor}
             onBack={() => setView('hub')}
@@ -91,7 +98,7 @@ export const HeartboundAdventures: React.FC = () => {
     );
   }
 
-  // ── HUB VIEW ─────────────────────────────────────────────────────
+  // ── HUB VIEW ──────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-purple-50 dark:from-pink-950 dark:via-rose-950 dark:to-purple-950">
 
@@ -101,7 +108,6 @@ export const HeartboundAdventures: React.FC = () => {
         </Link>
       </div>
 
-      {/* Hero */}
       <div className="max-w-6xl mx-auto px-4 py-10 text-center">
         <div className="text-8xl mb-4 inline-block animate-bounce">🌸</div>
         <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-pink-500 via-rose-400 to-purple-500 bg-clip-text text-transparent mb-4">
@@ -111,7 +117,6 @@ export const HeartboundAdventures: React.FC = () => {
           A cozy 3D co-op RPG. Explore magical islands, meet friendly NPCs, collect flowers, and grow your Bond from 1 to 100.
         </p>
 
-        {/* Partner presence */}
         {partnerPlayers.length > 0 && (
           <div className="max-w-sm mx-auto mb-6">
             {partnerPlayers.map(p => (
@@ -135,10 +140,10 @@ export const HeartboundAdventures: React.FC = () => {
 
         <div className="flex flex-wrap justify-center gap-4 mb-3">
           <button
-            onClick={() => setView('meadow')}
+            onClick={enterMeadow}
             className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold text-lg px-10 py-4 rounded-2xl shadow-xl hover:shadow-pink-300/50 hover:scale-105 transition-all"
           >
-            <Heart size={20} fill="currentColor" /> Enter Meadow Haven (3D)
+            <Heart size={20} fill="currentColor" /> Enter Meadow Haven 🌿
           </button>
         </div>
         <p className="text-sm text-gray-400">
@@ -149,7 +154,6 @@ export const HeartboundAdventures: React.FC = () => {
         </p>
       </div>
 
-      {/* NPC teaser */}
       <div className="max-w-6xl mx-auto px-4 pb-6">
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-md">
           <h3 className="font-bold text-gray-800 dark:text-white mb-3 text-lg">🐾 Meadow Haven Residents</h3>
@@ -173,7 +177,6 @@ export const HeartboundAdventures: React.FC = () => {
         </div>
       </div>
 
-      {/* Core Pillars */}
       <div className="max-w-6xl mx-auto px-4 pb-16">
         <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-8">Core Pillars</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -192,7 +195,6 @@ export const HeartboundAdventures: React.FC = () => {
         </div>
       </div>
 
-      {/* Island Explorer */}
       <div className="bg-white dark:bg-gray-900 py-16">
         <div className="max-w-6xl mx-auto px-4">
           <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-2">🗺️ Island Explorer</h2>
@@ -225,10 +227,8 @@ export const HeartboundAdventures: React.FC = () => {
               }
             </div>
             {activeIsland === 0 && (
-              <button
-                onClick={() => setView('meadow')}
-                className="mt-5 block w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition"
-              >
+              <button onClick={enterMeadow}
+                className="mt-5 block w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
                 🌿 Enter Meadow Haven (3D)
               </button>
             )}
@@ -236,7 +236,6 @@ export const HeartboundAdventures: React.FC = () => {
         </div>
       </div>
 
-      {/* Bond Milestones */}
       <div className="max-w-6xl mx-auto px-4 py-16">
         <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-2">💕 Bond Level Milestones</h2>
         <p className="text-center text-gray-500 dark:text-gray-400 mb-10">Grow together from Wanderers to Eternal Pair</p>
@@ -262,7 +261,6 @@ export const HeartboundAdventures: React.FC = () => {
         </div>
       </div>
 
-      {/* Inspired by */}
       <div className="bg-gradient-to-r from-pink-500 to-purple-600 py-12">
         <div className="max-w-5xl mx-auto px-4 grid md:grid-cols-2 gap-10 text-white">
           <div>
@@ -283,14 +281,14 @@ export const HeartboundAdventures: React.FC = () => {
             <h3 className="text-xl font-bold mb-4">🗓️ Development Roadmap</h3>
             <div className="space-y-3">
               {[
-                { phase: '1', title: 'Meadow Haven 3D (Live!)', desc: 'Three.js world, atmospheric sky, NPCs, co-op sync, flowers', done: true },
-                { phase: '2', title: 'Home Builder',            desc: 'Shared 3D interior, drag-drop furniture, Firebase-persisted layout', done: false },
-                { phase: '3', title: 'More Islands',            desc: 'Starlight Shore + island-specific creatures and quests', done: false },
+                { phase: '✓', title: 'Phase 7A: Controls + Menu (Live!)', desc: 'Fixed controls, auto-fullscreen, in-game menu (Inventory / Profile / Controls / Settings)', done: true },
+                { phase: '2', title: 'Phase 7C: Realistic 3D World',      desc: 'PBR terrain, real trees, animated pond, firefly particles, Environment map', done: false },
+                { phase: '3', title: 'Phase 7D: Audio Atmosphere',         desc: 'Ambient meadow loop, footsteps, NPC chimes, flower collect sound', done: false },
               ].map(s => (
                 <div key={s.phase} className={`rounded-xl p-4 flex items-start gap-4 ${s.done ? 'bg-white/20' : 'bg-white/10'}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
                     s.done ? 'bg-yellow-400 text-gray-900' : 'bg-white/20 text-white'
-                  }`}>{s.done ? '✓' : s.phase}</div>
+                  }`}>{s.phase}</div>
                   <div><p className="font-semibold">{s.title}</p><p className="text-sm text-pink-100">{s.desc}</p></div>
                 </div>
               ))}
