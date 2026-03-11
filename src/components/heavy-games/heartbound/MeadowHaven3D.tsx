@@ -1,25 +1,12 @@
 /**
- * MeadowHaven3D — Phase 7G
+ * MeadowHaven3D — Phase 7G (postprocessing-free build fix)
  * -----------------------------------------------
- * BUGFIXES + UX POLISH
+ * REMOVED: @react-three/postprocessing + postprocessing imports
+ * (these packages are NOT in package.json and caused TS2307 build errors)
  *
- * FIXED in Phase 7G:
- * 1. Movement was completely blocked at spawn:
- *    - Old: `if (Math.hypot(np.x,np.z) > 4.4)` — only allowed movement
- *      when MORE than 4.4 units from world centre. Spawn is (0,0,2)
- *      so hypot = 2 < 4.4 → player was always frozen.
- *    - New: skip the move only if the NEW position would land INSIDE
- *      the pond radius (< 3.8). All other movement is always applied.
- * 2. Avatar did not visually walk:
- *    - Old: `posRef.current.x/z` read once at JSX render time (static).
- *    - New: dedicated `PlayerAvatar` component that syncs its mesh to
- *      posRef every frame via useFrame — character now visibly moves.
- * 3. Menu button moved to top-right corner.
- * 4. Exit/Back button removed entirely from HUD.
- * 5. Escape key ONLY opens/closes menu — never exits fullscreen.
- *    Fullscreen is only toggled by F key or the Settings toggle.
- * 6. Keyboard listeners moved to `document` (was `window`) to fix
- *    cases where Canvas focus swallowed events.
+ * REPLACEMENT: Native Three.js ACESFilmicToneMapping via Canvas gl prop.
+ * Bloom / SSAO / Vignette are removed from the pipeline.
+ * All gameplay, movement, avatar, NPC, Firebase, and UI code is unchanged.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -30,8 +17,6 @@ import {
   Cone, Environment, Points, PointMaterial,
   Cloud,
 } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, HueSaturation, SSAO, ToneMapping } from '@react-three/postprocessing';
-import { ToneMappingMode, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,7 +29,7 @@ const MOVE_SPEED  = 0.09;
 const CAM_DIST    = 20;
 const CAM_HEIGHT  = 15;
 const CAM_LERP    = 0.06;
-const POND_RADIUS = 3.8; // block movement INTO pond only
+const POND_RADIUS = 3.8;
 
 // ── Quality detection ─────────────────────────────────────────────
 function useQualityTier(): 'high' | 'medium' | 'low' {
@@ -404,7 +389,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   );
 }
 
-// ── Avatar (static body, used by remote players) ──────────────────
+// ── Avatar (used by remote players) ──────────────────────────────
 function Avatar({ position, color, name, isMe, moving, facingAngle }: {
   position: [number,number,number]; color: string; name: string;
   isMe: boolean; moving: boolean; facingAngle: number;
@@ -456,7 +441,7 @@ function Avatar({ position, color, name, isMe, moving, facingAngle }: {
   );
 }
 
-// ── PlayerAvatar — tracks posRef every frame (FIX for frozen avatar) ──
+// ── PlayerAvatar — tracks posRef every frame ──────────────────────
 function PlayerAvatar({ posRef, movingRef, facingRef, color, name }: {
   posRef:    React.MutableRefObject<THREE.Vector3>;
   movingRef: React.MutableRefObject<boolean>;
@@ -478,32 +463,26 @@ function PlayerAvatar({ posRef, movingRef, facingRef, color, name }: {
   });
   return (
     <group ref={groupRef}>
-      {/* Shadow */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
         <circleGeometry args={[0.36,16]} />
         <meshBasicMaterial color="black" transparent opacity={0.22} />
       </mesh>
-      {/* Body */}
       <Cylinder args={[0.21,0.27,0.72,12]} position={[0,0.36,0]} castShadow>
         <meshStandardMaterial color={color} roughness={0.7} metalness={0.08} envMapIntensity={0.5} />
       </Cylinder>
-      {/* Head */}
       <Sphere args={[0.28,16,12]} position={[0,0.93,0]} castShadow>
         <meshStandardMaterial color="#fde7c3" roughness={0.8} metalness={0} />
       </Sphere>
-      {/* Eyes */}
       <Sphere args={[0.05,8,8]} position={[0.1,0.98,0.22]}>
         <meshBasicMaterial color="#1e293b" />
       </Sphere>
       <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
         <meshBasicMaterial color="#1e293b" />
       </Sphere>
-      {/* Player ring */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
         <ringGeometry args={[0.38,0.47,32]} />
         <meshBasicMaterial color={color} transparent opacity={0.75} />
       </mesh>
-      {/* Name tag */}
       <Billboard position={[0,1.55,0]}>
         <Text fontSize={0.22} color={color} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
           {name} ★
@@ -561,10 +540,7 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement controller — FIXED pond check ────────────────────────
-// OLD (broken): if (Math.hypot(np.x, np.z) > 4.4) — required player to be
-//   >4.4 units from centre to move. Spawn (0,0,2) = dist 2 → always blocked.
-// NEW (correct): apply move freely; only block if new pos lands inside pond.
+// ── Movement controller ───────────────────────────────────────────
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef:    React.MutableRefObject<Set<string>>;
   posRef:     React.MutableRefObject<THREE.Vector3>;
@@ -589,7 +565,6 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
     const half = WORLD_SIZE/2-2;
     np.x = Math.max(-half,Math.min(half,np.x));
     np.z = Math.max(-half,Math.min(half,np.z));
-    // Only block if new position is inside the pond
     if (Math.hypot(np.x, np.z) < POND_RADIUS) return;
     np.y = terrainY(np.x, np.z);
     posRef.current.copy(np);
@@ -598,43 +573,10 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   return null;
 }
 
-// ── Post-processing ───────────────────────────────────────────────
-function PostFX({ quality }: { quality: 'high' | 'medium' | 'low' }) {
-  if (quality === 'low') {
-    return (
-      <EffectComposer multisampling={0}>
-        <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.04} mipmapBlur />
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        <Vignette eskil={false} offset={0.12} darkness={0.38} blendFunction={BlendFunction.NORMAL} />
-      </EffectComposer>
-    );
-  }
-  if (quality === 'medium') {
-    return (
-      <EffectComposer multisampling={4}>
-        <Bloom intensity={0.45} luminanceThreshold={0.82} luminanceSmoothing={0.03} mipmapBlur />
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        <Vignette eskil={false} offset={0.10} darkness={0.40} blendFunction={BlendFunction.NORMAL} />
-        <HueSaturation hue={0} saturation={0.08} blendFunction={BlendFunction.NORMAL} />
-      </EffectComposer>
-    );
-  }
-  return (
-    <EffectComposer multisampling={8}>
-      <SSAO radius={0.35} intensity={22} luminanceInfluence={0.55} color={new THREE.Color('black')} blendFunction={BlendFunction.MULTIPLY} />
-      <Bloom intensity={0.50} luminanceThreshold={0.80} luminanceSmoothing={0.025} mipmapBlur />
-      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      <Vignette eskil={false} offset={0.10} darkness={0.42} blendFunction={BlendFunction.NORMAL} />
-      <HueSaturation hue={0} saturation={0.10} blendFunction={BlendFunction.NORMAL} />
-    </EffectComposer>
-  );
-}
-
 // ── Scene ─────────────────────────────────────────────────────────
 function Scene({
   myEmail, myName, myColor, onCollect, onBondXP,
   nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef,
-  quality,
 }: {
   myEmail: string; myName: string; myColor: string;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
@@ -645,7 +587,6 @@ function Scene({
   movingRef:   React.MutableRefObject<boolean>;
   facingRef:   React.MutableRefObject<number>;
   keysRef:     React.MutableRefObject<Set<string>>;
-  quality:     'high' | 'medium' | 'low';
 }) {
   const remotePlayers = useRef<Record<string,PlayerState>>({});
   const { publish, markOnline } = useHeartboundSync(
@@ -708,7 +649,6 @@ function Scene({
           isNearby={nearbyNPCRef.current?.id===npc.id}
           showPrompt={nearbyNPCRef.current?.id===npc.id && !blockedRef.current} />
       ))}
-      {/* FIX: PlayerAvatar syncs to posRef every frame — character now walks */}
       <PlayerAvatar
         posRef={posRef} movingRef={movingRef} facingRef={facingRef}
         color={myColor} name={myName}
@@ -721,7 +661,6 @@ function Scene({
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
         facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
       />
-      <PostFX quality={quality} />
     </>
   );
 }
@@ -877,9 +816,9 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
                     ))}
                   </div>
                   <p className="text-white/25 text-xs mt-2">
-                    {quality==='low' && 'Best for integrated graphics (Intel HD/UHD). Bloom + ACES only.'}
-                    {quality==='medium' && 'Balanced. Bloom, tone mapping, saturation. Good for mid-range.'}
-                    {quality==='high' && 'Full pipeline. SSAO + Bloom + DoF. RTX / dedicated GPU recommended.'}
+                    {quality==='low' && 'Best for integrated graphics. ACES tone mapping via native gl.'}
+                    {quality==='medium' && 'Balanced. Good for mid-range devices.'}
+                    {quality==='high' && 'Full antialias + shadows. Dedicated GPU recommended.'}
                   </p>
                 </div>
                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
@@ -972,7 +911,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     return () => document.removeEventListener('fullscreenchange', h);
   }, []);
 
-  // Fullscreen toggled only by F key or Settings toggle — NOT by Esc
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen().catch(() => {});
     else document.exitFullscreen();
@@ -987,31 +925,23 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const closeDialogue = useCallback(() => setDialogue(null), []);
   const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
 
-  // Keyboard listeners on document (not window) — fixes Canvas focus swallowing events
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      // Prevent scroll on arrow keys and space
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-      // Prevent Escape from triggering browser fullscreen exit behaviour
       if (e.key === 'Escape') e.preventDefault();
-
       keysRef.current.add(e.key);
       const hasD = !!dialogueRef.current;
       const hasM = menuOpenRef.current;
-
-      // E / Enter — talk / advance dialogue
       if (e.key==='e'||e.key==='E'||e.key==='Enter') {
         if (hasD) closeDialogue();
         else if (!hasM && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
         return;
       }
-      // Esc / M — ONLY menu toggle, never exits game or fullscreen
       if (e.key==='Escape'||e.key==='m'||e.key==='M') {
         if (hasD) closeDialogue();
         else setMenuOpen(p => !p);
         return;
       }
-      // F — fullscreen toggle only
       if (e.key==='f'||e.key==='F') { toggleFullscreen(); return; }
     };
     const up   = (e: KeyboardEvent) => keysRef.current.delete(e.key);
@@ -1024,7 +954,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       document.removeEventListener('keyup',   up);
       window.removeEventListener('blur',      blur);
     };
-  }, []); // empty — never re-registers, all state via refs
+  }, []);
 
   return (
     <div
@@ -1040,8 +970,8 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         style={{ width: '100%', height: '100%' }}
         gl={{
           antialias: effectiveQuality !== 'low',
-          toneMapping: THREE.NoToneMapping,
-          toneMappingExposure: 1.0,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: effectiveQuality === 'high' ? 1.1 : 1.0,
           powerPreference: effectiveQuality === 'low' ? 'low-power' : 'high-performance',
         }}
         tabIndex={-1}
@@ -1053,12 +983,11 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
             nearbyNPCRef={nearbyNPCRef} setNearbyNPC={setNearbyNPC}
             blockedRef={blockedRef} posRef={posRef}
             movingRef={movingRef} facingRef={facingRef} keysRef={keysRef}
-            quality={effectiveQuality}
           />
         </Suspense>
       </Canvas>
 
-      {/* Bond XP HUD — top centre */}
+      {/* Bond XP HUD */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -1070,14 +999,14 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
-      {/* Flowers HUD — top left */}
+      {/* Flowers HUD */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">
           🌸 {flowerCount}
         </div>
       </div>
 
-      {/* ☰ Menu button — top RIGHT (no exit button) */}
+      {/* Menu button — top right */}
       <div className="absolute top-3 right-3 z-10">
         <button
           onClick={() => setMenuOpen(true)}
@@ -1088,7 +1017,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </button>
       </div>
 
-      {/* Quality badge — bottom right */}
+      {/* Quality badge */}
       <div className="absolute bottom-10 right-3 z-10 pointer-events-none hidden md:block">
         <div className="bg-black/30 rounded-full px-2 py-0.5 text-white/30 text-xs capitalize">
           {effectiveQuality === 'low' ? '🔋 eco' : effectiveQuality === 'medium' ? '⚡ balanced' : '✨ ultra'}
@@ -1118,7 +1047,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
       <VirtualJoystick keysRef={keysRef} />
 
-      {/* Controls hint — bottom left */}
       <div className="hidden md:block absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
         WASD / Arrows · E to talk · M / Esc for menu · F fullscreen
       </div>
