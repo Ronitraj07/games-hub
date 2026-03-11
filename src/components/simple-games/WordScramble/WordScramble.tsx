@@ -74,7 +74,6 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     }
   }, [location.search, activeRoomId]);
 
-  // ─── Solo/AI state ───
   const [words]    = useState(() => [...WORD_LIST].sort(() => Math.random() - .5).slice(0, TOTAL));
   const [curIdx,     setCurIdx]    = useState(0);
   const [scrambled,  setScrambled] = useState('');
@@ -91,10 +90,8 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const localRecordedRef = useRef(false);
   const onlineRecordedRef = useRef(false);
 
-  // ─── Online scramble — stored in state so it's stable per word ───
   const [onlineScrambled, setOnlineScrambled] = useState('');
 
-  // ─── Online state ───
   const safeSession = activeRoomId
     ? `wordscramble-room-${sanitizeFirebasePath(activeRoomId)}`
     : sessionId
@@ -112,12 +109,10 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const isP1 = gameState?.p1Email === userKey;
   const curOnlineWord = gameState?.words?.[gameState.current];
 
-  // Re-scramble when online word changes
   useEffect(() => {
     if (curOnlineWord?.word) setOnlineScrambled(scramble(curOnlineWord.word));
   }, [curOnlineWord?.word]);
 
-  // ─── Record online result (fix: proper dep array) ───
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     if (onlineRecordedRef.current) return;
@@ -140,7 +135,6 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
 
   useEffect(() => { if (gameMode && gameMode !== 'vs-partner') loadWord(0); }, [gameMode, loadWord]);
 
-  // Local timer
   useEffect(() => {
     if (!gameMode || gameMode === 'vs-partner' || gameOver) return;
     const t = setInterval(() => {
@@ -153,7 +147,6 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curIdx, gameMode, gameOver]);
 
-  // AI timer
   useEffect(() => {
     if (gameMode !== 'vs-ai' || feedback || gameOver) return;
     const t = setTimeout(() => { setAiScore(s => s + 10); setAiSolved(true); }, AI_DELAY[aiDiff]);
@@ -179,7 +172,6 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     setTimeout(() => handleNext(ok), 600);
   };
 
-  // Record local/AI result
   useEffect(() => {
     if (!gameOver || localRecordedRef.current || !userKey || gameMode === 'vs-partner') return;
     localRecordedRef.current = true;
@@ -194,7 +186,6 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
 
-  // Online submit
   const handleOnlineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!gameState || gameState.status !== 'active' || !curOnlineWord) return;
@@ -228,36 +219,40 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
 
   const timerColor = timeLeft > 15 ? 'text-green-500' : timeLeft > 8 ? 'text-yellow-500' : 'text-red-500';
 
+  // ── LOBBY ──
   if (!gameMode) return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition"><ArrowLeft size={20} /> Back</Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
-          <div className="w-10" />
-        </div>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <GameLobby
-            gameName="Word Scramble" gameIcon="🔤"
-            gradient="from-pink-500 to-purple-500"
-            description="Unscramble romantic words — race to solve first!"
-            supportsSolo supportsAI
-            aiLabels={{ easy: 'solves after ~22s', medium: 'solves after ~13s', hard: 'solves in ~4s' }}
-            gameType="WordScramble"
-            onStartSolo={() => { setGameMode('solo'); loadWord(0); }}
-            onStartVsAI={(d) => { setAiDiff(d); setGameMode('vs-ai'); }}
-            onStartVsPartner={(roomId, hostFlag) => {
-              setGameMode('vs-partner');
-              setActiveRoomId(roomId);
-              setIsHost(hostFlag);
-              if (hostFlag) setShouldHostStart(true);
-            }}
-          />
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <div className="flex items-center justify-between mb-6">
+            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition"><ArrowLeft size={20} /> Back</Link>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
+            <div className="w-10" />
+          </div>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <GameLobby
+              gameName="Word Scramble" gameIcon="🔤"
+              gradient="from-pink-500 to-purple-500"
+              description="Unscramble romantic words — race to solve first!"
+              supportsSolo supportsAI
+              aiLabels={{ easy: 'solves after ~22s', medium: 'solves after ~13s', hard: 'solves in ~4s' }}
+              gameType="WordScramble"
+              onStartSolo={() => { setGameMode('solo'); loadWord(0); }}
+              onStartVsAI={(d) => { setAiDiff(d); setGameMode('vs-ai'); }}
+              onStartVsPartner={(roomId, hostFlag) => {
+                setGameMode('vs-partner');
+                setActiveRoomId(roomId);
+                setIsHost(hostFlag);
+                if (hostFlag) setShouldHostStart(true);
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 
+  // ── GAME OVER ──
   if (gameOver || gameState?.status === 'finished') {
     const isOnline  = gameMode === 'vs-partner';
     const myFinal   = isOnline ? (isP1 ? gameState!.p1Score : gameState!.p2Score) : score;
@@ -265,7 +260,7 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
     const maxScore  = TOTAL * 20;
     const pct       = (myFinal / maxScore) * 100;
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="h-screen flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">{pct >= 80 ? '🏆' : pct >= 50 ? '⭐' : '💪'}</div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Game Over!</h2>
@@ -301,105 +296,120 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const activeWord       = isOnlineActive ? curOnlineWord : words[curIdx];
   const activeScrambled  = isOnlineActive ? onlineScrambled : scrambled;
 
+  // ── ACTIVE GAME ──
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={() => { setGameMode(null); setActiveRoomId(null); setIsHost(false); }}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition">
-            <ArrowLeft size={20} /> Back
-          </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
-          <div className="flex items-center gap-1 text-yellow-600">
-            <Trophy size={18} />
-            <span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span>
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto p-4 pb-8">
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => { setGameMode(null); setActiveRoomId(null); setIsHost(false); }}
+              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 transition">
+              <ArrowLeft size={20} /> Back
+            </button>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">🔤 Word Scramble</h1>
+            <div className="flex items-center gap-1 text-yellow-600">
+              <Trophy size={18} />
+              <span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex justify-center mb-4">
-          <GameModeBadge mode={gameMode} difficulty={gameMode === 'vs-ai' ? aiDiff : undefined} />
-        </div>
-
-        {gameMode === 'vs-ai' && (
-          <div className="glass-card p-3 mb-4 flex justify-around text-sm">
-            <span>You: <strong>{score}</strong></span>
-            <span>🤖 AI: <strong className={aiSolved ? 'text-red-500' : ''}>{aiScore}</strong></span>
-            {aiSolved && <span className="text-xs text-red-400">AI solved it!</span>}
+          <div className="flex justify-center mb-3">
+            <GameModeBadge mode={gameMode} difficulty={gameMode === 'vs-ai' ? aiDiff : undefined} />
           </div>
-        )}
 
-        {isOnlineActive && (
-          <div className="glass-card p-3 mb-4 flex justify-around text-sm">
-            <span>You: <strong>{isP1 ? gameState?.p1Score : gameState?.p2Score}</strong></span>
-            <span>Partner: <strong>{isP1 ? gameState?.p2Score : gameState?.p1Score}</strong></span>
-            <span className="text-xs text-gray-400">Word {(gameState?.current ?? 0) + 1}/{TOTAL}</span>
-          </div>
-        )}
+          {/* VS AI scoreboard */}
+          {gameMode === 'vs-ai' && (
+            <div className="glass-card p-3 mb-3 flex justify-around text-sm">
+              <span>You: <strong>{score}</strong></span>
+              <span>🤖 AI: <strong className={aiSolved ? 'text-red-500' : ''}>{aiScore}</strong></span>
+              {aiSolved && <span className="text-xs text-red-400">AI solved it!</span>}
+            </div>
+          )}
 
-        <div className="glass-card p-6 mb-4">
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-sm text-gray-500">Round {round}/{TOTAL}</span>
+          {/* Online scoreboard */}
+          {isOnlineActive && (
+            <div className="glass-card p-3 mb-3 flex justify-around text-sm">
+              <span>You: <strong>{isP1 ? gameState?.p1Score : gameState?.p2Score}</strong></span>
+              <span>Partner: <strong>{isP1 ? gameState?.p2Score : gameState?.p1Score}</strong></span>
+              <span className="text-xs text-gray-400">Word {(gameState?.current ?? 0) + 1}/{TOTAL}</span>
+            </div>
+          )}
+
+          {/* Main card */}
+          <div className="glass-card p-5">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-sm text-gray-500">Round {round}/{TOTAL}</span>
+              {!isOnlineActive && (
+                <div className={`flex items-center gap-1 font-bold text-lg ${timerColor}`}>
+                  <Clock size={18} />{timeLeft}s
+                </div>
+              )}
+              {streak >= 2 && (
+                <div className="flex items-center gap-1 text-orange-500">
+                  <Star size={16} fill="currentColor" />
+                  <span className="text-sm font-bold">{streak}x streak!</span>
+                </div>
+              )}
+            </div>
+
+            {/* Timer bar */}
             {!isOnlineActive && (
-              <div className={`flex items-center gap-1 font-bold text-lg ${timerColor}`}>
-                <Clock size={18} />{timeLeft}s
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-4">
+                <div className="bg-gradient-to-r from-pink-500 to-purple-500 h-1.5 rounded-full transition-all"
+                  style={{ width: `${(timeLeft / 30) * 100}%` }} />
               </div>
             )}
-            {streak >= 2 && (
-              <div className="flex items-center gap-1 text-orange-500">
-                <Star size={16} fill="currentColor" />
-                <span className="text-sm font-bold">{streak}x streak!</span>
-              </div>
-            )}
-          </div>
 
-          {!isOnlineActive && (
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-6">
-              <div className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all"
-                style={{ width: `${(timeLeft / 30) * 100}%` }} />
-            </div>
-          )}
-
-          <div className={`text-center mb-6 p-6 rounded-xl transition-all ${
-            feedback === 'correct' ? 'bg-green-50 dark:bg-green-900/30'
-            : feedback === 'wrong' ? 'bg-red-50 dark:bg-red-900/30'
-            : 'bg-pink-50/50 dark:bg-pink-900/10'
-          }`}>
-            <p className="text-sm text-gray-500 mb-2">Unscramble this word:</p>
-            <p className="text-5xl font-bold tracking-widest bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
-              {activeScrambled.split('').join(' ')}
-            </p>
-            {feedback && !isOnlineActive && (
-              <p className={`mt-3 font-semibold ${feedback === 'correct' ? 'text-green-600' : 'text-red-600'}`}>
-                {feedback === 'correct' ? '✅ Correct!' : `❌ It was: ${words[curIdx].word}`}
+            {/* Scrambled word — reduced from text-5xl to text-3xl/4xl for compact fit */}
+            <div className={`text-center mb-5 p-5 rounded-xl transition-all ${
+              feedback === 'correct' ? 'bg-green-50 dark:bg-green-900/30'
+              : feedback === 'wrong' ? 'bg-red-50 dark:bg-red-900/30'
+              : 'bg-pink-50/50 dark:bg-pink-900/10'
+            }`}>
+              <p className="text-sm text-gray-500 mb-2">Unscramble this word:</p>
+              <p className="text-3xl sm:text-4xl font-bold tracking-widest bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
+                {activeScrambled.split('').join(' ')}
               </p>
+              {feedback && !isOnlineActive && (
+                <p className={`mt-2 font-semibold text-sm ${
+                  feedback === 'correct' ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {feedback === 'correct' ? '✅ Correct!' : `❌ It was: ${words[curIdx].word}`}
+                </p>
+              )}
+            </div>
+
+            {/* Hint */}
+            {showHint && activeWord && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 rounded-lg p-3 mb-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-300">💡 {activeWord.hint}</p>
+              </div>
+            )}
+
+            {/* Input */}
+            <form onSubmit={isOnlineActive ? handleOnlineSubmit : handleSubmit} className="flex gap-2">
+              <input type="text" value={input} onChange={e => setInput(e.target.value.toUpperCase())}
+                placeholder="Type your answer…"
+                className="flex-1 glass border-0 rounded-xl px-4 py-2.5 text-base font-semibold uppercase tracking-widest text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" autoFocus />
+              <button type="submit"
+                className="bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold px-5 py-2.5 rounded-xl transition">Go!</button>
+            </form>
+
+            {!isOnlineActive && (
+              <button onClick={() => setShowHint(true)}
+                className="w-full mt-2 text-sm text-gray-500 hover:text-pink-600 transition">💡 Show Hint</button>
+            )}
+
+            {isOnlineActive && (isP1 ? gameState?.p1Done : gameState?.p2Done) && (
+              <div className="flex items-center justify-center gap-2 mt-3 text-purple-500">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-sm">Waiting for partner…</span>
+              </div>
             )}
           </div>
 
-          {showHint && activeWord && (
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">💡 Hint: {activeWord.hint}</p>
-            </div>
-          )}
-
-          <form onSubmit={isOnlineActive ? handleOnlineSubmit : handleSubmit} className="flex gap-2">
-            <input type="text" value={input} onChange={e => setInput(e.target.value.toUpperCase())}
-              placeholder="Type your answer…"
-              className="flex-1 glass border-0 rounded-xl px-4 py-3 text-lg font-semibold uppercase tracking-widest text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" autoFocus />
-            <button type="submit"
-              className="bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold px-6 py-3 rounded-xl transition">Go!</button>
-          </form>
-
-          {!isOnlineActive && (
-            <button onClick={() => setShowHint(true)}
-              className="w-full mt-3 text-sm text-gray-500 hover:text-pink-600 transition">💡 Show Hint</button>
-          )}
-
-          {isOnlineActive && (isP1 ? gameState?.p1Done : gameState?.p2Done) && (
-            <div className="flex items-center justify-center gap-2 mt-4 text-purple-500">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-sm">Waiting for partner…</span>
-            </div>
-          )}
         </div>
       </div>
     </div>

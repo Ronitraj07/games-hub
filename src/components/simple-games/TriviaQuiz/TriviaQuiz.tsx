@@ -103,12 +103,10 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
   const [category, setCategory] = useState<string>('⭐ All');
 
-  // Room-based online state
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isHost,       setIsHost]       = useState(false);
   const [shouldHostStart, setShouldHostStart] = useState(false);
 
-  // Allow direct invite links
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room   = params.get('room');
@@ -120,7 +118,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }
   }, [location.search, activeRoomId]);
 
-  // ─ Custom questions from Firebase ─
   const customDbPath = userKey
     ? `trivia-custom/${sanitizeFirebasePath(userKey)}`
     : null;
@@ -142,7 +139,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => off(r, 'value', unsub);
   }, [customDbPath]);
 
-  // ─ Builder state ─
   const [draft,     setDraft]     = useState<Omit<TriviaQuestion, 'id' | 'custom'>>(BLANK_DRAFT());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState('');
@@ -168,7 +164,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('builder');
   };
 
-  // ─ Question pool ─
   const allCategories = [
     ...BUILTIN_CATEGORIES,
     ...(customQs.length > 0 ? [CUSTOM_CATEGORY] : []),
@@ -183,7 +178,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return [...pool].sort(() => Math.random() - 0.5).slice(0, TOTAL_Q);
   }, [category, customQs]);
 
-  // ─ Solo game state ─
   const [activeQ,    setActiveQ]    = useState<TriviaQuestion[]>([]);
   const [current,    setCurrent]    = useState(0);
   const [selected,   setSelected]   = useState<number | null>(null);
@@ -193,7 +187,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [showResult, setShowResult] = useState(false);
   const [localRecorded, setLocalRecorded] = useState(false);
 
-  // ─ Online state ─
   const safeSession = activeRoomId
     ? `trivia-room-${sanitizeFirebasePath(activeRoomId)}`
     : sessionId
@@ -212,7 +205,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isP1       = gameState?.p1Email === userKey;
   const curOnlineQ = gameState?.questions?.[gameState.current];
 
-  // ─ Record online result when finished (once) ─
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     const myScore  = isP1 ? gameState.p1Score : gameState.p2Score;
@@ -223,7 +215,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded, userKey, isP1, recordGame, updateGameState]);
 
-  // ─ Solo timer ─
   useEffect(() => {
     if (view !== 'game' || gameMode !== 'solo' || showResult) return;
     const t = setInterval(() => {
@@ -248,7 +239,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }, 1200);
   }, [selected, showResult, current, activeQ, timeLeft]);
 
-  // ─ Record solo result when results screen shown ─
   useEffect(() => {
     if (view !== 'results' || localRecorded || !userKey || gameMode !== 'solo') return;
     setLocalRecorded(true);
@@ -278,7 +268,6 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setView('game');
   };
 
-  // Host-only seed after room is ready
   useEffect(() => {
     if (!shouldHostStart || !activeRoomId || !isHost) return;
     startOnline();
@@ -298,157 +287,161 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   // ───────────────── VIEW: BUILDER ─────────────────
   if (view === 'builder') return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={() => { setView('lobby'); setDraft(BLANK_DRAFT()); setEditingId(null); setSaveError(''); }}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20}/> Back
-          </button>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
-            {editingId ? 'Edit Question' : 'New Question'}
-          </h1>
-          <div className="w-10"/>
-        </div>
-
-        <div className="glass-card p-5 mb-5">
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Question</label>
-          <textarea rows={3} value={draft.q}
-            onChange={e => setDraft(d => ({ ...d, q: e.target.value }))}
-            placeholder="e.g. When is our anniversary?"
-            className="w-full glass border-0 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none mb-4"
-          />
-
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            Options <span className="font-normal text-gray-400">(tap circle to mark correct answer)</span>
-          </label>
-          <div className="space-y-2 mb-4">
-            {draft.options.map((opt, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <button onClick={() => setDraft(d => ({ ...d, answer: i }))}
-                  className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
-                    draft.answer === i
-                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 border-transparent text-white scale-110'
-                      : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-pink-400'
-                  }`}>
-                  {['A','B','C','D'][i]}
-                </button>
-                <input value={opt}
-                  onChange={e => {
-                    const next = [...draft.options] as [string,string,string,string];
-                    next[i] = e.target.value;
-                    setDraft(d => ({ ...d, options: next }));
-                  }}
-                  placeholder={`Option ${['A','B','C','D'][i]}`}
-                  className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
-                />
-                {draft.answer === i && <CheckCircle size={16} className="text-green-500 shrink-0"/>}
-              </div>
-            ))}
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => { setView('lobby'); setDraft(BLANK_DRAFT()); setEditingId(null); setSaveError(''); }}
+              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <ArrowLeft size={20}/> Back
+            </button>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+              {editingId ? 'Edit Question' : 'New Question'}
+            </h1>
+            <div className="w-10"/>
           </div>
 
-          {saveError && <p className="text-red-500 text-sm mb-3">{saveError}</p>}
+          <div className="glass-card p-5 mb-5">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Question</label>
+            <textarea rows={3} value={draft.q}
+              onChange={e => setDraft(d => ({ ...d, q: e.target.value }))}
+              placeholder="e.g. When is our anniversary?"
+              className="w-full glass border-0 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none mb-4"
+            />
 
-          <button onClick={saveCustomQ}
-            className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition hover:opacity-90 flex items-center justify-center gap-2">
-            <Plus size={18}/> {editingId ? 'Update Question' : 'Add Question'}
-          </button>
-        </div>
-
-        {customQs.length > 0 && (
-          <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Your Questions ({customQs.length})</h3>
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {customQs.map(cq => (
-                <div key={cq.id} className="flex items-start gap-2 p-3 glass rounded-xl">
-                  <p className="flex-1 text-sm text-gray-800 dark:text:white line-clamp-2">{cq.q}</p>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => startEditQ(cq)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition">
-                      <Pencil size={14}/>
-                    </button>
-                    <button onClick={() => cq.id && deleteCustomQ(cq.id)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
-                      <Trash2 size={14}/>
-                    </button>
-                  </div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              Options <span className="font-normal text-gray-400">(tap circle to mark correct answer)</span>
+            </label>
+            <div className="space-y-2 mb-4">
+              {draft.options.map((opt, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <button onClick={() => setDraft(d => ({ ...d, answer: i }))}
+                    className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
+                      draft.answer === i
+                        ? 'bg-gradient-to-r from-pink-500 to-rose-500 border-transparent text-white scale-110'
+                        : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-pink-400'
+                    }`}>
+                    {['A','B','C','D'][i]}
+                  </button>
+                  <input value={opt}
+                    onChange={e => {
+                      const next = [...draft.options] as [string,string,string,string];
+                      next[i] = e.target.value;
+                      setDraft(d => ({ ...d, options: next }));
+                    }}
+                    placeholder={`Option ${['A','B','C','D'][i]}`}
+                    className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  />
+                  {draft.answer === i && <CheckCircle size={16} className="text-green-500 shrink-0"/>}
                 </div>
               ))}
             </div>
+
+            {saveError && <p className="text-red-500 text-sm mb-3">{saveError}</p>}
+
+            <button onClick={saveCustomQ}
+              className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition hover:opacity-90 flex items-center justify-center gap-2">
+              <Plus size={18}/> {editingId ? 'Update Question' : 'Add Question'}
+            </button>
           </div>
-        )}
+
+          {customQs.length > 0 && (
+            <div className="glass-card p-4">
+              <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Your Questions ({customQs.length})</h3>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {customQs.map(cq => (
+                  <div key={cq.id} className="flex items-start gap-2 p-3 glass rounded-xl">
+                    <p className="flex-1 text-sm text-gray-800 dark:text:white line-clamp-2">{cq.q}</p>
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => startEditQ(cq)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition">
+                        <Pencil size={14}/>
+                      </button>
+                      <button onClick={() => cq.id && deleteCustomQ(cq.id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                        <Trash2 size={14}/>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 
   // ───────────────── VIEW: LOBBY ─────────────────
   if (view === 'lobby') return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20}/> Back
-          </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
-            💕 Romantic Trivia
-          </h1>
-          <button onClick={() => setView('builder')} title="Custom questions"
-            className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <Sparkles size={20}/>
-          </button>
-        </div>
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <div className="flex items-center justify-between mb-6">
+            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <ArrowLeft size={20}/> Back
+            </Link>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+              💕 Romantic Trivia
+            </h1>
+            <button onClick={() => setView('builder')} title="Custom questions"
+              className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <Sparkles size={20}/>
+            </button>
+          </div>
 
-        <div className="glass-card p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">Category</p>
-            {customQs.length > 0 && (
-              <span className="text-xs text-pink-500 font-medium">{customQs.length} custom</span>
+          <div className="glass-card p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">Category</p>
+              {customQs.length > 0 && (
+                <span className="text-xs text-pink-500 font-medium">{customQs.length} custom</span>
+              )}
+            </div>
+            {loadingCust ? (
+              <div className="flex items-center gap-2 text-gray-400 text-sm py-1">
+                <Loader2 size={14} className="animate-spin"/> Loading…
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {allCategories.map(c => (
+                  <button key={c} onClick={() => setCategory(c)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                      category === c
+                        ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                        : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}>{c}</button>
+                ))}
+              </div>
             )}
           </div>
-          {loadingCust ? (
-            <div className="flex items-center gap-2 text-gray-400 text-sm py-1">
-              <Loader2 size={14} className="animate-spin"/> Loading…
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {allCategories.map(c => (
-                <button key={c} onClick={() => setCategory(c)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                    category === c
-                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
-                      : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}>{c}</button>
-              ))}
-            </div>
+
+          {customQs.length === 0 && (
+            <button onClick={() => setView('builder')}
+              className="w-full glass-card p-3 mb-4 flex items-center gap-3 hover:ring-2 hover:ring-pink-300 transition text-left">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center shrink-0">
+                <BookOpen size={16} className="text-white"/>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Add your own questions</p>
+                <p className="text-xs text-gray-500">Create couple-specific questions only you two can answer</p>
+              </div>
+              <Plus size={18} className="ml-auto text-pink-500 shrink-0"/>
+            </button>
           )}
-        </div>
 
-        {customQs.length === 0 && (
-          <button onClick={() => setView('builder')}
-            className="w-full glass-card p-3 mb-4 flex items-center gap-3 hover:ring-2 hover:ring-pink-300 transition text-left">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center shrink-0">
-              <BookOpen size={16} className="text-white"/>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Add your own questions</p>
-              <p className="text-xs text-gray-500">Create couple-specific questions only you two can answer</p>
-            </div>
-            <Plus size={18} className="ml-auto text-pink-500 shrink-0"/>
-          </button>
-        )}
-
-        <div className="flex items-center justify-center min-h-[44vh]">
-          <GameLobby
-            gameName="Romantic Trivia"
-            gameIcon="💕"
-            gradient="from-pink-500 to-rose-500"
-            description="10 romantic questions, 20 s each. How well do you know love?"
-            supportsSolo
-            supportsAI={false}
-            gameType="TriviaQuiz"
-            onStartSolo={handleStartSolo}
-            onStartVsPartner={(roomId, hostFlag) => { setGameMode('vs-partner'); setActiveRoomId(roomId); setIsHost(hostFlag); if (hostFlag) setShouldHostStart(true); setView('game'); }}
-          />
+          <div className="flex items-center justify-center min-h-[44vh]">
+            <GameLobby
+              gameName="Romantic Trivia"
+              gameIcon="💕"
+              gradient="from-pink-500 to-rose-500"
+              description="10 romantic questions, 20 s each. How well do you know love?"
+              supportsSolo
+              supportsAI={false}
+              gameType="TriviaQuiz"
+              onStartSolo={handleStartSolo}
+              onStartVsPartner={(roomId, hostFlag) => { setGameMode('vs-partner'); setActiveRoomId(roomId); setIsHost(hostFlag); if (hostFlag) setShouldHostStart(true); setView('game'); }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -462,7 +455,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const correct  = answers.filter((a, i) => a === activeQ[i]?.answer).length;
     const pct      = (myFinal / (TOTAL_Q * 15)) * 100;
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="h-screen flex items-center justify-center p-4 overflow-y-auto">
         <div className="glass-card p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">{pct >= 80 ? '💖' : pct >= 50 ? '💕' : '💝'}</div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">Quiz Complete!</h2>
@@ -476,7 +469,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             </div>
           </div>
           {!isOnline && (
-            <div className="grid grid-cols-2 gap-2 mb-6">
+            <div className="grid grid-cols-2 gap-2 mb-6 max-h-48 overflow-y-auto">
               {activeQ.map((q, i) => (
                 <div key={i} className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
                   answers[i] === q.answer
@@ -511,90 +504,99 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const timerColor = timeLeft > 12 ? 'bg-green-500' : timeLeft > 6 ? 'bg-yellow-500' : 'bg-red-500';
   const qNum       = isOnlineActive ? (gameState?.current ?? 0) + 1 : current + 1;
 
-  if (!q) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin text-pink-500" size={32}/></div>;
+  if (!q) return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin text-pink-500" size={32}/></div>;
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20}/> Back
-          </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
-            💕 Romantic Trivia
-          </h1>
-          <div className="flex items-center gap-1 text-pink-500">
-            <Trophy size={18}/>
-            <span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span>
-          </div>
-        </div>
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto p-4 pb-8">
 
-        <div className="flex justify-between items-center mb-4">
-          <GameModeBadge mode={gameMode!} />
-          {isOnlineActive && (
-            <div className="glass px-3 py-1 rounded-full text-xs font-semibold text-gray-600 dark:text-gray-400">
-              Partner: {isP1 ? gameState?.p2Score : gameState?.p1Score} pts
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <ArrowLeft size={20}/> Back
+            </button>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">
+              💕 Romantic Trivia
+            </h1>
+            <div className="flex items-center gap-1 text-pink-500">
+              <Trophy size={18}/>
+              <span className="font-bold">{isOnlineActive ? (isP1 ? gameState?.p1Score : gameState?.p2Score) : score}</span>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="glass-card p-6">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-medium text-pink-600 dark:text-pink-400">
-              {q.custom ? '✏️ Custom' : q.category}
-            </span>
-            {!isOnlineActive && (
-              <div className="flex items-center gap-1 font-bold text-gray-600 dark:text-gray-400">
-                <Clock size={16}/>
-                <span className={timeLeft <= 6 ? 'text-red-500' : ''}>{timeLeft}s</span>
+            <GameModeBadge mode={gameMode!} />
+            {isOnlineActive && (
+              <div className="glass px-3 py-1 rounded-full text-xs font-semibold text-gray-600 dark:text-gray-400">
+                Partner: {isP1 ? gameState?.p2Score : gameState?.p1Score} pts
               </div>
             )}
           </div>
 
-          {!isOnlineActive && (
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-5">
-              <div className={`h-2 rounded-full transition-all ${timerColor}`} style={{ width: `${timerPct}%` }} />
+          <div className="glass-card p-5">
+            {/* Category + timer */}
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-pink-600 dark:text-pink-400">
+                {q.custom ? '✏️ Custom' : q.category}
+              </span>
+              {!isOnlineActive && (
+                <div className="flex items-center gap-1 font-bold text-gray-600 dark:text-gray-400">
+                  <Clock size={16}/>
+                  <span className={timeLeft <= 6 ? 'text-red-500' : ''}>{timeLeft}s</span>
+                </div>
+              )}
             </div>
-          )}
 
-          <div className="flex justify-between mb-2">
-            <span className="text-xs text-gray-400">Q {qNum}/{TOTAL_Q}</span>
+            {/* Countdown bar */}
+            {!isOnlineActive && (
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-4">
+                <div className={`h-1.5 rounded-full transition-all ${timerColor}`} style={{ width: `${timerPct}%` }} />
+              </div>
+            )}
+
+            {/* Progress */}
+            <div className="flex justify-between mb-1">
+              <span className="text-xs text-gray-400">Q {qNum}/{TOTAL_Q}</span>
+            </div>
+            <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1 mb-4">
+              <div className="bg-gradient-to-r from-pink-400 to-rose-400 h-1 rounded-full transition-all"
+                style={{ width: `${((qNum - 1) / TOTAL_Q) * 100}%` }} />
+            </div>
+
+            {/* Question — capped so very long text doesn't blow layout */}
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-5 leading-snug line-clamp-4">{q.q}</h2>
+
+            {myAnswered && isOnlineActive ? (
+              <div className="flex items-center justify-center gap-3 py-6 text-pink-500">
+                <Loader2 size={20} className="animate-spin"/>
+                <span>Waiting for partner…</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {q.options.map((option, i) => {
+                  let style = 'glass-btn border-0 hover:ring-2 hover:ring-pink-400';
+                  if (showResult && !isOnlineActive) {
+                    if (i === q.answer)      style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
+                    else if (i === selected) style = 'bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
+                    else                     style = 'opacity-40 glass-btn border-0';
+                  }
+                  return (
+                    <button key={i}
+                      onClick={() => isOnlineActive ? handleOnlineAnswer(i) : handleSoloAnswer(i)}
+                      disabled={(showResult && !isOnlineActive) || (myAnswered ?? false)}
+                      className={`${style} rounded-xl px-4 py-2.5 text-left font-medium transition-all flex items-center gap-3`}>
+                      <span className="w-6 h-6 rounded-full bg-white/60 dark:bg-gray-600 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 shrink-0">
+                        {['A','B','C','D'][i]}
+                      </span>
+                      <span className="text-gray-800 dark:text-white text-sm">{option}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mb-6">
-            <div className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 rounded-full transition-all"
-              style={{ width: `${((qNum - 1) / TOTAL_Q) * 100}%` }} />
-          </div>
 
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed">{q.q}</h2>
-
-          {myAnswered && isOnlineActive ? (
-            <div className="flex items-center justify-center gap-3 py-8 text-pink-500">
-              <Loader2 size={20} className="animate-spin"/>
-              <span>Waiting for partner…</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {q.options.map((option, i) => {
-                let style = 'glass-btn border-0 hover:ring-2 hover:ring-pink-400';
-                if (showResult && !isOnlineActive) {
-                  if (i === q.answer)      style = 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
-                  else if (i === selected) style = 'bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
-                  else                     style = 'opacity-40 glass-btn border-0';
-                }
-                return (
-                  <button key={i}
-                    onClick={() => isOnlineActive ? handleOnlineAnswer(i) : handleSoloAnswer(i)}
-                    disabled={(showResult && !isOnlineActive) || (myAnswered ?? false)}
-                    className={`${style} rounded-xl px-4 py-3 text-left font-medium transition-all flex items-center gap-3`}>
-                    <span className="w-7 h-7 rounded-full bg-white/60 dark:bg-gray-600 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300 shrink-0">
-                      {['A','B','C','D'][i]}
-                    </span>
-                    <span className="text-gray-800 dark:text-white">{option}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     </div>
