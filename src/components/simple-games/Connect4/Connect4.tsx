@@ -27,13 +27,13 @@ interface Connect4State {
 const ROWS = 6, COLS = 7;
 const emptyBoard = () => Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
 
-const checkWinner = (board: (string|null)[][], row: number, col: number, player: string) => {
-  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
-  for (const [dr,dc] of dirs) {
-    let cells = [[row,col]];
-    for (let i=1;i<4;i++){const r=row+dr*i,c=col+dc*i;if(r<0||r>=ROWS||c<0||c>=COLS||board[r][c]!==player)break;cells.push([r,c]);}
-    for (let i=1;i<4;i++){const r=row-dr*i,c=col-dc*i;if(r<0||r>=ROWS||c<0||c>=COLS||board[r][c]!==player)break;cells.push([r,c]);}
-    if (cells.length >= 4) return cells.slice(0,4);
+const checkWinner = (board: (string | null)[][], row: number, col: number, player: string) => {
+  const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  for (const [dr, dc] of dirs) {
+    let cells = [[row, col]];
+    for (let i = 1; i < 4; i++) { const r = row + dr * i, c = col + dc * i; if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== player) break; cells.push([r, c]); }
+    for (let i = 1; i < 4; i++) { const r = row - dr * i, c = col - dc * i; if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== player) break; cells.push([r, c]); }
+    if (cells.length >= 4) return cells.slice(0, 4);
   }
   return null;
 };
@@ -45,11 +45,12 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
   const userKey        = user?.email ?? null;
   const aiTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingInit    = useRef<Connect4State | null>(null);
-  const [hovered,      setHovered]      = useState<number|null>(null);
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [isHost,       setIsHost]       = useState(false);
+  const recordedRef    = useRef(false);   // Fix: useRef guard avoids stale closure
 
-  // Read ?room= from URL (invite link)
+  const [hovered, setHovered]           = useState<number | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost, setIsHost]             = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room   = params.get('room');
@@ -72,7 +73,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
   const { gameState, updateGameState, patchGameState, loading } =
     useRealtimeGame<Connect4State>(safeSession, 'connect4', makeInitial(userKey ?? ''));
 
-  // Player 2 registration
   useEffect(() => {
     if (!gameState || !userKey) return;
     if (gameState.mode !== 'vs-partner') return;
@@ -81,7 +81,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
   }, [gameState?.players?.player1, gameState?.players?.player2, userKey, gameState?.mode]);
 
-  // Write pending initial state after host's safeSession updates
   useEffect(() => {
     if (!pendingInit.current || !activeRoomId || !isHost) return;
     updateGameState(pendingInit.current);
@@ -97,8 +96,11 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     : gameState?.currentPlayer === userKey;
   const partnerReady = !!(gameState?.players?.player2);
 
+  // Fix: recordedRef prevents double-fire regardless of stale closure
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
+    if (recordedRef.current) return;
+    recordedRef.current = true;
     const isWin  = gameState.winner === userKey;
     const result = gameState.isDraw ? 'draw' : isWin ? 'win' : 'loss';
     recordGame({
@@ -107,7 +109,13 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
       opponentEmail: gameState.mode === 'vs-ai' ? undefined : (gameState.players.player2 ?? undefined),
     });
     updateGameState({ ...gameState, recorded: true });
-  }, [gameState?.status, gameState?.recorded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.status, gameState?.recorded, userKey]);
+
+  // Reset recorded guard when a new game starts
+  useEffect(() => {
+    if (gameState?.status === 'active') recordedRef.current = false;
+  }, [gameState?.status]);
 
   // AI move
   useEffect(() => {
@@ -118,14 +126,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
       const col   = getConnect4AIMove(board, 'AI', gameState.players.player1, gameState.aiDifficulty as C4Difficulty);
       if (col === -1) return;
       let row = -1;
-      for (let r = ROWS-1; r >= 0; r--) { if (!board[r][col]) { row = r; break; } }
+      for (let r = ROWS - 1; r >= 0; r--) { if (!board[r][col]) { row = r; break; } }
       if (row === -1) return;
       board[row][col] = 'AI';
       const cells = checkWinner(board, row, col, 'AI');
       const full  = board[0].every(c => c !== null);
-      if (cells)      updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished', recorded: false });
-      else if (full)  updateGameState({ ...gameState, board, isDraw: true, status: 'finished', recorded: false });
-      else            updateGameState({ ...gameState, board, currentPlayer: gameState.players.player1 });
+      if (cells)     updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished', recorded: false });
+      else if (full) updateGameState({ ...gameState, board, isDraw: true, status: 'finished', recorded: false });
+      else           updateGameState({ ...gameState, board, currentPlayer: gameState.players.player1 });
     }, 500);
     return () => { if (aiTimer.current) clearTimeout(aiTimer.current); };
   }, [gameState?.currentPlayer, gameState?.status, gameState?.mode]);
@@ -135,14 +143,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     if (isAIMode  && gameState.currentPlayer !== gameState.players.player1) return;
     if (!isAIMode && !isMyTurn) return;
     let row = -1;
-    for (let r = ROWS-1; r >= 0; r--) { if (!gameState.board[r]?.[col]) { row = r; break; } }
+    for (let r = ROWS - 1; r >= 0; r--) { if (!gameState.board[r]?.[col]) { row = r; break; } }
     if (row === -1) return;
     const newBoard = gameState.board.map(r => [...r]);
     newBoard[row][col] = userKey ?? '';
     const cells = checkWinner(newBoard, row, col, userKey ?? '');
     const full  = newBoard[0].every(c => c !== null);
-    if (cells)     { updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false }); return; }
-    if (full)      { updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false }); return; }
+    if (cells)  { updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false }); return; }
+    if (full)   { updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false }); return; }
     const next = isAIMode ? 'AI' : (
       gameState.currentPlayer === gameState.players.player1
         ? (gameState.players.player2 ?? '')
@@ -153,35 +161,36 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
 
   const startVsAI = (diff: AIDifficulty) => {
     setActiveRoomId(null); setIsHost(false);
+    recordedRef.current = false;
     updateGameState({ ...makeInitial(userKey ?? '', 'vs-ai', diff), players: { player1: userKey ?? '', player2: 'AI' } });
   };
 
-  // Called by GameLobby → InviteModal onReady
   const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
     setIsHost(hostFlag);
     setActiveRoomId(roomId);
+    recordedRef.current = false;
     if (hostFlag) {
       pendingInit.current = { ...makeInitial(userKey ?? '', 'vs-partner'), players: { player1: userKey ?? '', player2: null } };
     }
   };
 
-  // Play Again — reset board, keep players & room
   const playAgain = () => {
     if (!gameState) return;
+    recordedRef.current = false;
     updateGameState({
       ...makeInitial(gameState.players.player1, gameState.mode, gameState.aiDifficulty),
       players: gameState.players,
     });
   };
 
-  // Leave — back to lobby
   const resetGame = () => {
     setActiveRoomId(null); setIsHost(false);
+    recordedRef.current = false;
     updateGameState({ ...makeInitial(userKey ?? ''), status: 'waiting' });
   };
 
   const isWinCell = (r: number, c: number) =>
-    gameState?.winningCells?.some(([wr,wc]: number[]) => wr===r && wc===c) || false;
+    gameState?.winningCells?.some(([wr, wc]: number[]) => wr === r && wc === c) || false;
 
   const inSession = !!(activeRoomId || (gameState?.mode === 'vs-ai' && gameState?.status !== 'waiting'));
 
@@ -198,7 +207,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
           <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
         </div>
 
-        {/* LOBBY */}
         {!inSession && (
           <div className="flex items-center justify-center min-h-[60vh]">
             <GameLobby
@@ -214,7 +222,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
           </div>
         )}
 
-        {/* GAME */}
         {inSession && gameState && (
           <div className="space-y-4">
             <div className="flex justify-center gap-2 flex-wrap">
@@ -245,7 +252,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
 
             <div className="glass-card p-4">
               <div className="grid mb-1" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
-                {Array(COLS).fill(null).map((_,c) => (
+                {Array(COLS).fill(null).map((_, c) => (
                   <div key={c} className="flex justify-center">
                     <div className={`w-4 h-4 rounded-full transition-all duration-200 ${
                       hovered === c && isMyTurn && gameState.status === 'active'
@@ -255,8 +262,8 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
                 ))}
               </div>
               <div className="grid" style={{ gridTemplateColumns: `repeat(${COLS},1fr)`, gap: '6px' }}>
-                {Array.isArray(gameState.board) && gameState.board.map((row: (string|null)[], r: number) =>
-                  row.map((cell: string|null, c: number) => (
+                {Array.isArray(gameState.board) && gameState.board.map((row: (string | null)[], r: number) =>
+                  row.map((cell: string | null, c: number) => (
                     <button key={`${r}-${c}`}
                       onClick={() => handleColumnClick(c)}
                       onMouseEnter={() => setHovered(c)}
@@ -265,14 +272,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
                       className="aspect-square rounded-full transition-all duration-300 hover:scale-105 disabled:cursor-not-allowed"
                       style={{
                         background: cell
-                          ? isWinCell(r,c)
+                          ? isWinCell(r, c)
                             ? 'linear-gradient(135deg,#fbbf24,#f59e0b)'
                             : cell === gameState.players.player1
                             ? 'linear-gradient(135deg,#ec4899,#f43f5e)'
                             : 'linear-gradient(135deg,#facc15,#f97316)'
                           : 'rgba(255,255,255,0.3)',
                         boxShadow: cell
-                          ? isWinCell(r,c)
+                          ? isWinCell(r, c)
                             ? '0 0 16px rgba(251,191,36,.8),inset 0 2px 4px rgba(255,255,255,.3)'
                             : 'inset 0 2px 4px rgba(0,0,0,.1)'
                           : 'inset 0 2px 8px rgba(0,0,0,.15)',

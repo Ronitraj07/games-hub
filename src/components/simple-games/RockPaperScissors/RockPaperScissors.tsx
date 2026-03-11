@@ -45,7 +45,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   const location       = useLocation();
   const userKey        = user?.email ?? null;
 
-  // AI-mode local state
+  // AI local state
   const [aiDiff,       setAiDiff]       = useState<AIDifficulty>('medium');
   const [playerChoice, setPlayerChoice] = useState<RPSChoice | null>(null);
   const [aiChoice,     setAiChoice]     = useState<RPSChoice | null>(null);
@@ -57,16 +57,16 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   const [animating,    setAnimating]    = useState(false);
   const [history,      setHistory]      = useState<{ player: RPSChoice; cpu: RPSChoice; result: Result }[]>([]);
   const [aiHistory,    setAiHistory]    = useState<RPSChoice[]>([]);
-  const [aiRecorded,   setAiRecorded]   = useState(false);
+  // Fix: use ref instead of state so recordAIResult never captures a stale value
+  const aiRecordedRef = useRef(false);
 
   // Room-based vs-partner state
   const [activeRoomId,    setActiveRoomId]    = useState<string | null>(null);
   const [isHost,          setIsHost]          = useState(false);
   const [mode,            setMode]            = useState<GameMode | null>(null);
-  const [shouldHostStart, setShouldHostStart] = useState(false);
   const pendingInitRef = useRef<RPSOnlineState | null>(null);
+  const onlineRecordedRef = useRef(false);
 
-  // Read ?room= from invite link
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room   = params.get('room');
@@ -96,7 +96,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
 
   const isP1Online = gameState?.p1Email === userKey;
 
-  // Guest registers as p2
   useEffect(() => {
     if (!gameState || !userKey) return;
     if (gameState.p1Email === userKey) return;
@@ -104,7 +103,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
     patchGameState({ p2Email: userKey } as any);
   }, [gameState?.p1Email, gameState?.p2Email, userKey]);
 
-  // Host writes initial state once safeSession settles on the room path
   useEffect(() => {
     if (!pendingInitRef.current || !activeRoomId || !isHost) return;
     updateGameState(pendingInitRef.current);
@@ -119,8 +117,9 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
 
   // ── AI helpers ──
   const recordAIResult = (pScore: number, aScore: number) => {
-    if (aiRecorded || !userKey) return;
-    setAiRecorded(true);
+    // Fix: ref guard — no stale closure risk
+    if (aiRecordedRef.current || !userKey) return;
+    aiRecordedRef.current = true;
     const res = pScore > aScore ? 'win' : pScore < aScore ? 'loss' : 'draw';
     recordGame({ gameType: 'rps', playerEmail: userKey, result: res, score: pScore, mode: 'vs-ai' });
   };
@@ -135,13 +134,24 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
       setAiChoice(cpu); setResult(res);
       setAiHistory(h => [...h, choice]);
       setHistory(h => [...h, { player: choice, cpu, result: res }]);
-      const newP = res === 'win'  ? playerScore + 1 : playerScore;
-      const newA = res === 'lose' ? aiScore + 1     : aiScore;
-      if (res === 'win')       { setPlayerScore(newP); playCorrect(); }
-      else if (res === 'lose') { setAiScore(newA);     playWrong(); }
-      else                     { playClick(); }
-      if (round >= TOTAL_ROUNDS) { setGameOver(true); recordAIResult(newP, newA); }
-      else setRound(r => r + 1);
+      // Fix: compute new scores locally so recordAIResult gets the right final values
+      setPlayerScore(prev => {
+        const newP = res === 'win'  ? prev + 1 : prev;
+        setAiScore(prevA => {
+          const newA = res === 'lose' ? prevA + 1 : prevA;
+          if (round >= TOTAL_ROUNDS) {
+            setGameOver(true);
+            recordAIResult(newP, newA);
+          } else {
+            setRound(r => r + 1);
+          }
+          return newA;
+        });
+        return newP;
+      });
+      if (res === 'win')       playCorrect();
+      else if (res === 'lose') playWrong();
+      else                     playClick();
       setAnimating(false);
     }, 800);
   };
@@ -149,12 +159,14 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   const resetAI = () => {
     setPlayerChoice(null); setAiChoice(null); setResult(null);
     setPlayerScore(0); setAiScore(0); setRound(1);
-    setGameOver(false); setHistory([]); setAiHistory([]); setAiRecorded(false);
+    setGameOver(false); setHistory([]); setAiHistory([]);
+    aiRecordedRef.current = false;
   };
 
   // ── Online helpers ──
   const recordOnlineResult = (gs: RPSOnlineState) => {
-    if (gs.recorded || !userKey) return;
+    if (gs.recorded || !userKey || onlineRecordedRef.current) return;
+    onlineRecordedRef.current = true;
     const myS  = isP1Online ? gs.p1Score : gs.p2Score;
     const oppS = isP1Online ? gs.p2Score : gs.p1Score;
     const res  = myS > oppS ? 'win' : myS < oppS ? 'loss' : 'draw';
@@ -167,21 +179,26 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
     if (!gameState || gameState.status !== 'picking') return;
     if (myOnlineChoice) return;
     const bothPicked = isP1Online ? (gameState.p2Choice !== null) : (gameState.p1Choice !== null);
-    const updated = isP1Online
-      ? { ...gameState, p1Choice: choice }
-      : { ...gameState, p2Choice: choice };
+    // Fix: read actual partner choice, not possibly-null from gameState
+    const p1c = isP1Online ? choice                : (gameState.p1Choice ?? choice);
+    const p2c = isP1Online ? (gameState.p2Choice ?? choice) : choice;
+    const updated: RPSOnlineState = {
+      ...gameState,
+      p1Choice: isP1Online ? choice : gameState.p1Choice,
+      p2Choice: isP1Online ? gameState.p2Choice : choice,
+    };
     if (bothPicked) {
-      const p1c  = isP1Online ? choice : gameState.p1Choice!;
-      const p2c  = isP1Online ? gameState.p2Choice! : choice;
-      const res1 = getResult(p1c, p2c);
+      const res1   = getResult(p1c, p2c);
+      const newP1  = gameState.p1Score + (res1 === 'win'  ? 1 : 0);
+      const newP2  = gameState.p2Score + (res1 === 'lose' ? 1 : 0);
+      const newRound = gameState.round + 1;
       const newState: RPSOnlineState = {
         ...updated,
-        p1Choice: isP1Online ? choice : gameState.p1Choice,
-        p2Choice: isP1Online ? gameState.p2Choice : choice,
-        p1Score:  gameState.p1Score + (res1 === 'win'  ? 1 : 0),
-        p2Score:  gameState.p2Score + (res1 === 'lose' ? 1 : 0),
-        history:  [...(gameState.history || []), { p1: p1c, p2: p2c }],
-        status:   gameState.round >= TOTAL_ROUNDS ? 'finished' : 'reveal',
+        p1Choice: p1c, p2Choice: p2c,   // store final choices so reveal screen is accurate
+        p1Score: newP1, p2Score: newP2,
+        round: newRound,
+        history: [...(gameState.history || []), { p1: p1c, p2: p2c }],
+        status: gameState.round >= TOTAL_ROUNDS ? 'finished' : 'reveal',
         recorded: false,
       };
       if (newState.status === 'finished') recordOnlineResult(newState);
@@ -191,26 +208,25 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
     }
   };
 
-  const nextRoundOnline  = () => {
+  const nextRoundOnline = () => {
     if (!gameState) return;
-    updateGameState({ ...gameState, p1Choice: null, p2Choice: null, round: gameState.round + 1, status: 'picking' });
+    updateGameState({ ...gameState, p1Choice: null, p2Choice: null, status: 'picking' });
   };
 
-  const playAgainOnline  = () => {
+  const playAgainOnline = () => {
     if (!gameState) return;
+    onlineRecordedRef.current = false;
     updateGameState({ ...makeInitial(gameState.p1Email), p2Email: gameState.p2Email, status: 'picking' });
   };
 
-  const leaveOnline = () => { setActiveRoomId(null); setIsHost(false); setMode(null); };
+  const leaveOnline = () => { setActiveRoomId(null); setIsHost(false); setMode(null); onlineRecordedRef.current = false; };
 
-  // GameLobby callback — replaces the old setTimeout hack
   const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
     setIsHost(hostFlag);
     setActiveRoomId(roomId);
     setMode('vs-partner');
-    if (hostFlag) {
-      pendingInitRef.current = { ...makeInitial(userKey ?? ''), status: 'picking' };
-    }
+    onlineRecordedRef.current = false;
+    if (hostFlag) pendingInitRef.current = { ...makeInitial(userKey ?? ''), status: 'picking' };
   };
 
   const handleStartVsAI = (diff: AIDifficulty) => {
@@ -229,7 +245,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
     </div>
   );
 
-  // ── LOBBY ──
   if (!mode && !activeRoomId) return (
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
