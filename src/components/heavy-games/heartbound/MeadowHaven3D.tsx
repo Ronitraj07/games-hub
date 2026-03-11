@@ -1,35 +1,25 @@
 /**
- * MeadowHaven3D — Phase 7F
+ * MeadowHaven3D — Phase 7G
  * -----------------------------------------------
- * POST-PROCESSING + PBR TERRAIN + REFLECTIVE WATER
+ * BUGFIXES + UX POLISH
  *
- * NEW in Phase 7F:
- * 1. Post-processing pipeline:
- *    - SSAO (ambient occlusion — darkens crevices, ground contact)
- *    - Bloom (mipmapBlur — fireflies glow, pond shimmer, lights pop)
- *    - ACES Filmic tone mapping (cinematic color grade)
- *    - Vignette (subtle edge darkening, lens feel)
- *    - HueSaturation (warm +10% saturation)
- * 2. Terrain — 2-layer PBR blend:
- *    - Grass layer (vertex color, roughness 0.92)
- *    - Rock/dirt blend on steeper normals
- *    - Normal-based vertex color darkening in valleys
- *    - All terrain meshes receiveShadow
- * 3. Water — PBR shimmer:
- *    - roughness: 0.04, metalness: 0.25, envMapIntensity: 2.4
- *    - Animated color via useFrame (sin wave on RGB)
- *    - Lily pads with emissive tint
- *    - Pond edge feathering ring
- * 4. Lighting upgrade:
- *    - Sun directional: 2.4 intensity, warm gold
- *    - Fill light: cool blue-violet
- *    - Pond point light: teal, decay 2
- *    - Hemisphere: sky/ground split
- * 5. Environment preset: "sunset" drives HDRI reflections
- *    on all PBR surfaces (water, avatars, metallic objects)
- * 6. Quality detection: checks GPU tier, auto-enables/disables
- *    SSAO on low-end devices (Intel integrated = SSAO off)
- * 7. Controls + Esc + Menu unchanged from previous commit
+ * FIXED in Phase 7G:
+ * 1. Movement was completely blocked at spawn:
+ *    - Old: `if (Math.hypot(np.x,np.z) > 4.4)` — only allowed movement
+ *      when MORE than 4.4 units from world centre. Spawn is (0,0,2)
+ *      so hypot = 2 < 4.4 → player was always frozen.
+ *    - New: skip the move only if the NEW position would land INSIDE
+ *      the pond radius (< 3.8). All other movement is always applied.
+ * 2. Avatar did not visually walk:
+ *    - Old: `posRef.current.x/z` read once at JSX render time (static).
+ *    - New: dedicated `PlayerAvatar` component that syncs its mesh to
+ *      posRef every frame via useFrame — character now visibly moves.
+ * 3. Menu button moved to top-right corner.
+ * 4. Exit/Back button removed entirely from HUD.
+ * 5. Escape key ONLY opens/closes menu — never exits fullscreen.
+ *    Fullscreen is only toggled by F key or the Settings toggle.
+ * 6. Keyboard listeners moved to `document` (was `window`) to fix
+ *    cases where Canvas focus swallowed events.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -37,7 +27,7 @@ import React, {
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Sky, Stars, Billboard, Text, Cylinder, Sphere, Box,
-  Cone, Environment, Points, PointMaterial, MeshReflectorMaterial,
+  Cone, Environment, Points, PointMaterial,
   Cloud,
 } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, HueSaturation, SSAO, ToneMapping } from '@react-three/postprocessing';
@@ -49,14 +39,14 @@ import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
 
 // ── Constants ────────────────────────────────────────────────────
-const WORLD_SIZE = 48;
-const MOVE_SPEED = 0.09;
-const CAM_DIST   = 20;
-const CAM_HEIGHT = 15;
-const CAM_LERP   = 0.06;
+const WORLD_SIZE  = 48;
+const MOVE_SPEED  = 0.09;
+const CAM_DIST    = 20;
+const CAM_HEIGHT  = 15;
+const CAM_LERP    = 0.06;
+const POND_RADIUS = 3.8; // block movement INTO pond only
 
 // ── Quality detection ─────────────────────────────────────────────
-// Detects integrated GPU (Intel/ARM) and disables expensive effects
 function useQualityTier(): 'high' | 'medium' | 'low' {
   return useMemo(() => {
     try {
@@ -96,18 +86,16 @@ function Terrain() {
     if (!g) return;
     const pos    = g.attributes.position;
     const colors: number[] = [];
-    // Richer valley-to-hilltop color palette
-    const valley = new THREE.Color('#1e5c35');  // deep valley green
-    const low    = new THREE.Color('#2d6a4f');  // low meadow
-    const mid    = new THREE.Color('#52b788');  // mid grass
-    const high   = new THREE.Color('#74c69d');  // hilltop bright
-    const dirt   = new THREE.Color('#8B6914');  // subtle dirt in deepest valleys
+    const valley = new THREE.Color('#1e5c35');
+    const low    = new THREE.Color('#2d6a4f');
+    const mid    = new THREE.Color('#52b788');
+    const high   = new THREE.Color('#74c69d');
+    const dirt   = new THREE.Color('#8B6914');
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
-      const z = pos.getY(i); // Y in plane coords = Z in world
+      const z = pos.getY(i);
       const y = terrainY(x, z);
       pos.setZ(i, y);
-      // Normalize height roughly -2 to +3
       const t = THREE.MathUtils.clamp((y + 2.0) / 5.0, 0, 1);
       let c: THREE.Color;
       if (t < 0.12)      c = dirt.clone().lerp(valley, t / 0.12);
@@ -122,27 +110,18 @@ function Terrain() {
   }, []);
   return (
     <>
-      {/* Main terrain */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow castShadow>
         <planeGeometry ref={geo} args={[WORLD_SIZE, WORLD_SIZE, 120, 120]} />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.90}
-          metalness={0.0}
-          envMapIntensity={0.3}
-        />
+        <meshStandardMaterial vertexColors roughness={0.90} metalness={0.0} envMapIntensity={0.3} />
       </mesh>
-      {/* N-S dirt path */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.022, 0]} receiveShadow>
         <planeGeometry args={[3.2, WORLD_SIZE - 4]} />
         <meshStandardMaterial color="#b8864e" roughness={0.98} metalness={0} />
       </mesh>
-      {/* E-W dirt path */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.022, 0]} receiveShadow>
         <planeGeometry args={[WORLD_SIZE - 4, 3.2]} />
         <meshStandardMaterial color="#b8864e" roughness={0.98} metalness={0} />
       </mesh>
-      {/* Subtle AO plane — darkens where terrain meets edges */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
         <planeGeometry args={[WORLD_SIZE + 4, WORLD_SIZE + 4]} />
         <meshBasicMaterial color="#0d1a0e" />
@@ -151,11 +130,10 @@ function Terrain() {
   );
 }
 
-// ── Reflective Pond (Phase 7F upgrade) ───────────────────────────
+// ── Reflective Pond ───────────────────────────────────────────────
 function Pond() {
-  const waterRef    = useRef<THREE.Mesh>(null!);
-  const rippleRef   = useRef<THREE.Mesh>(null!);
-  // Animate water color and ripple ring
+  const waterRef  = useRef<THREE.Mesh>(null!);
+  const rippleRef = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
     if (!waterRef.current) return;
     const mat = waterRef.current.material as THREE.MeshStandardMaterial;
@@ -168,9 +146,8 @@ function Pond() {
     mat.opacity = 0.78 + 0.06 * Math.sin(t * 0.55);
     mat.envMapIntensity = 2.2 + 0.5 * Math.sin(t * 0.4);
     if (rippleRef.current) {
-      const rs = rippleRef.current.scale;
       const pulse = 1.0 + 0.03 * Math.sin(t * 1.2);
-      rs.set(pulse, pulse, pulse);
+      rippleRef.current.scale.set(pulse, pulse, pulse);
     }
   });
   const lilyPads = useMemo(() => [
@@ -183,49 +160,28 @@ function Pond() {
   ], []);
   return (
     <group>
-      {/* Deep base — dark bottom */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]}>
         <circleGeometry args={[4.4, 48]} />
         <meshStandardMaterial color="#0d2a40" roughness={0.8} metalness={0.05} />
       </mesh>
-      {/* Feathered bank ring — smooth dirt-to-water transition */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
         <ringGeometry args={[4.0, 4.8, 48]} />
         <meshStandardMaterial color="#7da8c4" roughness={0.95} metalness={0} transparent opacity={0.55} />
       </mesh>
-      {/* PBR animated water surface */}
       <mesh ref={waterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.07, 0]}>
         <circleGeometry args={[4.0, 48]} />
-        <meshStandardMaterial
-          color="#5ac8fa"
-          roughness={0.04}
-          metalness={0.25}
-          transparent
-          opacity={0.82}
-          envMapIntensity={2.4}
-        />
+        <meshStandardMaterial color="#5ac8fa" roughness={0.04} metalness={0.25} transparent opacity={0.82} envMapIntensity={2.4} />
       </mesh>
-      {/* Subtle ripple ring */}
       <mesh ref={rippleRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.072, 0]}>
         <ringGeometry args={[1.8, 2.1, 32]} />
         <meshBasicMaterial color="#a8d8f0" transparent opacity={0.18} />
       </mesh>
-      {/* Lily pads */}
       {lilyPads.map(({ pos, i }) => (
         <group key={i}>
-          <mesh
-            rotation={[-Math.PI / 2, (i * 1.3) % (Math.PI * 2), 0]}
-            position={pos}
-          >
+          <mesh rotation={[-Math.PI / 2, (i * 1.3) % (Math.PI * 2), 0]} position={pos}>
             <circleGeometry args={[0.30 + (i % 3) * 0.05, 14]} />
-            <meshStandardMaterial
-              color={i % 2 === 0 ? '#1a5c38' : '#2d6a4f'}
-              roughness={0.75}
-              metalness={0}
-              envMapIntensity={0.4}
-            />
+            <meshStandardMaterial color={i % 2 === 0 ? '#1a5c38' : '#2d6a4f'} roughness={0.75} metalness={0} envMapIntensity={0.4} />
           </mesh>
-          {/* Tiny flower on some lily pads */}
           {i % 3 === 0 && (
             <Billboard position={[pos[0], pos[1] + 0.12, pos[2]]}>
               <Text fontSize={0.18} anchorX="center" anchorY="middle">🌸</Text>
@@ -253,22 +209,19 @@ const TREE_POSITIONS: [number, number, number, number][] = [
 const TREE_GREENS = ['#1a5c38','#206040','#2d6a4f','#166534','#1b4332'];
 
 function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; variant: number }) {
-  const gy          = terrainY(x, z);
-  const trunkColor  = '#6b3c1f';
-  const leafColor   = TREE_GREENS[variant % TREE_GREENS.length];
-  const leaf2       = TREE_GREENS[(variant + 1) % TREE_GREENS.length];
-  const leaf3       = TREE_GREENS[(variant + 2) % TREE_GREENS.length];
+  const gy         = terrainY(x, z);
+  const trunkColor = '#6b3c1f';
+  const leafColor  = TREE_GREENS[variant % TREE_GREENS.length];
+  const leaf2      = TREE_GREENS[(variant + 1) % TREE_GREENS.length];
+  const leaf3      = TREE_GREENS[(variant + 2) % TREE_GREENS.length];
   return (
     <group position={[x, gy, z]} scale={[scale, scale, scale]}>
-      {/* Trunk with slight taper */}
       <Cylinder args={[0.16, 0.28, 1.5, 8]} position={[0, 0.75, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={trunkColor} roughness={0.97} metalness={0} />
       </Cylinder>
-      {/* Root bulge */}
       <Cylinder args={[0.32, 0.36, 0.3, 8]} position={[0, 0.15, 0]} castShadow receiveShadow>
         <meshStandardMaterial color={trunkColor} roughness={0.97} metalness={0} />
       </Cylinder>
-      {/* 3-layer canopy — different greens, slight XZ offsets for organic look */}
       <Cone args={[1.4, 2.2, 8]} position={[0.0, 2.5, 0.0]} castShadow receiveShadow>
         <meshStandardMaterial color={leafColor} roughness={0.86} metalness={0} envMapIntensity={0.25} />
       </Cone>
@@ -285,9 +238,9 @@ function Forest() {
   return <>{TREE_POSITIONS.map(([x,z,scale,variant],i) => <Tree key={i} x={x} z={z} scale={scale} variant={variant} />)}</>;
 }
 
-// ── Fireflies — emissive glow, bloom makes them pop ───────────────
+// ── Fireflies ─────────────────────────────────────────────────────
 function Fireflies() {
-  const count   = 32;
+  const count     = 32;
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -324,15 +277,7 @@ function Fireflies() {
           itemSize={3}
         />
       </bufferGeometry>
-      {/* High luminance so Bloom picks them up */}
-      <PointMaterial
-        size={0.14}
-        color="#fff59d"
-        transparent
-        opacity={0.92}
-        sizeAttenuation
-        depthWrite={false}
-      />
+      <PointMaterial size={0.14} color="#fff59d" transparent opacity={0.92} sizeAttenuation depthWrite={false} />
     </Points>
   );
 }
@@ -341,21 +286,15 @@ function Fireflies() {
 function Decorations() {
   return (
     <>
-      {/* Rocks */}
       {([
         [-6,3,0.18],[8,-7,0.22],[-9,-4,0.16],[5,10,0.20],
         [-11,6,0.24],[11,-9,0.19],[-7,11,0.15],[9,8,0.21],
         [3,-12,0.17],[-12,3,0.20],
       ] as [number,number,number][]).map(([x,z,r],i) => (
         <Sphere key={i} args={[r, 8, 6]} position={[x, terrainY(x,z)+r*0.5, z]} castShadow>
-          <meshStandardMaterial
-            color={i%2===0?'#6b6560':'#8f8680'}
-            roughness={0.95}
-            metalness={0.04}
-          />
+          <meshStandardMaterial color={i%2===0?'#6b6560':'#8f8680'} roughness={0.95} metalness={0.04} />
         </Sphere>
       ))}
-      {/* Mushrooms */}
       {([
         [-4,-8],[7,6],[-8,9],[-3,8],[6,-5],[10,2],[-5,12],
       ] as [number,number][]).map(([x,z],i) => (
@@ -366,14 +305,11 @@ function Decorations() {
           <Sphere args={[0.22,10,8]} position={[0,0.50,0]} castShadow>
             <meshStandardMaterial
               color={['#dc2626','#ea580c','#9333ea','#0891b2','#16a34a','#e11d48','#854d0e'][i]}
-              roughness={0.6}
-              metalness={0.04}
-              envMapIntensity={0.3}
+              roughness={0.6} metalness={0.04} envMapIntensity={0.3}
             />
           </Sphere>
         </group>
       ))}
-      {/* Meadow sign */}
       <group position={[2.0, terrainY(2.0,0.8)+0.01, 0.8]}>
         <Box args={[0.1,0.65,0.1]} position={[0,0.33,0]} castShadow>
           <meshStandardMaterial color="#92400e" roughness={0.95} metalness={0} />
@@ -385,7 +321,6 @@ function Decorations() {
           <Text fontSize={0.1} color="#fef9c3" anchorX="center" anchorY="middle">Meadow Haven 🌿</Text>
         </Billboard>
       </group>
-      {/* Fence posts along path */}
       {[-8,-4,0,4,8].map((x,i) => (
         <group key={i} position={[x, terrainY(x,1.9), 1.9]}>
           <Box args={[0.1,0.55,0.1]} position={[0,0.28,0]} castShadow>
@@ -469,7 +404,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   );
 }
 
-// ── Avatar ────────────────────────────────────────────────────────
+// ── Avatar (static body, used by remote players) ──────────────────
 function Avatar({ position, color, name, isMe, moving, facingAngle }: {
   position: [number,number,number]; color: string; name: string;
   isMe: boolean; moving: boolean; facingAngle: number;
@@ -490,7 +425,60 @@ function Avatar({ position, color, name, isMe, moving, facingAngle }: {
   });
   return (
     <group ref={groupRef} position={position}>
-      {/* Shadow ellipse */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
+        <circleGeometry args={[0.36,16]} />
+        <meshBasicMaterial color="black" transparent opacity={0.22} />
+      </mesh>
+      <Cylinder args={[0.21,0.27,0.72,12]} position={[0,0.36,0]} castShadow>
+        <meshStandardMaterial color={color} roughness={0.7} metalness={0.08} envMapIntensity={0.5} />
+      </Cylinder>
+      <Sphere args={[0.28,16,12]} position={[0,0.93,0]} castShadow>
+        <meshStandardMaterial color="#fde7c3" roughness={0.8} metalness={0} />
+      </Sphere>
+      <Sphere args={[0.05,8,8]} position={[0.1,0.98,0.22]}>
+        <meshBasicMaterial color="#1e293b" />
+      </Sphere>
+      <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
+        <meshBasicMaterial color="#1e293b" />
+      </Sphere>
+      {isMe && (
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
+          <ringGeometry args={[0.38,0.47,32]} />
+          <meshBasicMaterial color={color} transparent opacity={0.75} />
+        </mesh>
+      )}
+      <Billboard position={[0,1.55,0]}>
+        <Text fontSize={0.22} color={isMe?color:'white'} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
+          {name}{isMe?' ★':''}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
+
+// ── PlayerAvatar — tracks posRef every frame (FIX for frozen avatar) ──
+function PlayerAvatar({ posRef, movingRef, facingRef, color, name }: {
+  posRef:    React.MutableRefObject<THREE.Vector3>;
+  movingRef: React.MutableRefObject<boolean>;
+  facingRef: React.MutableRefObject<number>;
+  color: string;
+  name: string;
+}) {
+  const groupRef = useRef<THREE.Group>(null!);
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const p       = posRef.current;
+    const y       = terrainY(p.x, p.z);
+    const bob     = movingRef.current ? Math.sin(clock.elapsedTime * 8) * 0.06 : 0;
+    const breathe = 1 + Math.sin(clock.elapsedTime * 1.5) * 0.012;
+    groupRef.current.scale.y = breathe;
+    groupRef.current.position.set(p.x, y + bob, p.z);
+    const cur = groupRef.current.rotation.y;
+    groupRef.current.rotation.y = cur + (facingRef.current - cur) * 0.15;
+  });
+  return (
+    <group ref={groupRef}>
+      {/* Shadow */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
         <circleGeometry args={[0.36,16]} />
         <meshBasicMaterial color="black" transparent opacity={0.22} />
@@ -510,17 +498,15 @@ function Avatar({ position, color, name, isMe, moving, facingAngle }: {
       <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
         <meshBasicMaterial color="#1e293b" />
       </Sphere>
-      {/* Player indicator ring */}
-      {isMe && (
-        <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
-          <ringGeometry args={[0.38,0.47,32]} />
-          <meshBasicMaterial color={color} transparent opacity={0.75} />
-        </mesh>
-      )}
+      {/* Player ring */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
+        <ringGeometry args={[0.38,0.47,32]} />
+        <meshBasicMaterial color={color} transparent opacity={0.75} />
+      </mesh>
       {/* Name tag */}
       <Billboard position={[0,1.55,0]}>
-        <Text fontSize={0.22} color={isMe?color:'white'} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
-          {name}{isMe?' ★':''}
+        <Text fontSize={0.22} color={color} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
+          {name} ★
         </Text>
       </Billboard>
     </group>
@@ -544,41 +530,19 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
   );
 }
 
-// ── Lighting (Phase 7F upgrade) ───────────────────────────────────
+// ── Lighting ──────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
-      {/* Warm ambient — fills shadows gently */}
       <ambientLight intensity={0.50} color="#fff0cc" />
-      {/* Main sun — ACES-friendly intensity, warm gold */}
       <directionalLight
-        position={[22, 30, 10]}
-        intensity={2.2}
-        color="#ffe488"
-        castShadow
+        position={[22, 30, 10]} intensity={2.2} color="#ffe488" castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-far={110}
-        shadow-camera-left={-35}
-        shadow-camera-right={35}
-        shadow-camera-top={35}
-        shadow-camera-bottom={-35}
-        shadow-bias={-0.0008}
+        shadow-camera-far={110} shadow-camera-left={-35} shadow-camera-right={35}
+        shadow-camera-top={35} shadow-camera-bottom={-35} shadow-bias={-0.0008}
       />
-      {/* Cool fill from opposite side — blue-violet sky bounce */}
-      <directionalLight
-        position={[-14, 8, -14]}
-        intensity={0.30}
-        color="#b0c8f8"
-      />
-      {/* Pond point light — shimmers on water */}
-      <pointLight
-        position={[0, 2.8, 0]}
-        intensity={1.4}
-        color="#7ee8fa"
-        distance={11}
-        decay={2}
-      />
-      {/* Warm ground-bounce hemisphere */}
+      <directionalLight position={[-14, 8, -14]} intensity={0.30} color="#b0c8f8" />
+      <pointLight position={[0, 2.8, 0]} intensity={1.4} color="#7ee8fa" distance={11} decay={2} />
       <hemisphereLight args={['#9be8d8', '#3a6030', 0.38]} />
     </>
   );
@@ -597,7 +561,10 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement controller ───────────────────────────────────────────
+// ── Movement controller — FIXED pond check ────────────────────────
+// OLD (broken): if (Math.hypot(np.x, np.z) > 4.4) — required player to be
+//   >4.4 units from centre to move. Spawn (0,0,2) = dist 2 → always blocked.
+// NEW (correct): apply move freely; only block if new pos lands inside pond.
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef:    React.MutableRefObject<Set<string>>;
   posRef:     React.MutableRefObject<THREE.Vector3>;
@@ -617,32 +584,26 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
     if (dx!==0&&dz!==0) { dx*=0.707; dz*=0.707; }
     movingRef.current = dx!==0||dz!==0;
     if (!movingRef.current) return;
-    if (dx!==0||dz!==0) facingRef.current=Math.atan2(dx,dz);
-    const np=posRef.current.clone().add(new THREE.Vector3(dx,0,dz));
-    const half=WORLD_SIZE/2-2;
-    np.x=Math.max(-half,Math.min(half,np.x));
-    np.z=Math.max(-half,Math.min(half,np.z));
-    if (Math.hypot(np.x,np.z)>4.4) {
-      np.y=terrainY(np.x,np.z);
-      posRef.current.copy(np);
-      onPublish(np.x,np.z,true);
-    }
+    facingRef.current = Math.atan2(dx, dz);
+    const np   = posRef.current.clone().add(new THREE.Vector3(dx,0,dz));
+    const half = WORLD_SIZE/2-2;
+    np.x = Math.max(-half,Math.min(half,np.x));
+    np.z = Math.max(-half,Math.min(half,np.z));
+    // Only block if new position is inside the pond
+    if (Math.hypot(np.x, np.z) < POND_RADIUS) return;
+    np.y = terrainY(np.x, np.z);
+    posRef.current.copy(np);
+    onPublish(np.x, np.z, true);
   });
   return null;
 }
 
-// ── Post-processing — quality adaptive ───────────────────────────
+// ── Post-processing ───────────────────────────────────────────────
 function PostFX({ quality }: { quality: 'high' | 'medium' | 'low' }) {
   if (quality === 'low') {
-    // Integrated GPU — only free effects
     return (
       <EffectComposer multisampling={0}>
-        <Bloom
-          intensity={0.35}
-          luminanceThreshold={0.85}
-          luminanceSmoothing={0.04}
-          mipmapBlur
-        />
+        <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.04} mipmapBlur />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         <Vignette eskil={false} offset={0.12} darkness={0.38} blendFunction={BlendFunction.NORMAL} />
       </EffectComposer>
@@ -651,34 +612,17 @@ function PostFX({ quality }: { quality: 'high' | 'medium' | 'low' }) {
   if (quality === 'medium') {
     return (
       <EffectComposer multisampling={4}>
-        <Bloom
-          intensity={0.45}
-          luminanceThreshold={0.82}
-          luminanceSmoothing={0.03}
-          mipmapBlur
-        />
+        <Bloom intensity={0.45} luminanceThreshold={0.82} luminanceSmoothing={0.03} mipmapBlur />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         <Vignette eskil={false} offset={0.10} darkness={0.40} blendFunction={BlendFunction.NORMAL} />
         <HueSaturation hue={0} saturation={0.08} blendFunction={BlendFunction.NORMAL} />
       </EffectComposer>
     );
   }
-  // High — full pipeline
   return (
     <EffectComposer multisampling={8}>
-      <SSAO
-        radius={0.35}
-        intensity={22}
-        luminanceInfluence={0.55}
-        color={new THREE.Color('black')}
-        blendFunction={BlendFunction.MULTIPLY}
-      />
-      <Bloom
-        intensity={0.50}
-        luminanceThreshold={0.80}
-        luminanceSmoothing={0.025}
-        mipmapBlur
-      />
+      <SSAO radius={0.35} intensity={22} luminanceInfluence={0.55} color={new THREE.Color('black')} blendFunction={BlendFunction.MULTIPLY} />
+      <Bloom intensity={0.50} luminanceThreshold={0.80} luminanceSmoothing={0.025} mipmapBlur />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <Vignette eskil={false} offset={0.10} darkness={0.42} blendFunction={BlendFunction.NORMAL} />
       <HueSaturation hue={0} saturation={0.10} blendFunction={BlendFunction.NORMAL} />
@@ -740,21 +684,12 @@ function Scene({
     <>
       <Lighting />
       <Environment preset="sunset" />
-      {/* Atmospheric fog — pushed further for bigger world feel */}
       <fog attach="fog" args={['#b8d4c0', 48, 105]} />
-      {/* Sky — warm afternoon sun, tuned Rayleigh + Mie */}
       <Sky
-        sunPosition={[80, 20, -40]}
-        turbidity={4.2}
-        rayleigh={1.1}
-        mieCoefficient={0.006}
-        mieDirectionalG={0.87}
-        inclination={0.52}
-        azimuth={0.18}
+        sunPosition={[80, 20, -40]} turbidity={4.2} rayleigh={1.1}
+        mieCoefficient={0.006} mieDirectionalG={0.87} inclination={0.52} azimuth={0.18}
       />
-      {/* Stars fade in at edges — visible through fog gap */}
       <Stars radius={85} depth={40} count={1000} factor={3} fade speed={0.3} />
-      {/* Billboard clouds — cheap, atmospheric */}
       <Cloud position={[-18, 14, -15]} speed={0.2} opacity={0.55} />
       <Cloud position={[20, 16, -20]}  speed={0.15} opacity={0.45} />
       <Cloud position={[5,  18, -30]}  speed={0.18} opacity={0.50} />
@@ -773,9 +708,10 @@ function Scene({
           isNearby={nearbyNPCRef.current?.id===npc.id}
           showPrompt={nearbyNPCRef.current?.id===npc.id && !blockedRef.current} />
       ))}
-      <Avatar
-        position={[posRef.current.x, terrainY(posRef.current.x,posRef.current.z), posRef.current.z]}
-        color={myColor} name={myName} isMe moving={movingRef.current} facingAngle={facingRef.current}
+      {/* FIX: PlayerAvatar syncs to posRef every frame — character now walks */}
+      <PlayerAvatar
+        posRef={posRef} movingRef={movingRef} facingRef={facingRef}
+        color={myColor} name={myName}
       />
       {Object.values(remoteSnap).filter(p => p.email!==myEmail&&p.online).map(p => (
         <RemoteAvatar key={p.email} player={p} />
@@ -785,7 +721,6 @@ function Scene({
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
         facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
       />
-      {/* Post-processing — quality adaptive */}
       <PostFX quality={quality} />
     </>
   );
@@ -928,7 +863,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
                     <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${isFullscreen?'left-6':'left-0.5'}`} />
                   </button>
                 </div>
-                {/* Quality preset selector */}
                 <div className="bg-white/5 rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-white/80 text-sm">🎮 Graphics Quality</span>
@@ -956,7 +890,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
                 </div>
                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 opacity-40">
                   <span className="text-white/80 text-sm">🎵 Ambient music</span>
-                  <span className="text-white/40 text-xs">Phase 7Y</span>
+                  <span className="text-white/40 text-xs">Coming soon</span>
                 </div>
               </div>
             </div>
@@ -1038,6 +972,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     return () => document.removeEventListener('fullscreenchange', h);
   }, []);
 
+  // Fullscreen toggled only by F key or Settings toggle — NOT by Esc
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen().catch(() => {});
     else document.exitFullscreen();
@@ -1052,37 +987,44 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const closeDialogue = useCallback(() => setDialogue(null), []);
   const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
 
-  // SINGLE PERMANENT KEYDOWN LISTENER — empty [] dep, all state via refs
+  // Keyboard listeners on document (not window) — fixes Canvas focus swallowing events
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // Prevent scroll on arrow keys and space
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+      // Prevent Escape from triggering browser fullscreen exit behaviour
       if (e.key === 'Escape') e.preventDefault();
+
       keysRef.current.add(e.key);
       const hasD = !!dialogueRef.current;
       const hasM = menuOpenRef.current;
+
+      // E / Enter — talk / advance dialogue
       if (e.key==='e'||e.key==='E'||e.key==='Enter') {
         if (hasD) closeDialogue();
         else if (!hasM && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
         return;
       }
+      // Esc / M — ONLY menu toggle, never exits game or fullscreen
       if (e.key==='Escape'||e.key==='m'||e.key==='M') {
         if (hasD) closeDialogue();
         else setMenuOpen(p => !p);
         return;
       }
+      // F — fullscreen toggle only
       if (e.key==='f'||e.key==='F') { toggleFullscreen(); return; }
     };
     const up   = (e: KeyboardEvent) => keysRef.current.delete(e.key);
     const blur = () => keysRef.current.clear();
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup',   up);
-    window.addEventListener('blur',    blur);
+    document.addEventListener('keydown', down);
+    document.addEventListener('keyup',   up);
+    window.addEventListener('blur',      blur);
     return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup',   up);
-      window.removeEventListener('blur',    blur);
+      document.removeEventListener('keydown', down);
+      document.removeEventListener('keyup',   up);
+      window.removeEventListener('blur',      blur);
     };
-  }, []); // EMPTY — never re-registers
+  }, []); // empty — never re-registers, all state via refs
 
   return (
     <div
@@ -1098,7 +1040,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         style={{ width: '100%', height: '100%' }}
         gl={{
           antialias: effectiveQuality !== 'low',
-          toneMapping: THREE.NoToneMapping, // let PostFX handle tone mapping
+          toneMapping: THREE.NoToneMapping,
           toneMappingExposure: 1.0,
           powerPreference: effectiveQuality === 'low' ? 'low-power' : 'high-performance',
         }}
@@ -1116,7 +1058,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </Suspense>
       </Canvas>
 
-      {/* Bond XP HUD */}
+      {/* Bond XP HUD — top centre */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -1128,14 +1070,25 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
-      {/* Flowers HUD */}
-      <div className="absolute top-3 right-3 z-10 pointer-events-none">
+      {/* Flowers HUD — top left */}
+      <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">
           🌸 {flowerCount}
         </div>
       </div>
 
-      {/* Quality badge — bottom right, subtle */}
+      {/* ☰ Menu button — top RIGHT (no exit button) */}
+      <div className="absolute top-3 right-3 z-10">
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
+          title="Menu (M / Esc)"
+        >
+          ☰ Menu
+        </button>
+      </div>
+
+      {/* Quality badge — bottom right */}
       <div className="absolute bottom-10 right-3 z-10 pointer-events-none hidden md:block">
         <div className="bg-black/30 rounded-full px-2 py-0.5 text-white/30 text-xs capitalize">
           {effectiveQuality === 'low' ? '🔋 eco' : effectiveQuality === 'medium' ? '⚡ balanced' : '✨ ultra'}
@@ -1165,19 +1118,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
       <VirtualJoystick keysRef={keysRef} />
 
-      {/* Top-left HUD */}
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        <button onClick={onBack}
-          className="bg-black/45 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-black/60 transition">
-          ← Exit
-        </button>
-        <button onClick={() => setMenuOpen(true)}
-          className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
-          title="Menu (M)">
-          ☰ Menu
-        </button>
-      </div>
-
+      {/* Controls hint — bottom left */}
       <div className="hidden md:block absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
         WASD / Arrows · E to talk · M / Esc for menu · F fullscreen
       </div>
