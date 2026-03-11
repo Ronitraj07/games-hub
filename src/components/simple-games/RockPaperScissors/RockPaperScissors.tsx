@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useGameStats } from '@/hooks/useGameStats';
@@ -14,7 +14,7 @@ import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
 const CHOICES: { value: RPSChoice; emoji: string; label: string; beats: RPSChoice }[] = [
   { value: 'rock',     emoji: '✊', label: 'Rock',     beats: 'scissors' },
   { value: 'paper',   emoji: '✋', label: 'Paper',    beats: 'rock'     },
-  { value: 'scissors',emoji: '✌️', label: 'Scissors', beats: 'paper'    },
+  { value: 'scissors', emoji: '✌️', label: 'Scissors', beats: 'paper'    },
 ];
 
 const TOTAL_ROUNDS = 5;
@@ -25,18 +25,18 @@ const getResult = (p: RPSChoice, opp: RPSChoice): Result => {
 };
 
 interface RPSOnlineState {
-  p1Email: string;
-  p2Email: string | null;
-  p1Choice: RPSChoice | null;
-  p2Choice: RPSChoice | null;
-  p1Score: number;
-  p2Score: number;
-  round: number;
-  status: 'waiting' | 'picking' | 'reveal' | 'finished';
-  mode: GameMode;
+  p1Email:      string;
+  p2Email:      string | null;
+  p1Choice:     RPSChoice | null;
+  p2Choice:     RPSChoice | null;
+  p1Score:      number;
+  p2Score:      number;
+  round:        number;
+  status:       'waiting' | 'picking' | 'reveal' | 'finished';
+  mode:         GameMode;
   aiDifficulty: AIDifficulty;
-  history: { p1: RPSChoice; p2: RPSChoice }[];
-  recorded?: boolean;
+  history:      { p1: RPSChoice; p2: RPSChoice }[];
+  recorded?:    boolean;
 }
 
 export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId: propSession }) => {
@@ -45,7 +45,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   const location       = useLocation();
   const userKey        = user?.email ?? null;
 
-  // AI-mode local state (no Firebase needed for AI)
+  // AI-mode local state
   const [aiDiff,       setAiDiff]       = useState<AIDifficulty>('medium');
   const [playerChoice, setPlayerChoice] = useState<RPSChoice | null>(null);
   const [aiChoice,     setAiChoice]     = useState<RPSChoice | null>(null);
@@ -59,10 +59,12 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   const [aiHistory,    setAiHistory]    = useState<RPSChoice[]>([]);
   const [aiRecorded,   setAiRecorded]   = useState(false);
 
-  // Online-mode room state
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [isHost,       setIsHost]       = useState(false);
-  const [mode,         setMode]         = useState<GameMode | null>(null);
+  // Room-based vs-partner state
+  const [activeRoomId,    setActiveRoomId]    = useState<string | null>(null);
+  const [isHost,          setIsHost]          = useState(false);
+  const [mode,            setMode]            = useState<GameMode | null>(null);
+  const [shouldHostStart, setShouldHostStart] = useState(false);
+  const pendingInitRef = useRef<RPSOnlineState | null>(null);
 
   // Read ?room= from invite link
   useEffect(() => {
@@ -73,7 +75,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
       setIsHost(false);
       setMode('vs-partner');
     }
-  }, [location.search]);
+  }, [location.search, activeRoomId]);
 
   const safeSession = activeRoomId
     ? `rps-room-${sanitizeFirebasePath(activeRoomId)}`
@@ -94,13 +96,20 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
 
   const isP1Online = gameState?.p1Email === userKey;
 
-  // Player 2 registration
+  // Guest registers as p2
   useEffect(() => {
     if (!gameState || !userKey) return;
     if (gameState.p1Email === userKey) return;
     if (gameState.p2Email === userKey) return;
     patchGameState({ p2Email: userKey } as any);
   }, [gameState?.p1Email, gameState?.p2Email, userKey]);
+
+  // Host writes initial state once safeSession settles on the room path
+  useEffect(() => {
+    if (!pendingInitRef.current || !activeRoomId || !isHost) return;
+    updateGameState(pendingInitRef.current);
+    pendingInitRef.current = null;
+  }, [activeRoomId, isHost, safeSession]);
 
   const myOnlineChoice  = isP1Online ? gameState?.p1Choice : gameState?.p2Choice;
   const oppOnlineChoice = isP1Online ? gameState?.p2Choice : gameState?.p1Choice;
@@ -146,10 +155,10 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
   // ── Online helpers ──
   const recordOnlineResult = (gs: RPSOnlineState) => {
     if (gs.recorded || !userKey) return;
-    const myS   = isP1Online ? gs.p1Score : gs.p2Score;
-    const oppS  = isP1Online ? gs.p2Score : gs.p1Score;
-    const res   = myS > oppS ? 'win' : myS < oppS ? 'loss' : 'draw';
-    const opp   = isP1Online ? (gs.p2Email ?? undefined) : gs.p1Email;
+    const myS  = isP1Online ? gs.p1Score : gs.p2Score;
+    const oppS = isP1Online ? gs.p2Score : gs.p1Score;
+    const res  = myS > oppS ? 'win' : myS < oppS ? 'loss' : 'draw';
+    const opp  = isP1Online ? (gs.p2Email ?? undefined) : gs.p1Email;
     recordGame({ gameType: 'rps', playerEmail: userKey, result: res, score: myS, mode: 'vs-partner', opponentEmail: opp });
     updateGameState({ ...gs, recorded: true });
   };
@@ -162,17 +171,17 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
       ? { ...gameState, p1Choice: choice }
       : { ...gameState, p2Choice: choice };
     if (bothPicked) {
-      const p1c = isP1Online ? choice : gameState.p1Choice!;
-      const p2c = isP1Online ? gameState.p2Choice! : choice;
+      const p1c  = isP1Online ? choice : gameState.p1Choice!;
+      const p2c  = isP1Online ? gameState.p2Choice! : choice;
       const res1 = getResult(p1c, p2c);
       const newState: RPSOnlineState = {
         ...updated,
         p1Choice: isP1Online ? choice : gameState.p1Choice,
         p2Choice: isP1Online ? gameState.p2Choice : choice,
-        p1Score: gameState.p1Score + (res1 === 'win'  ? 1 : 0),
-        p2Score: gameState.p2Score + (res1 === 'lose' ? 1 : 0),
-        history: [...(gameState.history || []), { p1: p1c, p2: p2c }],
-        status:  gameState.round >= TOTAL_ROUNDS ? 'finished' : 'reveal',
+        p1Score:  gameState.p1Score + (res1 === 'win'  ? 1 : 0),
+        p2Score:  gameState.p2Score + (res1 === 'lose' ? 1 : 0),
+        history:  [...(gameState.history || []), { p1: p1c, p2: p2c }],
+        status:   gameState.round >= TOTAL_ROUNDS ? 'finished' : 'reveal',
         recorded: false,
       };
       if (newState.status === 'finished') recordOnlineResult(newState);
@@ -182,32 +191,25 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
     }
   };
 
-  const nextRoundOnline = () => {
+  const nextRoundOnline  = () => {
     if (!gameState) return;
     updateGameState({ ...gameState, p1Choice: null, p2Choice: null, round: gameState.round + 1, status: 'picking' });
   };
 
-  // Play Again — reset board, keep players & room
-  const playAgainOnline = () => {
+  const playAgainOnline  = () => {
     if (!gameState) return;
     updateGameState({ ...makeInitial(gameState.p1Email), p2Email: gameState.p2Email, status: 'picking' });
   };
 
-  // Leave — back to lobby
-  const leaveOnline = () => {
-    setActiveRoomId(null); setIsHost(false); setMode(null);
-  };
+  const leaveOnline = () => { setActiveRoomId(null); setIsHost(false); setMode(null); };
 
-  // Invite ready
+  // GameLobby callback — replaces the old setTimeout hack
   const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
     setIsHost(hostFlag);
     setActiveRoomId(roomId);
     setMode('vs-partner');
     if (hostFlag) {
-      // host writes initial state after safeSession updates
-      setTimeout(() => {
-        updateGameState({ ...makeInitial(userKey ?? ''), status: 'picking' });
-      }, 100);
+      pendingInitRef.current = { ...makeInitial(userKey ?? ''), status: 'picking' };
     }
   };
 
@@ -333,11 +335,11 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
             <div className="flex gap-2 flex-wrap">
               {history.map((h, i) => (
                 <div key={i} className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
-                  h.result==='win'  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                  h.result==='lose' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                  h.result === 'win'  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                  h.result === 'lose' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
                   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                 }`}>
-                  {CHOICES.find(c=>c.value===h.player)!.emoji} vs {CHOICES.find(c=>c.value===h.cpu)!.emoji}
+                  {CHOICES.find(c => c.value === h.player)!.emoji} vs {CHOICES.find(c => c.value === h.cpu)!.emoji}
                 </div>
               ))}
             </div>
@@ -384,7 +386,10 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
         </div>
         <div className="glass-card p-6 mb-4">
           {!gameState?.p2Email && (
-            <p className="text-center text-gray-400 py-4">Waiting for partner to join…</p>
+            <div className="flex items-center justify-center gap-2 py-6 text-gray-400">
+              <Loader2 size={18} className="animate-spin" />
+              <span>Waiting for partner to join…</span>
+            </div>
           )}
           {gameState?.p2Email && gameState?.status === 'picking' && (
             <>
@@ -410,15 +415,28 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId:
             <>
               <div className="flex justify-between items-center mb-6">
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c=>c.value===myOnlineChoice)!.emoji : '❓'}</div>
+                  <div className="text-8xl">{myOnlineChoice ? CHOICES.find(c => c.value === myOnlineChoice)!.emoji : '❓'}</div>
                   <p className="text-sm text-gray-500 mt-2">You</p>
                 </div>
                 <div className="text-3xl">⚔️</div>
                 <div className="text-center flex-1">
-                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c=>c.value===oppOnlineChoice)!.emoji : '❓'}</div>
+                  <div className="text-8xl">{oppOnlineChoice ? CHOICES.find(c => c.value === oppOnlineChoice)!.emoji : '❓'}</div>
                   <p className="text-sm text-gray-500 mt-2">Partner</p>
                 </div>
               </div>
+              {(() => {
+                const p1c = gameState!.history[gameState!.history.length - 1]?.p1;
+                const p2c = gameState!.history[gameState!.history.length - 1]?.p2;
+                if (!p1c || !p2c) return null;
+                const roundRes = getResult(isP1Online ? p1c : p2c, isP1Online ? p2c : p1c);
+                return (
+                  <p className={`text-center text-xl font-bold mb-4 ${
+                    roundRes === 'win' ? 'text-green-500' : roundRes === 'lose' ? 'text-red-500' : 'text-yellow-500'
+                  }`}>
+                    {roundRes === 'win' ? '🎉 You win this round!' : roundRes === 'lose' ? '😅 Partner wins this round!' : '🤝 Draw!'}
+                  </p>
+                );
+              })()}
               <button onClick={nextRoundOnline}
                 className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
                 Next Round →
