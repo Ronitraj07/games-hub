@@ -1,17 +1,12 @@
 /**
- * MeadowHaven3D — Phase 7C
- * -------------------------
- * REALISTIC 3D UPGRADES:
- * - PBR meshStandardMaterial everywhere (roughness, metalness)
- * - Terrain displacement 3× amplitude with vertex color variation
- * - 30+ real multi-cone trees with depth variation
- * - Animated pond with sin-wave color pulse + lily pads
- * - <Environment preset="sunset"> for env map reflections
- * - <Sky> tuned to golden afternoon (Sky: Children of the Light feel)
- * - Fog pushed to near:45 far:100 — world feels huge
- * - 25 firefly particles near pond (slow drift, pulse glow)
- * - Cinematic camera FOV 45, heavier lerp
- * - All Phase 7A fixes preserved (controls, menu, fullscreen)
+ * MeadowHaven3D — Phase 7C + Controls/UX Fixes
+ * -----------------------------------------------
+ * FIXES IN THIS COMMIT:
+ * 1. Controls — single permanent keydown listener, empty [] dep, all state via refs
+ * 2. Esc key — ONLY closes menu/dialogue, NEVER triggers browser fullscreen exit
+ *    (e.preventDefault() on Escape always, so browser never hijacks it)
+ * 3. Removed top-right Fullscreen + Exit buttons — fullscreen managed inside Settings tab
+ * 4. Menu button repositioned to top-left, right beside the ← Exit button
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -32,9 +27,9 @@ const WORLD_SIZE = 48;
 const MOVE_SPEED = 0.09;
 const CAM_DIST   = 20;
 const CAM_HEIGHT = 15;
-const CAM_LERP   = 0.06; // heavier/slower = more cinematic
+const CAM_LERP   = 0.06;
 
-// ── Terrain height (3× amplitude for real hills) ─────────────────
+// ── Terrain height ────────────────────────────────────────────────
 function terrainY(x: number, z: number): number {
   return (
     Math.sin(x * 0.28) * 1.2 +
@@ -45,10 +40,9 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── PBR Terrain ──────────────────────────────────────────────────
+// ── PBR Terrain ───────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
-
   useEffect(() => {
     const g = geo.current;
     if (!g) return;
@@ -57,13 +51,11 @@ function Terrain() {
     const low  = new THREE.Color('#2d6a4f');
     const mid  = new THREE.Color('#52b788');
     const high = new THREE.Color('#74c69d');
-
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getY(i);
       const y = terrainY(x, z);
       pos.setZ(i, y);
-      // Vertex colour: dark in valleys, bright on hills
       const t = THREE.MathUtils.clamp((y + 1.2) / 2.4, 0, 1);
       const c = t < 0.4 ? low.clone().lerp(mid, t / 0.4) : mid.clone().lerp(high, (t - 0.4) / 0.6);
       colors.push(c.r, c.g, c.b);
@@ -72,16 +64,12 @@ function Terrain() {
     g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     g.computeVertexNormals();
   }, []);
-
   return (
     <>
-      {/* Grass — PBR + vertex colours */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry ref={geo} args={[WORLD_SIZE, WORLD_SIZE, 120, 120]} />
         <meshStandardMaterial vertexColors roughness={0.92} metalness={0.0} />
       </mesh>
-
-      {/* Dirt path — PBR */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
         <planeGeometry args={[3.2, WORLD_SIZE - 4]} />
         <meshStandardMaterial color="#c8956c" roughness={0.98} metalness={0} />
@@ -101,7 +89,6 @@ function Pond() {
     if (!waterRef.current) return;
     const mat = waterRef.current.material as THREE.MeshStandardMaterial;
     const t = clock.elapsedTime;
-    // Subtle colour pulse — deep blue to sky blue
     mat.color.setRGB(
       0.35 + 0.05 * Math.sin(t * 0.4),
       0.72 + 0.08 * Math.sin(t * 0.3 + 1),
@@ -109,44 +96,26 @@ function Pond() {
     );
     mat.opacity = 0.72 + 0.06 * Math.sin(t * 0.6);
   });
-
-  // Lily pad positions
   const lilyPads = useMemo(() => [
     [1.2, 0.08, -1.4], [-1.8, 0.08, 0.8], [0.5, 0.08, 2.1],
     [-2.3, 0.08, -1.2], [2.5, 0.08, 1.0],
   ], []);
-
   return (
     <group>
-      {/* Pond bottom */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]}>
         <circleGeometry args={[4.2, 40]} />
         <meshStandardMaterial color="#1a4a6e" roughness={0.6} metalness={0.1} />
       </mesh>
-
-      {/* Water surface — animated PBR */}
       <mesh ref={waterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
         <circleGeometry args={[4.0, 40]} />
-        <meshStandardMaterial
-          color="#5ac8fa"
-          roughness={0.05}
-          metalness={0.15}
-          transparent
-          opacity={0.78}
-          envMapIntensity={1.8}
-        />
+        <meshStandardMaterial color="#5ac8fa" roughness={0.05} metalness={0.15} transparent opacity={0.78} envMapIntensity={1.8} />
       </mesh>
-
-      {/* Shore rim */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
         <ringGeometry args={[4.0, 4.5, 40]} />
         <meshStandardMaterial color="#a8d5f5" roughness={0.9} metalness={0} />
       </mesh>
-
-      {/* Lily pads */}
       {lilyPads.map((p, i) => (
-        <mesh key={i} rotation={[-Math.PI / 2, (i * 1.3) % (Math.PI * 2), 0]}
-          position={[p[0], p[1], p[2]]}>
+        <mesh key={i} rotation={[-Math.PI / 2, (i * 1.3) % (Math.PI * 2), 0]} position={[p[0], p[1], p[2]]}>
           <circleGeometry args={[0.32 + i * 0.04, 12]} />
           <meshStandardMaterial color={i % 2 === 0 ? '#2d6a4f' : '#40916c'} roughness={0.8} metalness={0} />
         </mesh>
@@ -155,22 +124,20 @@ function Pond() {
   );
 }
 
-// ── Real Trees (3-cone canopy, PBR) ───────────────────────────────
+// ── Trees ─────────────────────────────────────────────────────────
 const TREE_POSITIONS: [number, number, number, number][] = [
-  // [x, z, scale, hue-variation]
-  [-14,-6, 1.0, 0], [-12, 8, 1.3, 1], [-16, 2, 0.9, 2],
-  [13,-7,  1.1, 0], [14,  5, 1.4, 1], [15, 10, 0.85, 2],
-  [-6,-14, 1.0, 0], [5, -15, 1.2, 1], [-10,-13, 1.3, 2],
-  [7,  14, 0.9, 0], [-5, 15, 1.1, 1], [10, 13, 1.0, 2],
-  [-17,-1, 1.2, 0], [16,  0, 1.0, 1], [-3,-17, 0.9, 2],
-  [3,  17, 1.3, 0], [-14, 12, 1.0, 1],[12,-14, 1.1, 2],
-  [-8, 16, 0.9, 0], [8, -16, 1.2, 1], [-16,-10, 1.0, 2],
-  [16, -9, 0.85, 0],[16, 8,  1.1, 1], [-15, -3, 1.3, 2],
-  [-11,-16, 1.0, 0],[11, 16, 0.9, 1], [-13, 14, 1.1, 2],
-  [14, -12, 1.2, 0],[-4, -16, 1.0, 1],[4,  -18, 0.9, 2],
+  [-14,-6,1.0,0],[-12,8,1.3,1],[-16,2,0.9,2],
+  [13,-7,1.1,0],[14,5,1.4,1],[15,10,0.85,2],
+  [-6,-14,1.0,0],[5,-15,1.2,1],[-10,-13,1.3,2],
+  [7,14,0.9,0],[-5,15,1.1,1],[10,13,1.0,2],
+  [-17,-1,1.2,0],[16,0,1.0,1],[-3,-17,0.9,2],
+  [3,17,1.3,0],[-14,12,1.0,1],[12,-14,1.1,2],
+  [-8,16,0.9,0],[8,-16,1.2,1],[-16,-10,1.0,2],
+  [16,-9,0.85,0],[16,8,1.1,1],[-15,-3,1.3,2],
+  [-11,-16,1.0,0],[11,16,0.9,1],[-13,14,1.1,2],
+  [14,-12,1.2,0],[-4,-16,1.0,1],[4,-18,0.9,2],
 ];
-
-const TREE_GREENS = ['#1a5c38', '#206040', '#2d6a4f', '#166534', '#1b4332'];
+const TREE_GREENS = ['#1a5c38','#206040','#2d6a4f','#166534','#1b4332'];
 
 function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; variant: number }) {
   const gy = terrainY(x, z);
@@ -179,34 +146,23 @@ function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; v
   const leaf2      = TREE_GREENS[(variant + 1) % TREE_GREENS.length];
   return (
     <group position={[x, gy, z]} scale={[scale, scale, scale]}>
-      {/* Trunk */}
-      <Cylinder args={[0.18, 0.26, 1.4, 7]} position={[0, 0.7, 0]} castShadow receiveShadow>
+      <Cylinder args={[0.18,0.26,1.4,7]} position={[0,0.7,0]} castShadow receiveShadow>
         <meshStandardMaterial color={trunkColor} roughness={0.95} metalness={0} />
       </Cylinder>
-      {/* Lower canopy */}
-      <Cone args={[1.35, 2.2, 8]} position={[0, 2.4, 0]} castShadow receiveShadow>
+      <Cone args={[1.35,2.2,8]} position={[0,2.4,0]} castShadow receiveShadow>
         <meshStandardMaterial color={leafColor} roughness={0.88} metalness={0} />
       </Cone>
-      {/* Middle canopy */}
-      <Cone args={[1.0, 1.8, 8]} position={[0, 3.6, 0]} castShadow receiveShadow>
+      <Cone args={[1.0,1.8,8]} position={[0,3.6,0]} castShadow receiveShadow>
         <meshStandardMaterial color={leaf2} roughness={0.85} metalness={0} />
       </Cone>
-      {/* Top canopy */}
-      <Cone args={[0.65, 1.5, 7]} position={[0, 4.6, 0]} castShadow receiveShadow>
+      <Cone args={[0.65,1.5,7]} position={[0,4.6,0]} castShadow receiveShadow>
         <meshStandardMaterial color={leafColor} roughness={0.9} metalness={0} />
       </Cone>
     </group>
   );
 }
-
 function Forest() {
-  return (
-    <>
-      {TREE_POSITIONS.map(([x, z, scale, variant], i) => (
-        <Tree key={i} x={x} z={z} scale={scale} variant={variant} />
-      ))}
-    </>
-  );
+  return <>{TREE_POSITIONS.map(([x,z,scale,variant],i) => <Tree key={i} x={x} z={z} scale={scale} variant={variant} />)}</>;
 }
 
 // ── Fireflies ─────────────────────────────────────────────────────
@@ -215,55 +171,32 @@ function Fireflies() {
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      // Cluster near pond and along path
       const angle = Math.random() * Math.PI * 2;
-      const r     = 2 + Math.random() * 5;
-      arr[i * 3]     = Math.cos(angle) * r;
-      arr[i * 3 + 1] = 0.5 + Math.random() * 1.8;
-      arr[i * 3 + 2] = Math.sin(angle) * r;
+      const r = 2 + Math.random() * 5;
+      arr[i*3] = Math.cos(angle)*r; arr[i*3+1] = 0.5+Math.random()*1.8; arr[i*3+2] = Math.sin(angle)*r;
     }
     return arr;
   }, []);
-
-  const posRef   = useRef<THREE.BufferAttribute>(null!);
-  const origPos  = useMemo(() => Float32Array.from(positions), [positions]);
-
+  const posRef  = useRef<THREE.BufferAttribute>(null!);
+  const origPos = useMemo(() => Float32Array.from(positions), [positions]);
   useFrame(({ clock }) => {
     if (!posRef.current) return;
     const t = clock.elapsedTime;
     for (let i = 0; i < count; i++) {
-      const ox = origPos[i * 3];
-      const oy = origPos[i * 3 + 1];
-      const oz = origPos[i * 3 + 2];
-      posRef.current.setXYZ(
-        i,
-        ox + Math.sin(t * 0.6 + i * 1.3) * 0.35,
-        oy + Math.sin(t * 0.9 + i * 0.7) * 0.22,
-        oz + Math.cos(t * 0.5 + i * 1.1) * 0.35,
+      posRef.current.setXYZ(i,
+        origPos[i*3]   + Math.sin(t*0.6+i*1.3)*0.35,
+        origPos[i*3+1] + Math.sin(t*0.9+i*0.7)*0.22,
+        origPos[i*3+2] + Math.cos(t*0.5+i*1.1)*0.35,
       );
     }
     posRef.current.needsUpdate = true;
   });
-
   return (
     <Points>
       <bufferGeometry>
-        <bufferAttribute
-          ref={posRef}
-          attach="attributes-position"
-          array={positions}
-          count={count}
-          itemSize={3}
-        />
+        <bufferAttribute ref={posRef} attach="attributes-position" array={positions} count={count} itemSize={3} />
       </bufferGeometry>
-      <PointMaterial
-        size={0.12}
-        color="#fef08a"
-        transparent
-        opacity={0.85}
-        sizeAttenuation
-        depthWrite={false}
-      />
+      <PointMaterial size={0.12} color="#fef08a" transparent opacity={0.85} sizeAttenuation depthWrite={false} />
     </Points>
   );
 }
@@ -272,32 +205,22 @@ function Fireflies() {
 function Decorations() {
   return (
     <>
-      {/* Rocks — PBR */}
-      {([
-        [-6,3,0.18],[ 8,-7,0.22],[-9,-4,0.16],[5,10,0.20],
-        [-11,6,0.24],[11,-9,0.19],[-7,11,0.15],[9,8,0.21],
-      ] as [number,number,number][]).map(([x,z,r],i) => (
-        <Sphere key={i} args={[r,8,6]} position={[x, terrainY(x,z)+r*0.6, z]} castShadow>
+      {([ [-6,3,0.18],[8,-7,0.22],[-9,-4,0.16],[5,10,0.20],[-11,6,0.24],[11,-9,0.19],[-7,11,0.15],[9,8,0.21] ] as [number,number,number][]).map(([x,z,r],i) => (
+        <Sphere key={i} args={[r,8,6]} position={[x,terrainY(x,z)+r*0.6,z]} castShadow>
           <meshStandardMaterial color={i%2===0?'#78716c':'#a8a29e'} roughness={0.9} metalness={0.05} />
         </Sphere>
       ))}
-
-      {/* Mushrooms — PBR */}
       {([[-4,-8],[7,6],[-8,9],[-3,8],[6,-5]] as [number,number][]).map(([x,z],i) => (
-        <group key={i} position={[x, terrainY(x,z), z]}>
+        <group key={i} position={[x,terrainY(x,z),z]}>
           <Cylinder args={[0.07,0.1,0.38,8]} position={[0,0.19,0]} castShadow>
             <meshStandardMaterial color="#d6c9a0" roughness={0.9} metalness={0} />
           </Cylinder>
           <Sphere args={[0.24,10,8]} position={[0,0.52,0]} castShadow>
-            <meshStandardMaterial
-              color={['#dc2626','#ea580c','#9333ea','#0891b2','#16a34a'][i]}
-              roughness={0.6} metalness={0.05} />
+            <meshStandardMaterial color={['#dc2626','#ea580c','#9333ea','#0891b2','#16a34a'][i]} roughness={0.6} metalness={0.05} />
           </Sphere>
         </group>
       ))}
-
-      {/* Wooden sign */}
-      <group position={[2.0, terrainY(2.0, 0.8) + 0.01, 0.8]}>
+      <group position={[2.0,terrainY(2.0,0.8)+0.01,0.8]}>
         <Box args={[0.1,0.65,0.1]} position={[0,0.33,0]} castShadow>
           <meshStandardMaterial color="#92400e" roughness={0.95} metalness={0} />
         </Box>
@@ -305,15 +228,11 @@ function Decorations() {
           <meshStandardMaterial color="#b45309" roughness={0.9} metalness={0} />
         </Box>
         <Billboard position={[0,0.77,0.06]}>
-          <Text fontSize={0.1} color="#fef9c3" anchorX="center" anchorY="middle">
-            Meadow Haven 🌿
-          </Text>
+          <Text fontSize={0.1} color="#fef9c3" anchorX="center" anchorY="middle">Meadow Haven 🌿</Text>
         </Billboard>
       </group>
-
-      {/* Fence posts along path edge */}
       {[-8,-4,0,4,8].map((x,i) => (
-        <group key={i} position={[x, terrainY(x, 1.9), 1.9]}>
+        <group key={i} position={[x,terrainY(x,1.9),1.9]}>
           <Box args={[0.1,0.55,0.1]} position={[0,0.28,0]} castShadow>
             <meshStandardMaterial color="#a16207" roughness={0.95} metalness={0} />
           </Box>
@@ -324,16 +243,12 @@ function Decorations() {
 }
 
 // ── Flowers ───────────────────────────────────────────────────────
-const FLOWER_POS: [number, number][] = [
+const FLOWER_POS: [number,number][] = [
   [-7,-5],[5,-7],[-4,6],[8,4],[-9,1],[9,-2],
-  [2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],
-  [4, 6],[-5,-4],[7,-10],[-8, 8],
+  [2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],[4,6],[-5,-4],[7,-10],[-8,8],
 ];
-
 function Flower({ pos, collected, onCollect, playerPos }: {
-  pos: [number, number];
-  collected: boolean;
-  onCollect: () => void;
+  pos: [number,number]; collected: boolean; onCollect: () => void;
   playerPos: React.MutableRefObject<THREE.Vector3>;
 }) {
   const ref    = useRef<THREE.Group>(null!);
@@ -341,16 +256,13 @@ function Flower({ pos, collected, onCollect, playerPos }: {
   colRef.current = collected;
   useFrame(({ clock }) => {
     if (!ref.current || colRef.current) return;
-    ref.current.position.y = terrainY(pos[0], pos[1]) + 0.6 + Math.sin(clock.elapsedTime * 2 + pos[0]) * 0.14;
-    if (Math.hypot(playerPos.current.x - pos[0], playerPos.current.z - pos[1]) < 1.2 && !colRef.current)
-      onCollect();
+    ref.current.position.y = terrainY(pos[0],pos[1])+0.6+Math.sin(clock.elapsedTime*2+pos[0])*0.14;
+    if (Math.hypot(playerPos.current.x-pos[0],playerPos.current.z-pos[1])<1.2 && !colRef.current) onCollect();
   });
   if (collected) return null;
   return (
-    <group ref={ref} position={[pos[0], terrainY(pos[0], pos[1]) + 0.6, pos[1]]}>
-      <Billboard>
-        <Text fontSize={0.45} anchorX="center" anchorY="middle">🌸</Text>
-      </Billboard>
+    <group ref={ref} position={[pos[0],terrainY(pos[0],pos[1])+0.6,pos[1]]}>
+      <Billboard><Text fontSize={0.45} anchorX="center" anchorY="middle">🌸</Text></Billboard>
     </group>
   );
 }
@@ -359,12 +271,11 @@ function Flower({ pos, collected, onCollect, playerPos }: {
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
-    if (ref.current)
-      (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3);
+    if (ref.current) (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3+0.3*Math.sin(clock.elapsedTime*3);
   });
   return (
-    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]}>
-      <ringGeometry args={[0.9, 1.3, 32]} />
+    <mesh ref={ref} rotation={[-Math.PI/2,0,0]} position={[0,-0.5,0]}>
+      <ringGeometry args={[0.9,1.3,32]} />
       <meshBasicMaterial color={color} transparent opacity={0.4} side={THREE.DoubleSide} />
     </mesh>
   );
@@ -372,101 +283,80 @@ function GlowRing({ color }: { color: string }) {
 
 // ── NPC ───────────────────────────────────────────────────────────
 function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
-  npc: NPC;
-  playerPos: React.MutableRefObject<THREE.Vector3>;
-  onNearby: (npc: NPC | null) => void;
-  isNearby: boolean;
-  showPrompt: boolean;
+  npc: NPC; playerPos: React.MutableRefObject<THREE.Vector3>;
+  onNearby: (npc: NPC|null) => void; isNearby: boolean; showPrompt: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null!);
   const wasNear  = useRef(false);
-  const wx = npc.tx - 12;
-  const wz = npc.ty - 9;
+  const wx = npc.tx - 12, wz = npc.ty - 9;
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
-    groupRef.current.position.y = terrainY(wx, wz) + 0.9 + Math.sin(clock.elapsedTime * 1.2 + npc.tx) * 0.1;
-    const near = Math.hypot(playerPos.current.x - wx, playerPos.current.z - wz) < 2.8;
-    if (near !== wasNear.current) { wasNear.current = near; onNearby(near ? npc : null); }
+    groupRef.current.position.y = terrainY(wx,wz)+0.9+Math.sin(clock.elapsedTime*1.2+npc.tx)*0.1;
+    const near = Math.hypot(playerPos.current.x-wx,playerPos.current.z-wz)<2.8;
+    if (near!==wasNear.current) { wasNear.current=near; onNearby(near?npc:null); }
   });
   return (
-    <group ref={groupRef} position={[wx, terrainY(wx, wz) + 0.9, wz]}>
+    <group ref={groupRef} position={[wx,terrainY(wx,wz)+0.9,wz]}>
       {isNearby && <GlowRing color={npc.color} />}
-      <Billboard>
-        <Text fontSize={0.85} anchorX="center" anchorY="middle">{npc.emoji}</Text>
-      </Billboard>
-      <Billboard position={[0, 1.3, 0]}>
-        <Text fontSize={0.2} color="white" anchorX="center" anchorY="middle"
-          outlineWidth={0.03} outlineColor="black">{npc.name}</Text>
+      <Billboard><Text fontSize={0.85} anchorX="center" anchorY="middle">{npc.emoji}</Text></Billboard>
+      <Billboard position={[0,1.3,0]}>
+        <Text fontSize={0.2} color="white" anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor="black">{npc.name}</Text>
       </Billboard>
       {showPrompt && (
-        <Billboard position={[0, 1.9, 0]}>
-          <Text fontSize={0.19} color="#fde68a" anchorX="center" anchorY="middle"
-            outlineWidth={0.03} outlineColor="#78350f">Press E to talk</Text>
+        <Billboard position={[0,1.9,0]}>
+          <Text fontSize={0.19} color="#fde68a" anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor="#78350f">Press E to talk</Text>
         </Billboard>
       )}
     </group>
   );
 }
 
-// ── Avatar — PBR + directional facing ────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────
 function Avatar({ position, color, name, isMe, moving, facingAngle }: {
-  position: [number, number, number];
-  color: string; name: string; isMe: boolean; moving: boolean;
-  facingAngle: number;
+  position: [number,number,number]; color: string; name: string;
+  isMe: boolean; moving: boolean; facingAngle: number;
 }) {
   const groupRef  = useRef<THREE.Group>(null!);
   const movRef    = useRef(moving);
   const angleRef  = useRef(facingAngle);
   movRef.current   = moving;
   angleRef.current = facingAngle;
-
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
-    const bob = movRef.current ? Math.sin(clock.elapsedTime * 8) * 0.06 : 0;
-    // Idle breathing
-    const breathe = 1 + Math.sin(clock.elapsedTime * 1.5) * 0.012;
+    const bob     = movRef.current ? Math.sin(clock.elapsedTime*8)*0.06 : 0;
+    const breathe = 1+Math.sin(clock.elapsedTime*1.5)*0.012;
     groupRef.current.scale.y = breathe;
-    groupRef.current.position.set(position[0], position[1] + bob, position[2]);
-    // Smooth Y-rotation toward facing direction
-    const target = angleRef.current;
-    const cur    = groupRef.current.rotation.y;
-    groupRef.current.rotation.y = cur + (target - cur) * 0.15;
+    groupRef.current.position.set(position[0],position[1]+bob,position[2]);
+    const cur = groupRef.current.rotation.y;
+    groupRef.current.rotation.y = cur+(angleRef.current-cur)*0.15;
   });
-
   return (
     <group ref={groupRef} position={position}>
-      {/* Shadow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-        <circleGeometry args={[0.36, 16]} />
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
+        <circleGeometry args={[0.36,16]} />
         <meshBasicMaterial color="black" transparent opacity={0.22} />
       </mesh>
-      {/* Body — PBR */}
-      <Cylinder args={[0.21, 0.27, 0.72, 12]} position={[0, 0.36, 0]} castShadow>
+      <Cylinder args={[0.21,0.27,0.72,12]} position={[0,0.36,0]} castShadow>
         <meshStandardMaterial color={color} roughness={0.7} metalness={0.05} />
       </Cylinder>
-      {/* Head */}
-      <Sphere args={[0.28, 16, 12]} position={[0, 0.93, 0]} castShadow>
+      <Sphere args={[0.28,16,12]} position={[0,0.93,0]} castShadow>
         <meshStandardMaterial color="#fde7c3" roughness={0.8} metalness={0} />
       </Sphere>
-      {/* Eyes */}
       <Sphere args={[0.05,8,8]} position={[0.1,0.98,0.22]}>
         <meshBasicMaterial color="#1e293b" />
       </Sphere>
       <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
         <meshBasicMaterial color="#1e293b" />
       </Sphere>
-      {/* Selection ring */}
       {isMe && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]}>
-          <ringGeometry args={[0.38, 0.47, 32]} />
+        <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
+          <ringGeometry args={[0.38,0.47,32]} />
           <meshBasicMaterial color={color} transparent opacity={0.75} />
         </mesh>
       )}
-      {/* Name */}
-      <Billboard position={[0, 1.55, 0]}>
-        <Text fontSize={0.22} color={isMe ? color : 'white'} anchorX="center" anchorY="middle"
-          outlineWidth={0.04} outlineColor="black">
-          {name}{isMe ? ' ★' : ''}
+      <Billboard position={[0,1.55,0]}>
+        <Text fontSize={0.22} color={isMe?color:'white'} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
+          {name}{isMe?' ★':''}
         </Text>
       </Billboard>
     </group>
@@ -475,45 +365,27 @@ function Avatar({ position, color, name, isMe, moving, facingAngle }: {
 
 // ── Remote avatar ─────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const pos = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  const pos = useRef(new THREE.Vector3(player.x/20-10,0,player.y/20-9));
   useFrame(() => {
-    const tx = player.x / 20 - 10;
-    const tz = player.y / 20 - 9;
-    pos.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
+    const tx=player.x/20-10, tz=player.y/20-9;
+    pos.current.lerp(new THREE.Vector3(tx,terrainY(tx,tz),tz),0.12);
   });
   if (!player.online) return null;
-  return (
-    <Avatar position={[pos.current.x, pos.current.y, pos.current.z]}
-      color={player.spriteColor} name={player.name} isMe={false}
-      moving={player.moving} facingAngle={0} />
-  );
+  return <Avatar position={[pos.current.x,pos.current.y,pos.current.z]} color={player.spriteColor} name={player.name} isMe={false} moving={player.moving} facingAngle={0} />;
 }
 
-// ── Lighting — golden afternoon ───────────────────────────────────
+// ── Lighting ──────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
       <ambientLight intensity={0.55} color="#fff3d0" />
-      {/* Main sun — golden afternoon angle */}
-      <directionalLight
-        position={[20, 28, 8]}
-        intensity={2.0}
-        color="#ffe8a0"
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-far={100}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
-        shadow-bias={-0.001}
-      />
-      {/* Cool sky fill */}
-      <directionalLight position={[-12, 10, -12]} intensity={0.35} color="#b8d4f0" />
-      {/* Warm pond glow */}
-      <pointLight position={[0, 2.5, 0]} intensity={1.2} color="#7dd3fc" distance={10} decay={2} />
-      {/* Subtle hemisphere */}
-      <hemisphereLight args={['#87ceeb', '#3d6b35', 0.4]} />
+      <directionalLight position={[20,28,8]} intensity={2.0} color="#ffe8a0" castShadow
+        shadow-mapSize={[2048,2048]} shadow-camera-far={100}
+        shadow-camera-left={-30} shadow-camera-right={30}
+        shadow-camera-top={30} shadow-camera-bottom={-30} shadow-bias={-0.001} />
+      <directionalLight position={[-12,10,-12]} intensity={0.35} color="#b8d4f0" />
+      <pointLight position={[0,2.5,0]} intensity={1.2} color="#7dd3fc" distance={10} decay={2} />
+      <hemisphereLight args={['#87ceeb','#3d6b35',0.4]} />
     </>
   );
 }
@@ -522,15 +394,8 @@ function Lighting() {
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
-    camera.position.lerp(
-      new THREE.Vector3(
-        target.current.x + CAM_DIST * 0.55,
-        CAM_HEIGHT,
-        target.current.z + CAM_DIST,
-      ),
-      CAM_LERP,
-    );
-    camera.lookAt(target.current.x, target.current.y + 1.2, target.current.z);
+    camera.position.lerp(new THREE.Vector3(target.current.x+CAM_DIST*0.55,CAM_HEIGHT,target.current.z+CAM_DIST),CAM_LERP);
+    camera.lookAt(target.current.x,target.current.y+1.2,target.current.z);
   });
   return null;
 }
@@ -545,26 +410,25 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   blockedRef: React.MutableRefObject<boolean>;
 }) {
   useFrame(() => {
-    if (blockedRef.current) { movingRef.current = false; return; }
-    const k = keysRef.current;
-    let dx = 0, dz = 0;
-    if (k.has('ArrowLeft')  || k.has('a') || k.has('A')) dx -= MOVE_SPEED;
-    if (k.has('ArrowRight') || k.has('d') || k.has('D')) dx += MOVE_SPEED;
-    if (k.has('ArrowUp')    || k.has('w') || k.has('W')) dz -= MOVE_SPEED;
-    if (k.has('ArrowDown')  || k.has('s') || k.has('S')) dz += MOVE_SPEED;
-    if (dx !== 0 && dz !== 0) { dx *= 0.707; dz *= 0.707; }
-    movingRef.current = dx !== 0 || dz !== 0;
+    if (blockedRef.current) { movingRef.current=false; return; }
+    const k=keysRef.current;
+    let dx=0, dz=0;
+    if (k.has('ArrowLeft') ||k.has('a')||k.has('A')) dx-=MOVE_SPEED;
+    if (k.has('ArrowRight')||k.has('d')||k.has('D')) dx+=MOVE_SPEED;
+    if (k.has('ArrowUp')   ||k.has('w')||k.has('W')) dz-=MOVE_SPEED;
+    if (k.has('ArrowDown') ||k.has('s')||k.has('S')) dz+=MOVE_SPEED;
+    if (dx!==0&&dz!==0) { dx*=0.707; dz*=0.707; }
+    movingRef.current = dx!==0||dz!==0;
     if (!movingRef.current) return;
-    // Update facing angle
-    if (dx !== 0 || dz !== 0) facingRef.current = Math.atan2(dx, dz);
-    const np   = posRef.current.clone().add(new THREE.Vector3(dx, 0, dz));
-    const half = WORLD_SIZE / 2 - 2;
-    np.x = Math.max(-half, Math.min(half, np.x));
-    np.z = Math.max(-half, Math.min(half, np.z));
-    if (Math.hypot(np.x, np.z) > 4.4) {
-      np.y = terrainY(np.x, np.z);
+    if (dx!==0||dz!==0) facingRef.current=Math.atan2(dx,dz);
+    const np=posRef.current.clone().add(new THREE.Vector3(dx,0,dz));
+    const half=WORLD_SIZE/2-2;
+    np.x=Math.max(-half,Math.min(half,np.x));
+    np.z=Math.max(-half,Math.min(half,np.z));
+    if (Math.hypot(np.x,np.z)>4.4) {
+      np.y=terrainY(np.x,np.z);
       posRef.current.copy(np);
-      onPublish(np.x, np.z, true);
+      onPublish(np.x,np.z,true);
     }
   });
   return null;
@@ -572,51 +436,49 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
 
 // ── Scene ─────────────────────────────────────────────────────────
 function Scene({
-  myEmail, myName, myColor,
-  onCollect, onBondXP,
-  nearbyNPCRef, setNearbyNPC,
-  blockedRef, posRef, movingRef, facingRef, keysRef,
+  myEmail, myName, myColor, onCollect, onBondXP,
+  nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef,
 }: {
   myEmail: string; myName: string; myColor: string;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
-  nearbyNPCRef: React.MutableRefObject<NPC | null>;
-  setNearbyNPC: (n: NPC | null) => void;
+  nearbyNPCRef: React.MutableRefObject<NPC|null>;
+  setNearbyNPC: (n: NPC|null) => void;
   blockedRef:  React.MutableRefObject<boolean>;
   posRef:      React.MutableRefObject<THREE.Vector3>;
   movingRef:   React.MutableRefObject<boolean>;
   facingRef:   React.MutableRefObject<number>;
   keysRef:     React.MutableRefObject<Set<string>>;
 }) {
-  const remotePlayers = useRef<Record<string, PlayerState>>({});
+  const remotePlayers = useRef<Record<string,PlayerState>>({});
   const { publish, markOnline } = useHeartboundSync(
     myEmail, myName, myColor,
-    useCallback((p: Record<string, PlayerState>) => { remotePlayers.current = p; }, []),
+    useCallback((p: Record<string,PlayerState>) => { remotePlayers.current=p; },[]),
   );
   const flowerCountRef = useRef(0);
   const [collectedFlowers, setCollectedFlowers] = useState<Set<number>>(new Set());
-  const [remoteSnap, setRemoteSnap]             = useState<Record<string, PlayerState>>({});
+  const [remoteSnap, setRemoteSnap]             = useState<Record<string,PlayerState>>({});
 
   useEffect(() => { markOnline(); }, [markOnline]);
   useEffect(() => {
-    const id = setInterval(() => setRemoteSnap({ ...remotePlayers.current }), 100);
+    const id = setInterval(() => setRemoteSnap({...remotePlayers.current}), 100);
     return () => clearInterval(id);
   }, []);
 
   const handleFlowerCollect = useCallback((i: number) => {
     if (collectedFlowers.has(i)) return;
-    setCollectedFlowers(prev => new Set([...prev, i]));
+    setCollectedFlowers(prev => new Set([...prev,i]));
     flowerCountRef.current++;
     onCollect(flowerCountRef.current);
     onBondXP(5);
   }, [collectedFlowers, onCollect, onBondXP]);
 
   const onPublish = useCallback((x: number, z: number, moving: boolean) => {
-    publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving });
+    publish({ x:(x+10)*20, y:(z+9)*20, dir:'down', moving });
   }, [publish]);
 
-  const handleNPCNearby = useCallback((npc: NPC | null) => {
-    if (nearbyNPCRef.current?.id === npc?.id) return;
-    nearbyNPCRef.current = npc;
+  const handleNPCNearby = useCallback((npc: NPC|null) => {
+    if (nearbyNPCRef.current?.id===npc?.id) return;
+    nearbyNPCRef.current=npc;
     setNearbyNPC(npc);
   }, [nearbyNPCRef, setNearbyNPC]);
 
@@ -624,51 +486,32 @@ function Scene({
     <>
       <Lighting />
       <Environment preset="sunset" />
-      <fog attach="fog" args={['#c8e6c9', 45, 100]} />
-      <Sky
-        sunPosition={[80, 18, -40]}
-        turbidity={4.5}
-        rayleigh={1.2}
-        mieCoefficient={0.008}
-        mieDirectionalG={0.85}
-        inclination={0.52}
-        azimuth={0.18}
-      />
+      <fog attach="fog" args={['#c8e6c9',45,100]} />
+      <Sky sunPosition={[80,18,-40]} turbidity={4.5} rayleigh={1.2} mieCoefficient={0.008} mieDirectionalG={0.85} inclination={0.52} azimuth={0.18} />
       <Stars radius={80} depth={40} count={1200} factor={3} fade speed={0.4} />
-
       <Terrain />
       <Pond />
       <Forest />
       <Decorations />
       <Fireflies />
-
-      {FLOWER_POS.map((pos, i) => (
-        <Flower key={i} pos={pos} collected={collectedFlowers.has(i)}
-          onCollect={() => handleFlowerCollect(i)} playerPos={posRef} />
+      {FLOWER_POS.map((pos,i) => (
+        <Flower key={i} pos={pos} collected={collectedFlowers.has(i)} onCollect={() => handleFlowerCollect(i)} playerPos={posRef} />
       ))}
-
       {NPCS.map(npc => (
         <NPCSprite key={npc.id} npc={npc} playerPos={posRef}
           onNearby={handleNPCNearby}
-          isNearby={nearbyNPCRef.current?.id === npc.id}
-          showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
+          isNearby={nearbyNPCRef.current?.id===npc.id}
+          showPrompt={nearbyNPCRef.current?.id===npc.id && !blockedRef.current} />
       ))}
-
       <Avatar
-        position={[posRef.current.x, terrainY(posRef.current.x, posRef.current.z), posRef.current.z]}
-        color={myColor} name={myName} isMe moving={movingRef.current}
-        facingAngle={facingRef.current}
+        position={[posRef.current.x,terrainY(posRef.current.x,posRef.current.z),posRef.current.z]}
+        color={myColor} name={myName} isMe moving={movingRef.current} facingAngle={facingRef.current}
       />
-
-      {Object.values(remoteSnap).filter(p => p.email !== myEmail && p.online).map(p => (
+      {Object.values(remoteSnap).filter(p => p.email!==myEmail&&p.online).map(p => (
         <RemoteAvatar key={p.email} player={p} />
       ))}
-
       <CameraRig target={posRef} />
-      <MovementController
-        keysRef={keysRef} posRef={posRef} movingRef={movingRef}
-        facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
-      />
+      <MovementController keysRef={keysRef} posRef={posRef} movingRef={movingRef} facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef} />
     </>
   );
 }
@@ -678,18 +521,18 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
       <div className="rounded-2xl p-4 shadow-2xl border"
-        style={{ background:'rgba(10,6,25,0.93)', backdropFilter:'blur(14px)', borderColor: npc.color+'55' }}>
+        style={{ background:'rgba(10,6,25,0.93)', backdropFilter:'blur(14px)', borderColor:npc.color+'55' }}>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-2xl">{npc.emoji}</span>
           <span className="font-bold text-white text-sm">{npc.name}</span>
           <div className="flex-1" />
           <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
-            style={{ background: npc.color+'30', color: npc.color }}>+{npc.xpReward} Bond XP</span>
+            style={{ background:npc.color+'30', color:npc.color }}>+{npc.xpReward} Bond XP</span>
         </div>
         <p className="text-gray-200 text-sm leading-relaxed mb-3">{npc.lines[lineIdx]}</p>
         <button onClick={onClose}
           className="w-full py-1.5 rounded-xl text-xs font-semibold text-white/60 hover:text-white transition"
-          style={{ background: npc.color+'20', border:`1px solid ${npc.color}30` }}>
+          style={{ background:npc.color+'20', border:`1px solid ${npc.color}30` }}>
           Press E or tap to continue
         </button>
       </div>
@@ -733,9 +576,9 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
               <h3 className="text-white font-bold mb-4">Collected Items</h3>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { icon:'🌸', label:'Flowers',   count: flowerCount },
-                  { icon:'🍄', label:'Mushrooms', count: 0 },
-                  { icon:'💎', label:'Crystals',  count: 0 },
+                  { icon:'🌸', label:'Flowers',   count:flowerCount },
+                  { icon:'🍄', label:'Mushrooms', count:0 },
+                  { icon:'💎', label:'Crystals',  count:0 },
                 ].map(it => (
                   <div key={it.label} className={`bg-white/5 rounded-2xl p-4 flex flex-col items-center gap-2 border border-white/10 ${it.count===0&&it.label!=='Flowers'?'opacity-40':''}`}>
                     <span className="text-3xl">{it.icon}</span>
@@ -762,8 +605,8 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
               </div>
               <div className="space-y-2">
                 {[
-                  { label:'Flowers collected', value: flowerCount, icon:'🌸' },
-                  { label:'NPCs talked to',    value: 0,           icon:'💬' },
+                  { label:'Flowers collected', value:flowerCount, icon:'🌸' },
+                  { label:'NPCs talked to',    value:0,           icon:'💬' },
                 ].map(s => (
                   <div key={s.label} className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2">
                     <span className="text-white/60 text-sm">{s.icon} {s.label}</span>
@@ -778,13 +621,13 @@ function GameMenu({ bondXP, flowerCount, onClose, onToggleFullscreen, isFullscre
               <h3 className="text-white font-bold mb-4">Controls</h3>
               <div className="space-y-2">
                 {[
-                  { keys:'W / ↑',       action:'Move forward' },
-                  { keys:'S / ↓',       action:'Move backward' },
-                  { keys:'A / ←',       action:'Move left' },
-                  { keys:'D / →',       action:'Move right' },
-                  { keys:'E / Enter',    action:'Talk to NPC / Continue dialogue' },
-                  { keys:'M / Escape',   action:'Open / close menu' },
-                  { keys:'F',           action:'Toggle fullscreen' },
+                  { keys:'W / ↑',     action:'Move forward' },
+                  { keys:'S / ↓',     action:'Move backward' },
+                  { keys:'A / ←',     action:'Move left' },
+                  { keys:'D / →',     action:'Move right' },
+                  { keys:'E / Enter', action:'Talk to NPC / Continue dialogue' },
+                  { keys:'M / Esc',   action:'Open / close menu' },
+                  { keys:'F',         action:'Toggle fullscreen' },
                 ].map(c => (
                   <div key={c.action} className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2.5">
                     <span className="text-white/60 text-sm">{c.action}</span>
@@ -850,7 +693,7 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
           onPointerLeave={() => keysRef.current.delete(btn.key)}
           onPointerCancel={() => keysRef.current.delete(btn.key)}
           className="bg-white/25 backdrop-blur rounded-xl text-xl font-bold text-white active:bg-white/50 transition select-none touch-none flex items-center justify-center"
-          style={{ gridColumn: btn.col, gridRow: btn.row }}>{btn.label}</button>
+          style={{ gridColumn:btn.col, gridRow:btn.row }}>{btn.label}</button>
       ))}
     </div>
   );
@@ -885,8 +728,9 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [flowerCount,  setFlowerCount]  = useState(0);
 
-  useEffect(() => { dialogueRef.current = dialogue; blockedRef.current = !!dialogue || menuOpenRef.current; }, [dialogue]);
-  useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen; }, [menuOpen]);
+  useEffect(() => { dialogueRef.current=dialogue; blockedRef.current=!!dialogue||menuOpenRef.current; }, [dialogue]);
+  useEffect(() => { menuOpenRef.current=menuOpen; blockedRef.current=!!dialogueRef.current||menuOpen; }, [menuOpen]);
+  // Auto-focus on mount so keyboard works immediately without clicking
   useEffect(() => { containerRef.current?.focus(); }, []);
   useEffect(() => {
     const h = () => setIsFullscreen(!!document.fullscreenElement);
@@ -899,25 +743,60 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     else document.exitFullscreen();
   }, []);
 
-  // Single permanent listener — [] dep array
+  const openDialogue = useCallback((npc: NPC) => {
+    const idx = npcLineIdx.current[npc.id] ?? 0;
+    npcLineIdx.current[npc.id] = (idx+1) % npc.lines.length;
+    setDialogue({ npc, lineIdx: idx });
+    if (!talkedToRef.current.has(npc.id)) { talkedToRef.current.add(npc.id); onBondXP?.(npc.xpReward); }
+  }, [onBondXP]);
+  const closeDialogue = useCallback(() => setDialogue(null), []);
+  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
+
+  // ─────────────────────────────────────────────────────────────────
+  // SINGLE PERMANENT KEYDOWN LISTENER — mounted once, [] dep array
+  // All state read via refs only (dialogueRef, menuOpenRef, nearbyNPCRef)
+  // Esc: ALWAYS e.preventDefault() → browser NEVER exits fullscreen
+  //      Esc only closes dialogue or toggles menu
+  // ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // Prevent browser scrolling on arrow keys / space
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+
+      // *** KEY FIX: preventDefault on Escape so browser never exits fullscreen ***
+      if (e.key === 'Escape') e.preventDefault();
+
+      // Add to movement set (only movement keys matter here, others are no-ops)
       keysRef.current.add(e.key);
+
       const hasD = !!dialogueRef.current;
       const hasM = menuOpenRef.current;
+
+      // E / Enter → interact or continue dialogue
       if (e.key==='e'||e.key==='E'||e.key==='Enter') {
         if (hasD) closeDialogue();
         else if (!hasM && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
+        return;
       }
+
+      // Escape / M → close dialogue first, else toggle menu
       if (e.key==='Escape'||e.key==='m'||e.key==='M') {
         if (hasD) closeDialogue();
         else setMenuOpen(p => !p);
+        return;
       }
-      if (e.key==='f'||e.key==='F') toggleFullscreen();
+
+      // F → fullscreen (not Escape — fullscreen is now only in Settings toggle)
+      if (e.key==='f'||e.key==='F') {
+        toggleFullscreen();
+        return;
+      }
     };
+
     const up   = (e: KeyboardEvent) => keysRef.current.delete(e.key);
+    // Clear all keys when window loses focus → no stuck keys
     const blur = () => keysRef.current.clear();
+
     window.addEventListener('keydown', down);
     window.addEventListener('keyup',   up);
     window.addEventListener('blur',    blur);
@@ -926,16 +805,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       window.removeEventListener('keyup',   up);
       window.removeEventListener('blur',    blur);
     };
-  }, []); // ← empty — never re-registers
-
-  const openDialogue = useCallback((npc: NPC) => {
-    const idx = npcLineIdx.current[npc.id] ?? 0;
-    npcLineIdx.current[npc.id] = (idx + 1) % npc.lines.length;
-    setDialogue({ npc, lineIdx: idx });
-    if (!talkedToRef.current.has(npc.id)) { talkedToRef.current.add(npc.id); onBondXP?.(npc.xpReward); }
-  }, [onBondXP]);
-  const closeDialogue = useCallback(() => setDialogue(null), []);
-  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
+  }, []); // ← EMPTY — listener never re-registers
 
   return (
     <div
@@ -943,6 +813,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       tabIndex={-1}
       className="relative w-full select-none outline-none"
       style={{ height: isFullscreen ? '100vh' : 'calc(100vh - 120px)', minHeight: 400, background: '#0d1f0a' }}
+      // Re-focus whenever user clicks/taps anywhere on the game canvas
       onPointerDown={() => containerRef.current?.focus()}
     >
       <Canvas
@@ -963,7 +834,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </Suspense>
       </Canvas>
 
-      {/* Bond XP HUD */}
+      {/* Bond XP HUD — top center */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -975,8 +846,8 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
-      {/* Flowers HUD */}
-      <div className="absolute top-3 right-36 z-10 pointer-events-none">
+      {/* Flowers HUD — top right */}
+      <div className="absolute top-3 right-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">
           🌸 {flowerCount}
         </div>
@@ -1001,20 +872,25 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
       <VirtualJoystick keysRef={keysRef} />
 
-      <button onClick={() => setMenuOpen(true)}
-        className="absolute top-3 right-20 z-10 bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
-        title="Menu (M)">☰ Menu</button>
-
-      <button onClick={toggleFullscreen}
-        className="absolute top-3 right-3 z-10 bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
-        title="Fullscreen (F)">{isFullscreen ? '⛶ Exit' : '⛶'}</button>
-
-      <button onClick={onBack}
-        className="absolute top-3 left-3 z-10 bg-black/45 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-black/60 transition">
-        ← Exit</button>
+      {/*
+        TOP-LEFT HUD — ← Exit  |  ☰ Menu
+        Fullscreen and separate Exit buttons removed.
+        Fullscreen is now inside Settings tab only.
+      */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+        <button onClick={onBack}
+          className="bg-black/45 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-black/60 transition">
+          ← Exit
+        </button>
+        <button onClick={() => setMenuOpen(true)}
+          className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
+          title="Menu (M)">
+          ☰ Menu
+        </button>
+      </div>
 
       <div className="hidden md:block absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
-        WASD / Arrows · E to talk · M for menu · F fullscreen
+        WASD / Arrows · E to talk · M / Esc for menu · F fullscreen
       </div>
     </div>
   );
