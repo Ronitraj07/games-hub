@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
-import { useGameHistory } from '@/hooks/supabase/useGameHistory';
+import { useRivalryStats } from '@/hooks/supabase/useRivalryStats';
 import { GameCard } from '@/components/games/GameCard';
-import { Trophy, Clock, Target, Swords, Sparkles } from 'lucide-react';
+import { Trophy, Clock, Target, Swords, Sparkles, Flame, Zap } from 'lucide-react';
 
 const SIMPLE_GAMES = [
   {
@@ -56,7 +56,7 @@ const SIMPLE_GAMES = [
     estimatedTime: '5-10 min',
   },
   {
-    id: 'triviaquiz',
+    id: 'trivia',
     name: 'Trivia Quiz',
     description: 'Test your love knowledge',
     icon: '✨',
@@ -68,7 +68,7 @@ const SIMPLE_GAMES = [
     estimatedTime: '10-15 min',
   },
   {
-    id: 'rockpaperscissors',
+    id: 'rps',
     name: 'Rock Paper Scissors',
     description: 'Best of 5 rounds',
     icon: '🫧',
@@ -124,10 +124,22 @@ const STAT_CARDS = [
   { icon: Clock,   color: 'text-rose-400',   label: 'Favourite',   key: 'favoriteGame' as const },
 ];
 
+/** Format a Date as "X days ago" / "today" / "yesterday" */
+const timeAgo = (date: Date): string => {
+  const diffMs   = Date.now() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7)  return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return `${Math.floor(diffDays / 30)}mo ago`;
+};
+
 export const Home: React.FC = () => {
-  const { user }                              = useAuth();
+  const { user }                             = useAuth();
   const { stats, loading: statsLoading }     = usePlayerStats();
-  const { history, loading: historyLoading } = useGameHistory();
+  const { lastPlayed, currentStreak,
+          me, partner, loading: rivalLoading } = useRivalryStats();
   const [filter, setFilter]                  = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
 
   const filteredGames = SIMPLE_GAMES.filter(g => filter === 'all' || g.difficulty.toLowerCase() === filter);
@@ -166,7 +178,7 @@ export const Home: React.FC = () => {
 
         {/* Stats */}
         {!statsLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {STAT_CARDS.map(({ icon: Icon, color, label, key }) => (
               <div key={key} className="glass-card p-5">
                 <div className="flex items-center gap-3">
@@ -180,6 +192,48 @@ export const Home: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Rivalry banner — shown once data loaded and both players have played */}
+        {!rivalLoading && partner && (me.wins + me.losses + me.draws) > 0 && (
+          <div className="glass-card p-5 mb-8 flex flex-wrap items-center justify-between gap-4">
+            {/* Left: me */}
+            <div className="text-center min-w-[80px]">
+              <p className="text-2xl font-black text-green-500">{me.wins}</p>
+              <p className="text-xs text-gray-500">{me.name} wins</p>
+            </div>
+
+            {/* Centre: rivalry bar + streak */}
+            <div className="flex-1 min-w-[160px] text-center">
+              <p className="text-xs font-semibold text-gray-400 mb-2">⚔️ Head-to-Head</p>
+              {(me.wins + partner.wins) > 0 && (
+                <div className="h-2 rounded-full overflow-hidden flex bg-gray-100 dark:bg-gray-800 mb-2">
+                  <div
+                    className="bg-blue-400 h-full transition-all"
+                    style={{ width: `${(me.wins / (me.wins + partner.wins)) * 100}%` }}
+                  />
+                  <div
+                    className="bg-pink-400 h-full transition-all"
+                    style={{ width: `${(partner.wins / (me.wins + partner.wins)) * 100}%` }}
+                  />
+                </div>
+              )}
+              {currentStreak && currentStreak.count > 1 && (
+                <div className="inline-flex items-center gap-1 text-xs text-orange-500 font-semibold bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">
+                  <Flame size={11} /> {currentStreak.name} is on a {currentStreak.count}-win streak!
+                </div>
+              )}
+              {me.draws > 0 && (
+                <p className="text-xs text-gray-400 mt-1">{me.draws} draw{me.draws !== 1 ? 's' : ''}</p>
+              )}
+            </div>
+
+            {/* Right: partner */}
+            <div className="text-center min-w-[80px]">
+              <p className="text-2xl font-black text-pink-500">{partner.wins}</p>
+              <p className="text-xs text-gray-500">{partner.name} wins</p>
+            </div>
           </div>
         )}
 
@@ -203,48 +257,26 @@ export const Home: React.FC = () => {
             🎮 <span className="bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Games</span>
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {filteredGames.map((game) => (
-              <Link key={game.id} to={game.route} className="block group">
-                <GameCard {...game} />
-              </Link>
-            ))}
+            {filteredGames.map((game) => {
+              const lp = lastPlayed[game.id];
+              return (
+                <Link key={game.id} to={game.route} className="block group">
+                  <div className="relative">
+                    <GameCard {...game} />
+                    {/* Last-played badge */}
+                    {lp && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                        <Zap size={9} className="text-yellow-400" />
+                        {timeAgo(lp)}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
 
-        {/* Recent history */}
-        {!historyLoading && history.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-5 flex items-center gap-2">
-              🕐 <span className="bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Recent Games</span>
-            </h2>
-            <div className="glass-card overflow-hidden">
-              <div className="divide-y divide-white/30 dark:divide-white/10">
-                {history.slice(0, 5).map((game) => (
-                  <div key={game.id} className="p-4 hover:bg-white/30 dark:hover:bg-white/5 transition">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{game.game_type}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">vs {game.player_2_email}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                          game.winner_email === user?.email
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : game.winner_email === null
-                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        }`}>
-                          {game.winner_email === user?.email ? '🏆 Won' : game.winner_email === null ? '🤝 Draw' : '💔 Lost'}
-                        </span>
-                        <p className="text-xs text-gray-400 mt-1">{new Date(game.created_at).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
