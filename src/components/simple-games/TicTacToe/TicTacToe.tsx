@@ -51,7 +51,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('medium');
   const pendingInitRef = useRef<TicTacToeGameState | null>(null);
 
-  // Read ?room=CODE from URL (partner clicked invite link)
   useEffect(() => {
     const params    = new URLSearchParams(location.search);
     const roomParam = params.get('room');
@@ -67,7 +66,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     ? sanitizeFirebasePath(propSession)
     : `tictactoe-ai-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
 
-  // Fix: explicitly include recorded:false so Play Again always resets the flag
   const makeInitialState = (p1: string): TicTacToeGameState => ({
     board:         Array(9).fill(null) as BoardState,
     currentPlayer: 'X',
@@ -78,13 +76,12 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     isDraw:        false,
     mode:          'vs-human',
     aiDifficulty:  'medium',
-    recorded:      false,   // ← explicit reset prevents carry-over from previous game
+    recorded:      false,
   });
 
   const { gameState, updateGameState, patchGameState, loading } =
     useRealtimeGame<TicTacToeGameState>(safeSession, 'tictactoe', makeInitialState(userKey ?? ''));
 
-  // --- Player 2 registration ---
   useEffect(() => {
     if (!gameState || !userKey) return;
     if (gameState.mode !== 'vs-human') return;
@@ -101,7 +98,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
   const currentBoard      = safeBoard(gameState?.board);
   const partnerRegistered = !!(gameState?.players?.player2);
 
-  // Record result
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     const isWin  = gameState.winner === mySymbol;
@@ -117,7 +113,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
 
-  // AI move
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai') return;
     if (gameState.status !== 'active') return;
@@ -188,7 +183,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     pendingInitRef.current = null;
   }, [activeRoomId, isHost, safeSession]);
 
-  // Play Again — reset board but KEEP the same roomId and players
   const playAgain = () => {
     if (!gameState) return;
     updateGameState({
@@ -197,7 +191,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
       mode:         gameState.mode,
       aiDifficulty: gameState.aiDifficulty,
       status:       'active',
-      recorded:     false,   // ← explicit, belt-and-suspenders
+      recorded:     false,
     });
   };
 
@@ -229,124 +223,123 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>
+    <div className="flex items-center justify-center h-screen"><LoadingSpinner /></div>
   );
 
   const isAITurn  = gameState?.mode === 'vs-ai' && gameState?.currentPlayer === 'O';
   const inSession = !!(activeRoomId || (gameState?.mode === 'vs-ai' && gameState?.status !== 'waiting'));
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
-            <ArrowLeft size={20} /> Back
-          </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Tic Tac Toe</h1>
-          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400" title="Leave game">
-            <RotateCcw size={20} />
-          </button>
-        </div>
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 py-4">
 
-        {/* LOBBY */}
-        {!inSession && (
-          <div className="glass-card p-8 text-center">
-            <div className="text-6xl mb-4">❌⭕</div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tic Tac Toe</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-8">Choose how you want to play</p>
-            <div className="grid grid-cols-1 gap-3">
-              <button onClick={() => setShowInvite(true)} disabled={!userKey}
-                className="flex items-center gap-4 glass-btn px-5 py-4 rounded-2xl text-left hover:scale-[1.02] transition-all disabled:opacity-50">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-pink-500 to-purple-500 text-white"><Users size={22} /></div>
-                <div>
-                  <p className="font-bold text-gray-900 dark:text-white">Play vs Partner</p>
-                  <p className="text-sm text-gray-500">Invite with a 6-letter code</p>
-                </div>
-              </button>
-              <div className="glass-btn px-5 py-4 rounded-2xl">
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white"><Bot size={22} /></div>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <ArrowLeft size={20} /> Back
+            </Link>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">Tic Tac Toe</h1>
+            <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400" title="Leave game">
+              <RotateCcw size={20} />
+            </button>
+          </div>
+
+          {/* LOBBY */}
+          {!inSession && (
+            <div className="glass-card p-6 text-center">
+              <div className="text-5xl mb-3">❌⭕</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Tic Tac Toe</h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">Choose how you want to play</p>
+              <div className="grid grid-cols-1 gap-3">
+                <button onClick={() => setShowInvite(true)} disabled={!userKey}
+                  className="flex items-center gap-4 glass-btn px-5 py-4 rounded-2xl text-left hover:scale-[1.02] transition-all disabled:opacity-50">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-pink-500 to-purple-500 text-white"><Users size={22} /></div>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">Play vs AI</p>
-                    <p className="text-sm text-gray-500">Challenge the computer</p>
+                    <p className="font-bold text-gray-900 dark:text-white">Play vs Partner</p>
+                    <p className="text-sm text-gray-500">Invite with a 6-letter code</p>
+                  </div>
+                </button>
+                <div className="glass-btn px-5 py-4 rounded-2xl">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white"><Bot size={22} /></div>
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-white">Play vs AI</p>
+                      <p className="text-sm text-gray-500">Challenge the computer</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {(['easy','medium','hard'] as AIDifficulty[]).map(d => (
+                      <button key={d} onClick={() => startVsAI(d)}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold capitalize transition-all hover:scale-105 ${
+                          d==='easy'   ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                          d==='medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                                         'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        }`}>{d}</button>
+                    ))}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {(['easy','medium','hard'] as AIDifficulty[]).map(d => (
-                    <button key={d} onClick={() => startVsAI(d)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold capitalize transition-all hover:scale-105 ${
-                        d==='easy'   ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                        d==='medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                                       'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                      }`}>{d}</button>
-                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* GAME BOARD */}
+          {inSession && (
+            <div className="space-y-3">
+              {activeRoomId && (
+                <div className="flex justify-center gap-2 flex-wrap">
+                  <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-pink-400">👥 vs Partner</span>
+                  <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">Room: {activeRoomId}</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* GAME BOARD */}
-        {inSession && (
-          <div className="space-y-4">
-            {activeRoomId && (
-              <div className="flex justify-center gap-2 flex-wrap">
-                <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-pink-400">
-                  👥 vs Partner
-                </span>
-                <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
-                  Room: {activeRoomId}
-                </span>
-              </div>
-            )}
-            {!activeRoomId && (
-              <div className="flex justify-center">
-                <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-indigo-400">
-                  🤖 vs AI · {gameState?.aiDifficulty}
-                </span>
-              </div>
-            )}
-
-            <div className="glass-card p-4 text-center">
-              {gameState?.status === 'active' && (
-                <p className={`font-semibold text-lg ${
-                  (isMyTurn && !isAITurn) ? 'text-pink-400' : 'text-gray-500'
-                }`}>{turnLabel()}</p>
               )}
+              {!activeRoomId && (
+                <div className="flex justify-center">
+                  <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-indigo-400">🤖 vs AI · {gameState?.aiDifficulty}</span>
+                </div>
+              )}
+
+              <div className="glass-card p-3 text-center">
+                {gameState?.status === 'active' && (
+                  <p className={`font-semibold ${
+                    (isMyTurn && !isAITurn) ? 'text-pink-400' : 'text-gray-500'
+                  }`}>{turnLabel()}</p>
+                )}
+                {gameState?.status === 'finished' && (
+                  <p className="font-bold text-xl text-white">{resultLabel()}</p>
+                )}
+                {(!gameState || gameState.status === 'waiting') && (
+                  <p className="text-gray-400 font-medium">Waiting for partner to join…</p>
+                )}
+              </div>
+
+              <Board
+                board={currentBoard}
+                onCellClick={handleCellClick}
+                disabled={
+                  isAITurn ||
+                  !gameState ||
+                  gameState.status !== 'active' ||
+                  (gameState.mode === 'vs-human' && (!partnerRegistered || !isMyTurn))
+                }
+                winningCells={gameState?.winningCells || []}
+              />
+
               {gameState?.status === 'finished' && (
-                <p className="font-bold text-xl text-white">{resultLabel()}</p>
-              )}
-              {(!gameState || gameState.status === 'waiting') && (
-                <p className="text-gray-400 font-medium">Waiting for partner to join…</p>
+                <div className="flex gap-3">
+                  <button onClick={playAgain}
+                    className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
+                    Play Again 💕
+                  </button>
+                  <button onClick={resetGame}
+                    className="glass-btn px-5 py-3 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
+                    Leave
+                  </button>
+                </div>
               )}
             </div>
-
-            <Board
-              board={currentBoard}
-              onCellClick={handleCellClick}
-              disabled={
-                isAITurn ||
-                !gameState ||
-                gameState.status !== 'active' ||
-                (gameState.mode === 'vs-human' && (!partnerRegistered || !isMyTurn))
-              }
-              winningCells={gameState?.winningCells || []}
-            />
-
-            {gameState?.status === 'finished' && (
-              <div className="flex gap-3">
-                <button onClick={playAgain}
-                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
-                  Play Again 💕
-                </button>
-                <button onClick={resetGame}
-                  className="glass-btn px-5 py-3 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
-                  Leave
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {showInvite && (
