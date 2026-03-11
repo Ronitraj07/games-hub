@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, X, Shuffle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -129,6 +129,9 @@ export const TruthOrDare: React.FC = () => {
   const [isHost, setIsHost] = useState(false);
   const [inGame, setInGame] = useState(false);
 
+  // Fix: track whether host has already seeded Firebase to avoid re-seeding on re-renders
+  const seededRef = useRef(false);
+
   // ── Local UI state ──────────────────────────────────
   const [showAgeGate,   setShowAgeGate]   = useState(false);
   const [showCustom,    setShowCustom]    = useState(false);
@@ -140,22 +143,24 @@ export const TruthOrDare: React.FC = () => {
     ? `tod-room-${sanitizeFirebasePath(activeRoomId)}`
     : 'tod-placeholder';
 
-  const initialState: TodState = {
+  // Fix: initialState always uses userEmail as player1 —
+  // this is only the local fallback; the host immediately overwrites with updateGameState below.
+  const makeInitialState = (hostEmail: string): TodState => ({
     status: 'lobby',
     deck: 'romantic',
     adultUnlocked: false,
     currentCard: null,
-    currentTurn: userEmail,
-    player1: userEmail,
+    currentTurn: hostEmail,
+    player1: hostEmail,
     player2: null,
     customTruths: [],
     customDares: [],
     history: [],
     flipping: false,
-  };
+  });
 
   const { gameState, updateGameState } = useRealtimeGame<TodState>(
-    safeRoom, 'truthordare', initialState
+    safeRoom, 'truthordare', makeInitialState(userEmail)
   );
 
   const gs = gameState;
@@ -174,33 +179,47 @@ export const TruthOrDare: React.FC = () => {
     }
   }, [location.search, activeRoomId]);
 
-  // ── Guest joins: write player2 into Firebase ────────
+  // Fix: Guest join — runs whenever Firebase state loads.
+  // Conditions: we have a room, we are NOT the host, Firebase is loaded (gs exists),
+  // the host's player1 is someone else, and player2 slot is empty.
   React.useEffect(() => {
     if (!activeRoomId || isHost || !gs) return;
+    // gs.player1 will be the HOST's email (written by host seed below).
+    // If it equals our email we somehow ended up as host — do nothing.
     if (gs.player1 === userEmail) return;
-    if (!gs.player2 && gs.player1 !== userEmail) {
-      updateGameState({ ...gs, player2: userEmail, status: 'active' });
-    }
-  }, [activeRoomId, isHost, gs?.player1, gs?.player2]);
+    // Slot already taken (either by us or someone else)
+    if (gs.player2) return;
+    // Write ourselves in as player2 and flip status to active
+    updateGameState({ ...gs, player2: userEmail, status: 'active' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRoomId, isHost, gs?.player1, gs?.player2, gs?.status]);
 
-  // ── Host starts when partner joins ─────────────────
+  // Fix: Host activates game when partner joins (fallback in case guest didn't flip status)
   React.useEffect(() => {
     if (!isHost || !gs) return;
     if (gs.player2 && gs.status === 'lobby') {
       updateGameState({ ...gs, status: 'active' });
     }
-  }, [gs?.player2]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gs?.player2, gs?.status]);
 
-  // ── Host seeds room on InviteModal ready ────────────
+  // ── Host seeds room on mount ────────────────────────
+  // Fix: host must write the initial state to Firebase immediately so the guest
+  // reads player1 = host's email (not their own email from local initialState).
   const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
     setActiveRoomId(roomId);
     setIsHost(hostFlag);
     setInGame(true);
-    if (hostFlag) {
-      // Host seeds initial state once safeRoom path is ready
-      // The guest-join effect above will activate the game
-    }
+    seededRef.current = false;
   };
+
+  // Seed effect: fires once activeRoomId + isHost are set and safeRoom path is ready
+  React.useEffect(() => {
+    if (!activeRoomId || !isHost || seededRef.current) return;
+    seededRef.current = true;
+    updateGameState(makeInitialState(userEmail));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRoomId, isHost, safeRoom]);
 
   // ── Deck selection ───────────────────────────────────
   const selectDeck = (d: DeckKey) => {
@@ -216,6 +235,8 @@ export const TruthOrDare: React.FC = () => {
   };
 
   // ── Draw card ────────────────────────────────────────
+  // Fix: stale closure — capture the card locally and pass it explicitly to both
+  // updateGameState calls instead of relying on gs spreading twice from the same closure.
   const drawCard = useCallback((type?: CardType) => {
     if (!gs || gs.flipping || !isMyTurn) return;
     const t: CardType = type ?? (Math.random() > 0.5 ? 'truth' : 'dare');
@@ -226,22 +247,22 @@ export const TruthOrDare: React.FC = () => {
     ];
     const text = pickRandom(pool);
     const card: TodCard = { type: t, text, deck: gs.deck, drawnBy: userEmail };
-    const nextTurn = amPlayer1
-      ? (gs.player2 ?? userEmail)
-      : gs.player1;
-    updateGameState({
-      ...gs,
-      flipping: true,
-      currentCard: card,
-      history: [card, ...(gs.history || [])].slice(0, 20),
-    });
+    const newHistory = [card, ...(gs.history || [])].slice(0, 20);
+    const nextTurn = amPlayer1 ? (gs.player2 ?? userEmail) : gs.player1;
+
+    // First write: show flipping animation with new card
+    updateGameState({ ...gs, flipping: true, currentCard: card, history: newHistory });
+
+    // Second write: end flip, advance turn.
+    // Fix: spread gs first, then override — but use the values we computed above
+    // so we don't lose currentCard from the first write.
     setTimeout(() => {
       updateGameState({
         ...gs,
         flipping: false,
-        currentCard: card,
+        currentCard: card,       // explicit — not relying on Firebase read-back
         currentTurn: nextTurn,
-        history: [card, ...(gs.history || [])].slice(0, 20),
+        history: newHistory,     // explicit — same array as first write
       });
     }, 400);
   }, [gs, isMyTurn, amPlayer1, userEmail]);
@@ -261,6 +282,7 @@ export const TruthOrDare: React.FC = () => {
     setActiveRoomId(null);
     setIsHost(false);
     setInGame(false);
+    seededRef.current = false;
   };
 
   // ─────────────────────────────────────────────────────
@@ -287,7 +309,7 @@ export const TruthOrDare: React.FC = () => {
   );
 
   // ─────────────────────────────────────────────────────
-  //  RENDER — Waiting for partner
+  //  RENDER — Waiting for partner (host only, before P2 joins)
   // ─────────────────────────────────────────────────────
   if (isHost && !partnerJoined) return (
     <div className="min-h-screen p-4 flex items-center justify-center">
