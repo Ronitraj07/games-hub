@@ -124,27 +124,20 @@ export const TruthOrDare: React.FC = () => {
   const location = useLocation();
   const userEmail = user?.email ?? 'guest';
 
-  // ── Room state ──────────────────────────────────────
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [inGame, setInGame] = useState(false);
-
-  // Fix: track whether host has already seeded Firebase to avoid re-seeding on re-renders
   const seededRef = useRef(false);
 
-  // ── Local UI state ──────────────────────────────────
   const [showAgeGate,   setShowAgeGate]   = useState(false);
   const [showCustom,    setShowCustom]    = useState(false);
   const [newCustomText, setNewCustomText] = useState('');
   const [newCustomType, setNewCustomType] = useState<CardType>('truth');
 
-  // ── Firebase session ────────────────────────────────
   const safeRoom = activeRoomId
     ? `tod-room-${sanitizeFirebasePath(activeRoomId)}`
     : 'tod-placeholder';
 
-  // Fix: initialState always uses userEmail as player1 —
-  // this is only the local fallback; the host immediately overwrites with updateGameState below.
   const makeInitialState = (hostEmail: string): TodState => ({
     status: 'lobby',
     deck: 'romantic',
@@ -168,7 +161,6 @@ export const TruthOrDare: React.FC = () => {
   const amPlayer1 = gs?.player1 === userEmail;
   const partnerJoined = !!gs?.player2;
 
-  // ── Deep-link join: ?room=CODE ──────────────────────
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room = params.get('room');
@@ -179,33 +171,20 @@ export const TruthOrDare: React.FC = () => {
     }
   }, [location.search, activeRoomId]);
 
-  // Fix: Guest join — runs whenever Firebase state loads.
-  // Conditions: we have a room, we are NOT the host, Firebase is loaded (gs exists),
-  // the host's player1 is someone else, and player2 slot is empty.
   React.useEffect(() => {
     if (!activeRoomId || isHost || !gs) return;
-    // gs.player1 will be the HOST's email (written by host seed below).
-    // If it equals our email we somehow ended up as host — do nothing.
     if (gs.player1 === userEmail) return;
-    // Slot already taken (either by us or someone else)
     if (gs.player2) return;
-    // Write ourselves in as player2 and flip status to active
     updateGameState({ ...gs, player2: userEmail, status: 'active' });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRoomId, isHost, gs?.player1, gs?.player2, gs?.status]);
 
-  // Fix: Host activates game when partner joins (fallback in case guest didn't flip status)
   React.useEffect(() => {
     if (!isHost || !gs) return;
     if (gs.player2 && gs.status === 'lobby') {
       updateGameState({ ...gs, status: 'active' });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs?.player2, gs?.status]);
 
-  // ── Host seeds room on mount ────────────────────────
-  // Fix: host must write the initial state to Firebase immediately so the guest
-  // reads player1 = host's email (not their own email from local initialState).
   const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
     setActiveRoomId(roomId);
     setIsHost(hostFlag);
@@ -213,15 +192,12 @@ export const TruthOrDare: React.FC = () => {
     seededRef.current = false;
   };
 
-  // Seed effect: fires once activeRoomId + isHost are set and safeRoom path is ready
   React.useEffect(() => {
     if (!activeRoomId || !isHost || seededRef.current) return;
     seededRef.current = true;
     updateGameState(makeInitialState(userEmail));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRoomId, isHost, safeRoom]);
 
-  // ── Deck selection ───────────────────────────────────
   const selectDeck = (d: DeckKey) => {
     if (!gs) return;
     if (DECKS[d].adult && !gs.adultUnlocked) { setShowAgeGate(true); return; }
@@ -234,9 +210,6 @@ export const TruthOrDare: React.FC = () => {
     updateGameState({ ...gs, adultUnlocked: true, deck: 'adult', currentCard: null });
   };
 
-  // ── Draw card ────────────────────────────────────────
-  // Fix: stale closure — capture the card locally and pass it explicitly to both
-  // updateGameState calls instead of relying on gs spreading twice from the same closure.
   const drawCard = useCallback((type?: CardType) => {
     if (!gs || gs.flipping || !isMyTurn) return;
     const t: CardType = type ?? (Math.random() > 0.5 ? 'truth' : 'dare');
@@ -249,25 +222,14 @@ export const TruthOrDare: React.FC = () => {
     const card: TodCard = { type: t, text, deck: gs.deck, drawnBy: userEmail };
     const newHistory = [card, ...(gs.history || [])].slice(0, 20);
     const nextTurn = amPlayer1 ? (gs.player2 ?? userEmail) : gs.player1;
-
-    // First write: show flipping animation with new card
     updateGameState({ ...gs, flipping: true, currentCard: card, history: newHistory });
-
-    // Second write: end flip, advance turn.
-    // Fix: spread gs first, then override — but use the values we computed above
-    // so we don't lose currentCard from the first write.
     setTimeout(() => {
       updateGameState({
-        ...gs,
-        flipping: false,
-        currentCard: card,       // explicit — not relying on Firebase read-back
-        currentTurn: nextTurn,
-        history: newHistory,     // explicit — same array as first write
+        ...gs, flipping: false, currentCard: card, currentTurn: nextTurn, history: newHistory,
       });
     }, 400);
   }, [gs, isMyTurn, amPlayer1, userEmail]);
 
-  // ── Custom cards ─────────────────────────────────────
   const addCustomCard = () => {
     if (!gs || !newCustomText.trim()) return;
     if (newCustomType === 'truth') {
@@ -279,15 +241,10 @@ export const TruthOrDare: React.FC = () => {
   };
 
   const leaveGame = () => {
-    setActiveRoomId(null);
-    setIsHost(false);
-    setInGame(false);
-    seededRef.current = false;
+    setActiveRoomId(null); setIsHost(false); setInGame(false); seededRef.current = false;
   };
 
-  // ─────────────────────────────────────────────────────
-  //  RENDER — Lobby (no room yet)
-  // ─────────────────────────────────────────────────────
+  // ─── LOBBY ───
   if (!inGame || !activeRoomId) return (
     <div className="min-h-screen p-4">
       <div className="max-w-md mx-auto pt-8">
@@ -308,11 +265,9 @@ export const TruthOrDare: React.FC = () => {
     </div>
   );
 
-  // ─────────────────────────────────────────────────────
-  //  RENDER — Waiting for partner (host only, before P2 joins)
-  // ─────────────────────────────────────────────────────
+  // ─── WAITING ───
   if (isHost && !partnerJoined) return (
-    <div className="min-h-screen p-4 flex items-center justify-center">
+    <div className="h-screen flex items-center justify-center p-4">
       <div className="glass-card max-w-sm w-full p-10 text-center">
         <div className="text-6xl mb-4 animate-pulse">⏳</div>
         <h2 className="text-xl font-bold text-white mb-2">Room Created!</h2>
@@ -320,193 +275,177 @@ export const TruthOrDare: React.FC = () => {
         <div className="glass rounded-2xl px-6 py-4 mb-4">
           <p className="text-4xl font-black tracking-widest text-pink-400">{activeRoomId}</p>
         </div>
-        <button onClick={leaveGame}
-          className="text-sm text-gray-500 hover:text-red-400 transition mt-4">
-          ← Leave room
-        </button>
+        <button onClick={leaveGame} className="text-sm text-gray-500 hover:text-red-400 transition mt-4">← Leave room</button>
       </div>
     </div>
   );
 
-  // ─────────────────────────────────────────────────────
-  //  RENDER — Game active
-  // ─────────────────────────────────────────────────────
+  // ─── ACTIVE GAME ───
   const deck = DECKS[gs?.deck ?? 'romantic'];
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 py-3">
 
-        {/* Age gate modal */}
-        {showAgeGate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="glass-card max-w-sm w-full p-8 text-center">
-              <div className="text-6xl mb-4">🔞</div>
-              <h2 className="text-2xl font-bold text-white mb-2">Adults Only</h2>
-              <p className="text-gray-400 text-sm mb-6">
-                The <span className="font-bold text-rose-400">After Dark</span> deck contains explicit 18+ content for couples.
-                Both players must be 18 or older to continue.
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => setShowAgeGate(false)}
-                  className="flex-1 glass-btn py-3 rounded-xl font-semibold text-gray-300">Cancel</button>
-                <button onClick={confirmAge}
-                  className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-rose-600 to-red-700 hover:scale-105 transition-transform">
-                  I am 18+ ✓
-                </button>
+          {/* Age gate modal */}
+          {showAgeGate && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className="glass-card max-w-sm w-full p-8 text-center">
+                <div className="text-6xl mb-4">🔞</div>
+                <h2 className="text-2xl font-bold text-white mb-2">Adults Only</h2>
+                <p className="text-gray-400 text-sm mb-6">
+                  The <span className="font-bold text-rose-400">After Dark</span> deck contains explicit 18+ content.
+                  Both players must be 18 or older to continue.
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowAgeGate(false)}
+                    className="flex-1 glass-btn py-3 rounded-xl font-semibold text-gray-300">Cancel</button>
+                  <button onClick={confirmAge}
+                    className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-rose-600 to-red-700 hover:scale-105 transition-transform">
+                    I am 18+ ✓
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={leaveGame}
-            className="flex items-center gap-2 text-gray-400 hover:text-pink-400 transition text-sm">
-            <ArrowLeft size={18} /> Leave
-          </button>
-          <div className="text-center">
-            <h1 className={`text-xl font-bold bg-gradient-to-r ${deck.color} bg-clip-text text-transparent`}>
-              🔥 Truth or Dare
-            </h1>
-            <p className="text-xs text-gray-500">Room: <span className="text-pink-400 font-bold">{activeRoomId}</span></p>
-          </div>
-          <button onClick={() => setShowCustom(s => !s)}
-            className="glass-btn p-2 rounded-xl text-gray-400">
-            <Plus size={18} />
-          </button>
-        </div>
-
-        {/* Turn indicator */}
-        <div className={`text-center py-2 px-4 rounded-full text-sm font-semibold mb-5 ${
-          isMyTurn
-            ? 'bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30'
-            : 'glass text-gray-400'
-        }`}>
-          {isMyTurn ? '✨ Your turn — pick Truth or Dare' : "Partner's turn — wait for them…"}
-        </div>
-
-        {/* Deck selector */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {(Object.keys(DECKS) as DeckKey[]).map(d => (
-            <button key={d} onClick={() => selectDeck(d)}
-              className={`relative py-3 rounded-2xl text-sm font-bold transition-all ${
-                gs?.deck === d
-                  ? `bg-gradient-to-r ${DECKS[d].color} text-white shadow-lg scale-105`
-                  : 'glass text-gray-400 hover:scale-105'
-              }`}>
-              {DECKS[d].label}
-              {DECKS[d].adult && !gs?.adultUnlocked && (
-                <Lock size={10} className="absolute top-1 right-2 text-rose-400" />
-              )}
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={leaveGame}
+              className="flex items-center gap-2 text-gray-400 hover:text-pink-400 transition text-sm">
+              <ArrowLeft size={18} /> Leave
             </button>
-          ))}
-        </div>
+            <div className="text-center">
+              <h1 className={`text-lg font-bold bg-gradient-to-r ${deck.color} bg-clip-text text-transparent`}>
+                🔥 Truth or Dare
+              </h1>
+              <p className="text-xs text-gray-500">Room: <span className="text-pink-400 font-bold">{activeRoomId}</span></p>
+            </div>
+            <button onClick={() => setShowCustom(s => !s)}
+              className="glass-btn p-2 rounded-xl text-gray-400">
+              <Plus size={18} />
+            </button>
+          </div>
 
-        {/* Custom card panel */}
-        {showCustom && (
-          <div className="glass-card p-4 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-white text-sm">Add Custom Card</h3>
-              <button onClick={() => setShowCustom(false)} className="text-gray-400 hover:text-red-400"><X size={16} /></button>
-            </div>
-            <div className="flex gap-2 mb-3">
-              {(['truth', 'dare'] as CardType[]).map(t => (
-                <button key={t} onClick={() => setNewCustomType(t)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${
-                    newCustomType === t ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white' : 'glass text-gray-400'
-                  }`}>{t}</button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input value={newCustomText} onChange={e => setNewCustomText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addCustomCard()}
-                placeholder={`Write a custom ${newCustomType}…`}
-                className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
-              <button onClick={addCustomCard}
-                className="px-4 py-2 rounded-xl font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:scale-105 transition-transform">
-                Add
+          {/* Turn indicator */}
+          <div className={`text-center py-1.5 px-4 rounded-full text-sm font-semibold mb-3 ${
+            isMyTurn
+              ? 'bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-pink-300 border border-pink-500/30'
+              : 'glass text-gray-400'
+          }`}>
+            {isMyTurn ? '✨ Your turn — pick Truth or Dare' : "Partner's turn — wait for them…"}
+          </div>
+
+          {/* Deck selector */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {(Object.keys(DECKS) as DeckKey[]).map(d => (
+              <button key={d} onClick={() => selectDeck(d)}
+                className={`relative py-2.5 rounded-2xl text-sm font-bold transition-all ${
+                  gs?.deck === d
+                    ? `bg-gradient-to-r ${DECKS[d].color} text-white shadow-lg`
+                    : 'glass text-gray-400 hover:text-white'
+                }`}>
+                {DECKS[d].adult && !gs?.adultUnlocked && (
+                  <Lock size={12} className="inline mr-1" />
+                )}
+                {DECKS[d].label}
               </button>
-            </div>
-            {(gs?.customTruths?.length > 0 || gs?.customDares?.length > 0) && (
-              <div className="mt-3 flex flex-wrap gap-1">
-                {[
-                  ...(gs.customTruths || []).map(t => ({ text: t, type: 'truth' })),
-                  ...(gs.customDares  || []).map(d => ({ text: d, type: 'dare'  })),
-                ].map((c, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-pink-900/40 text-pink-300 text-xs">
-                    {c.type === 'truth' ? '🧠' : '🎯'} {c.text.slice(0, 25)}{c.text.length > 25 ? '…' : ''}
-                  </span>
-                ))}
+            ))}
+          </div>
+
+          {/* Current card */}
+          <div className={`rounded-3xl p-5 mb-3 text-center transition-all ${
+            gs?.currentCard
+              ? gs.currentCard.type === 'truth'
+                ? 'bg-gradient-to-br from-blue-950/60 to-indigo-950/60 border border-blue-500/20'
+                : 'bg-gradient-to-br from-orange-950/60 to-red-950/60 border border-orange-500/20'
+              : 'glass'
+          } ${gs?.flipping ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+            {gs?.currentCard ? (
+              <>
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-3 ${
+                  gs.currentCard.type === 'truth'
+                    ? 'bg-blue-500/20 text-blue-300'
+                    : 'bg-orange-500/20 text-orange-300'
+                }`}>
+                  {gs.currentCard.type === 'truth' ? '💡 TRUTH' : '🔥 DARE'}
+                </span>
+                <p className="text-white text-base font-medium leading-relaxed">{gs.currentCard.text}</p>
+              </>
+            ) : (
+              <div className="py-4">
+                <div className="text-4xl mb-2">🂴</div>
+                <p className="text-gray-500 text-sm">Draw a card to start!</p>
               </div>
             )}
           </div>
-        )}
 
-        {/* Main card */}
-        <div className={`glass-card overflow-hidden mb-5 transition-all duration-300 ${
-          gs?.flipping ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
-        }`}>
-          {!gs?.currentCard ? (
-            <div className="p-12 text-center">
-              <div className="text-7xl mb-4">🔥</div>
-              <p className="text-gray-400">Draw a card to start</p>
-            </div>
-          ) : (
-            <div className={`p-8 ${deck.bg}`}>
-              <div className="flex items-center gap-3 mb-5">
-                <span className={`px-4 py-1.5 rounded-full text-white font-bold text-sm bg-gradient-to-r ${deck.color}`}>
-                  {gs.currentCard.type === 'truth' ? '🧠 TRUTH' : '🎯 DARE'}
-                </span>
-                <span className="text-xs text-gray-400">{DECKS[gs.currentCard.deck].label}</span>
-                <span className="text-xs text-gray-500 ml-auto">
-                  {gs.currentCard.drawnBy === userEmail ? 'You drew this' : 'Partner drew this'}
-                </span>
+          {/* Action buttons */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <button onClick={() => drawCard('truth')} disabled={!isMyTurn}
+              className="py-3 rounded-2xl font-bold text-sm bg-gradient-to-br from-blue-600 to-indigo-700 text-white disabled:opacity-40 hover:scale-105 active:scale-95 transition-all">
+              💡 Truth
+            </button>
+            <button onClick={() => drawCard()} disabled={!isMyTurn}
+              className="py-3 rounded-2xl font-bold text-sm bg-gradient-to-br from-purple-600 to-pink-600 text-white disabled:opacity-40 hover:scale-105 active:scale-95 transition-all">
+              🎴 Random
+            </button>
+            <button onClick={() => drawCard('dare')} disabled={!isMyTurn}
+              className="py-3 rounded-2xl font-bold text-sm bg-gradient-to-br from-orange-500 to-red-600 text-white disabled:opacity-40 hover:scale-105 active:scale-95 transition-all">
+              🔥 Dare
+            </button>
+          </div>
+
+          {/* Custom card panel */}
+          {showCustom && (
+            <div className="glass-card p-4 mb-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-white text-sm">Add Custom Card</h3>
+                <button onClick={() => setShowCustom(false)} className="text-gray-500 hover:text-white"><X size={16} /></button>
               </div>
-              <p className="text-xl font-bold text-white leading-relaxed">
-                {gs.currentCard.text}
-              </p>
+              <div className="flex gap-2 mb-3">
+                {(['truth','dare'] as CardType[]).map(t => (
+                  <button key={t} onClick={() => setNewCustomType(t)}
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold capitalize transition ${
+                      newCustomType === t ? 'bg-pink-500 text-white' : 'glass text-gray-400'
+                    }`}>{t}</button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={newCustomText} onChange={e => setNewCustomText(e.target.value)}
+                  placeholder={`Enter ${newCustomType}…`}
+                  className="flex-1 glass border-0 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                <button onClick={addCustomCard}
+                  className="px-4 py-2 rounded-xl bg-pink-500 text-white text-sm font-bold hover:bg-pink-600 transition">Add</button>
+              </div>
+              {(gs?.customTruths?.length || gs?.customDares?.length) ? (
+                <div className="mt-3 text-xs text-gray-500">
+                  {gs.customTruths.length} custom truths · {gs.customDares.length} custom dares
+                </div>
+              ) : null}
             </div>
           )}
-        </div>
 
-        {/* Draw buttons */}
-        <div className={`grid grid-cols-3 gap-3 mb-5 transition-opacity ${
-          isMyTurn ? 'opacity-100' : 'opacity-30 pointer-events-none'
-        }`}>
-          <button onClick={() => drawCard('truth')}
-            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all">
-            <span className="text-2xl">🧠</span>
-            <span className="text-sm font-bold text-gray-300">Truth</span>
-          </button>
-          <button onClick={() => drawCard()}
-            className={`flex flex-col items-center gap-1 py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all bg-gradient-to-r ${deck.color} text-white shadow-lg`}>
-            <Shuffle size={22} />
-            <span className="text-sm font-bold">Random</span>
-          </button>
-          <button onClick={() => drawCard('dare')}
-            className="flex flex-col items-center gap-1 glass-btn py-4 rounded-2xl hover:scale-105 active:scale-95 transition-all">
-            <span className="text-2xl">🎯</span>
-            <span className="text-sm font-bold text-gray-300">Dare</span>
-          </button>
-        </div>
-
-        {/* History */}
-        {gs?.history && gs.history.length > 1 && (
-          <div className="glass-card p-4">
-            <h3 className="text-xs font-semibold text-gray-500 mb-3">Card History</h3>
-            <div className="space-y-2 max-h-44 overflow-y-auto">
-              {gs.history.slice(1).map((h, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm">
-                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-white text-xs font-bold bg-gradient-to-r ${DECKS[h.deck].color}`}>
-                    {h.type === 'truth' ? '🧠' : '🎯'}
-                  </span>
-                  <span className="text-gray-400 line-clamp-2">{h.text}</span>
-                </div>
-              ))}
+          {/* History — compact, scrollable */}
+          {(gs?.history?.length ?? 0) > 1 && (
+            <div className="glass-card p-3">
+              <p className="text-xs font-bold text-gray-500 mb-2">📜 Recent Cards</p>
+              <div className="space-y-1 max-h-28 overflow-y-auto">
+                {gs!.history.slice(1).map((c, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold ${
+                      c.type === 'truth' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'
+                    }`}>{c.type}</span>
+                    <span className="text-gray-400 line-clamp-1">{c.text}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+        </div>
       </div>
     </div>
   );
