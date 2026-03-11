@@ -7,13 +7,12 @@ import { Copy, Check, X, Users, LogIn, Loader2, Link2, Mail, Send } from 'lucide
 interface InviteModalProps {
   gameType: string;
   onClose: () => void;
-  /** Called when both players are ready — roomId is the Firebase invite code */
   onReady: (roomId: string, isHost: boolean) => void;
 }
 
 export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onReady }) => {
-  const { user } = useAuth();
-  const { status, roomId, invite, error, createRoom, joinRoom, cancelRoom } =
+  const { user, loading: authLoading } = useAuth();
+  const { status, roomId, error, createRoom, joinRoom, cancelRoom } =
     useGameInvite(gameType);
 
   const [tab,         setTab]         = useState<'host' | 'join'>('host');
@@ -21,24 +20,24 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
   const [copied,      setCopied]      = useState<'code' | 'link' | null>(null);
   const [joinError,   setJoinError]   = useState('');
   const [joining,     setJoining]     = useState(false);
-
-  // Email invite state
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus,  setEmailStatus]  = useState<'idle' | 'sent' | 'error'>('idle');
   const [emailError,   setEmailError]   = useState('');
 
-  // Derive partner info from auth-config
+  // Wait for auth to resolve before deriving partner
+  // Fallback: if user is somehow null after auth, derive from empty string (shows no email btn)
   const myEmail      = user?.email ?? '';
-  const myName       = getDisplayNameFromEmail(myEmail);
-  const partnerEmail = getPartnerEmail(myEmail);
-  const partnerName  = getPartnerName(myEmail);
+  const myName       = myEmail ? getDisplayNameFromEmail(myEmail) : 'You';
+  const partnerEmail = myEmail ? getPartnerEmail(myEmail) : null;
+  const partnerName  = myEmail ? getPartnerName(myEmail) : null;
 
-  // Auto-create room when host tab opens
+  // Auto-create room when host tab opens (wait for auth)
   useEffect(() => {
+    if (authLoading) return;                      // don't create until user is known
     if (tab === 'host' && status === 'idle') createRoom();
-  }, [tab]);
+  }, [tab, authLoading]);
 
-  // Notify parent once both players are in
+  // Notify parent once both players are ready
   useEffect(() => {
     if (status === 'joined' && roomId) {
       const isHost = tab === 'host';
@@ -67,12 +66,10 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
     setEmailSending(true);
     setEmailStatus('idle');
     setEmailError('');
-
     const roomUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
-
     try {
       const res = await fetch('/api/send-invite', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           toEmail:  partnerEmail,
@@ -105,10 +102,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
     setJoining(false);
   };
 
-  const handleClose = () => {
-    cancelRoom();
-    onClose();
-  };
+  const handleClose = () => { cancelRoom(); onClose(); };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -122,7 +116,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
             </div>
             <div>
               <h2 className="font-bold text-gray-900 dark:text-white text-lg">Invite Partner</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{gameType}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{gameType}</p>
             </div>
           </div>
           <button onClick={handleClose} className="glass-btn p-2 rounded-xl text-gray-400 hover:text-red-500 transition">
@@ -133,15 +127,12 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
         {/* Tabs */}
         <div className="flex gap-2 p-4 pb-0">
           {(['host', 'join'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
+            <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
                 tab === t
                   ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-md'
                   : 'glass text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
-            >
+              }`}>
               {t === 'host' ? '🎮 Create Room' : '🔗 Join Room'}
             </button>
           ))}
@@ -149,23 +140,27 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
 
         <div className="p-6">
 
-          {/* ── HOST TAB ── */}
+          {/* HOST TAB */}
           {tab === 'host' && (
             <div className="space-y-4">
-              {status === 'creating' && (
+
+              {/* Auth/Firebase loading */}
+              {(authLoading || status === 'creating') && (
                 <div className="flex items-center justify-center gap-3 py-8">
                   <Loader2 size={22} className="animate-spin text-pink-500" />
-                  <span className="text-gray-500 dark:text-gray-400">Creating room…</span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {authLoading ? 'Loading…' : 'Creating room…'}
+                  </span>
                 </div>
               )}
 
-              {(status === 'waiting' || status === 'joined') && roomId && (
+              {!authLoading && (status === 'waiting' || status === 'joined') && roomId && (
                 <>
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
                     Share with {partnerName ?? 'your partner'}:
                   </p>
 
-                  {/* Room code display */}
+                  {/* Room code */}
                   <div className="flex justify-center">
                     <div className="glass px-6 py-4 rounded-2xl">
                       <span className="text-4xl font-black tracking-[0.3em] bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent select-all">
@@ -174,43 +169,34 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
                     </div>
                   </div>
 
-                  {/* Manual sharing: Copy Code + Copy Link */}
+                  {/* Manual: Copy Code + Copy Link — always visible */}
                   <div className="flex gap-2">
-                    <button
-                      onClick={copyCode}
-                      className="flex-1 flex items-center justify-center gap-2 glass-btn py-2.5 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:scale-[1.02]"
-                    >
+                    <button onClick={copyCode}
+                      className="flex-1 flex items-center justify-center gap-2 glass-btn py-2.5 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:scale-[1.02]">
                       {copied === 'code' ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
                       {copied === 'code' ? 'Copied!' : 'Copy Code'}
                     </button>
-                    <button
-                      onClick={copyLink}
-                      className="flex-1 flex items-center justify-center gap-2 glass-btn py-2.5 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:scale-[1.02]"
-                    >
+                    <button onClick={copyLink}
+                      className="flex-1 flex items-center justify-center gap-2 glass-btn py-2.5 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:scale-[1.02]">
                       {copied === 'link' ? <Check size={16} className="text-green-500" /> : <Link2 size={16} />}
                       {copied === 'link' ? 'Copied!' : 'Copy Link'}
                     </button>
                   </div>
 
-                  {/* Email invite — only shown if partner email exists */}
-                  {partnerEmail && (
+                  {/* Email invite — shown for Ronit & Radhika only (partnerEmail non-null) */}
+                  {partnerEmail ? (
                     <div className="border border-pink-200 dark:border-pink-800 rounded-2xl p-4 bg-pink-50/50 dark:bg-pink-900/10 space-y-2">
                       <div className="flex items-center gap-2 text-sm text-pink-600 dark:text-pink-300">
                         <Mail size={15} />
                         <span className="font-semibold">Email invite</span>
-                        <span className="ml-auto text-xs text-gray-400">{partnerEmail}</span>
+                        <span className="ml-auto text-xs text-gray-400 truncate max-w-[160px]">{partnerEmail}</span>
                       </div>
 
                       {emailStatus === 'idle' && (
-                        <button
-                          onClick={sendEmailInvite}
-                          disabled={emailSending}
-                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-purple-500 disabled:opacity-60 text-white font-semibold text-sm py-2.5 rounded-xl transition hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                          {emailSending
-                            ? <Loader2 size={16} className="animate-spin" />
-                            : <Send size={15} />}
-                          {emailSending ? 'Sending…' : `Email ${partnerName ?? 'Partner'}`}
+                        <button onClick={sendEmailInvite} disabled={emailSending}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-purple-500 disabled:opacity-60 text-white font-semibold text-sm py-2.5 rounded-xl transition hover:scale-[1.02] active:scale-[0.98]">
+                          {emailSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={15} />}
+                          {emailSending ? 'Sending…' : `💌 Email ${partnerName ?? 'Partner'}`}
                         </button>
                       )}
 
@@ -224,18 +210,21 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
                       {emailStatus === 'error' && (
                         <div className="space-y-1.5">
                           <p className="text-red-500 text-xs text-center">{emailError}</p>
-                          <button
-                            onClick={() => { setEmailStatus('idle'); setEmailError(''); }}
-                            className="w-full text-xs text-pink-500 hover:text-pink-600 transition py-1"
-                          >
+                          <button onClick={() => { setEmailStatus('idle'); setEmailError(''); }}
+                            className="w-full text-xs text-pink-500 hover:text-pink-600 transition py-1">
                             Try again
                           </button>
                         </div>
                       )}
                     </div>
+                  ) : (
+                    /* Fallback for Shizz account — no partner configured */
+                    <p className="text-xs text-gray-400 text-center">
+                      No partner email configured for this account.
+                    </p>
                   )}
 
-                  {/* Waiting / joined status */}
+                  {/* Waiting / joined */}
                   {status === 'waiting' && (
                     <div className="flex items-center justify-center gap-3 py-2 text-gray-500 dark:text-gray-400">
                       <Loader2 size={16} className="animate-spin text-purple-400" />
@@ -259,7 +248,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
             </div>
           )}
 
-          {/* ── JOIN TAB ── */}
+          {/* JOIN TAB */}
           {tab === 'join' && (
             <div className="space-y-4">
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
@@ -286,16 +275,14 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
                 </div>
               )}
 
-              <button
-                onClick={handleJoin}
-                disabled={joinCode.length !== 6 || joining}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-purple-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02] active:scale-[0.98]"
-              >
+              <button onClick={handleJoin} disabled={joinCode.length !== 6 || joining}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-purple-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02] active:scale-[0.98]">
                 {joining ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
                 {joining ? 'Joining…' : 'Join Room'}
               </button>
             </div>
           )}
+
         </div>
       </div>
     </div>
