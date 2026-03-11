@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 
-export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordscramble' | 'pictionary' | 'mathduel';
+// Fix: added 'truthordare' so TruthOrDare games are persisted correctly
+export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordscramble' | 'pictionary' | 'mathduel' | 'truthordare';
 export type GameResult = 'win' | 'loss' | 'draw';
 export type GameMode   = 'solo' | 'vs-partner' | 'vs-ai';
 

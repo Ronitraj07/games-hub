@@ -4,7 +4,7 @@ import { ArrowLeft, Trophy, RefreshCw, Loader2, Swords, Brain, Grid3x3, Hash, Ga
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ALLOWED_EMAILS, getDisplayNameFromEmail, getPlayerEmoji } from '@/lib/auth-config';
 
-// ─── types ───────────────────────────────────────────────────────────────────
+// ─── types ──────────────────────────────────────────────────────────────────
 type GameType =
   | 'tictactoe' | 'wordscramble' | 'memorymatch' | 'connect4'
   | 'trivia'    | 'rps'          | 'pictionary'  | 'mathduel' | 'truthordare';
@@ -22,15 +22,17 @@ interface PlayerStat {
   byGame:      Record<GameType, { wins: number; losses: number; draws: number }>;
 }
 
+// Fix: added created_at so getWinStreak sort works correctly
 interface Row {
   player_email:   string;
   opponent_email: string | null;
   result:         string;
   score:          number;
   game_type:      GameType;
+  created_at:     string | null;
 }
 
-// ─── game metadata ────────────────────────────────────────────────────────────
+// ─── game metadata ─────────────────────────────────────────────────────────────────
 const GAME_META: Record<GameType, { label: string; icon: React.ReactNode; color: string }> = {
   tictactoe:   { label: 'Tic Tac Toe',        icon: <Hash size={16}/>,       color: 'text-green-500'  },
   wordscramble:{ label: 'Word Scramble',        icon: <Gamepad2 size={16}/>,   color: 'text-purple-500' },
@@ -48,7 +50,7 @@ const GAME_TYPES = Object.keys(GAME_META) as GameType[];
 const emptyByGame = (): Record<GameType, { wins: number; losses: number; draws: number }> =>
   Object.fromEntries(GAME_TYPES.map(g => [g, { wins: 0, losses: 0, draws: 0 }])) as any;
 
-// ─── build stats from raw rows ───────────────────────────────────────────────
+// ─── build stats from raw rows ─────────────────────────────────────────────────────────
 const buildStats = (rows: Row[]): PlayerStat[] => {
   const map: Record<string, PlayerStat> = {};
 
@@ -77,14 +79,16 @@ const buildStats = (rows: Row[]): PlayerStat[] => {
   return Object.values(map).sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
 };
 
-// ─── compute head-to-head wins (p1 wins against p2) ──────────────────────────
+// ─── compute head-to-head wins ────────────────────────────────────────────────────────────
 const getH2HWins = (rows: Row[], myEmail: string, opponentEmail: string): number =>
   rows.filter(r => r.player_email === myEmail && r.opponent_email === opponentEmail && r.result === 'win').length;
 
-// ─── compute current win streak for a player ─────────────────────────────────
+// ─── compute current win streak ───────────────────────────────────────────────────────────────
 const getWinStreak = (rows: Row[], email: string): number => {
-  const mine = [...rows].filter(r => r.player_email === email)
-    .sort((a: any, b: any) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+  // Fix: created_at is now properly typed so the sort compares real timestamps
+  const mine = rows
+    .filter(r => r.player_email === email)
+    .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
   let streak = 0;
   for (const r of mine) {
     if (r.result === 'win') streak++;
@@ -93,7 +97,7 @@ const getWinStreak = (rows: Row[], email: string): number => {
   return streak;
 };
 
-// ─── component ───────────────────────────────────────────────────────────────
+// ─── component ─────────────────────────────────────────────────────────────────────────────
 export const Leaderboard: React.FC = () => {
   const [stats,   setStats]   = useState<PlayerStat[]>([]);
   const [rawRows, setRawRows] = useState<Row[]>([]);
@@ -223,13 +227,12 @@ export const Leaderboard: React.FC = () => {
               </div>
             ))}
 
-            {/* ─── Head-to-Head (Ronit vs Radhika) ─── */}
+            {/* ─── Head-to-Head ─── */}
             {tab === 'overall' && ronit && radhika && (
               <div className="glass-card p-5 mt-2">
                 <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-4 text-center">⚔️ Head-to-Head: Ronit vs Radhika</h3>
                 <div className="flex items-center justify-between">
 
-                  {/* Ronit */}
                   <div className="text-center">
                     <p className="text-3xl mb-1">{ronit.emoji}</p>
                     <p className="font-bold text-gray-900 dark:text-white text-sm">Ronit</p>
@@ -242,7 +245,6 @@ export const Leaderboard: React.FC = () => {
                     )}
                   </div>
 
-                  {/* VS centre */}
                   <div className="text-center px-4">
                     <p className="text-gray-400 font-bold text-2xl">VS</p>
                     <p className="text-xs text-gray-400 mt-2">{totalDraws} draw{totalDraws !== 1 ? 's' : ''}</p>
@@ -251,7 +253,6 @@ export const Leaderboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Radhika */}
                   <div className="text-center">
                     <p className="text-3xl mb-1">{radhika.emoji}</p>
                     <p className="font-bold text-gray-900 dark:text-white text-sm">Radhika</p>
@@ -266,18 +267,13 @@ export const Leaderboard: React.FC = () => {
 
                 </div>
 
-                {/* Win bar */}
                 {(ronitH2H + radhikaH2H) > 0 && (
                   <div className="mt-4">
                     <div className="h-2 rounded-full overflow-hidden flex bg-gray-100 dark:bg-gray-800">
-                      <div
-                        className="bg-gradient-to-r from-blue-400 to-blue-500 h-full transition-all"
-                        style={{ width: `${(ronitH2H / (ronitH2H + radhikaH2H)) * 100}%` }}
-                      />
-                      <div
-                        className="bg-gradient-to-r from-pink-400 to-pink-500 h-full transition-all"
-                        style={{ width: `${(radhikaH2H / (ronitH2H + radhikaH2H)) * 100}%` }}
-                      />
+                      <div className="bg-gradient-to-r from-blue-400 to-blue-500 h-full transition-all"
+                        style={{ width: `${(ronitH2H / (ronitH2H + radhikaH2H)) * 100}%` }} />
+                      <div className="bg-gradient-to-r from-pink-400 to-pink-500 h-full transition-all"
+                        style={{ width: `${(radhikaH2H / (ronitH2H + radhikaH2H)) * 100}%` }} />
                     </div>
                     <div className="flex justify-between text-xs text-gray-400 mt-1">
                       <span className="text-blue-400">👨‍💻 Ronit {Math.round((ronitH2H / (ronitH2H + radhikaH2H)) * 100)}%</span>

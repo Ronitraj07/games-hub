@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getPlayerEmoji } from '@/lib/auth-config';
-import { Home, Sun, Moon, Volume2, VolumeX, Sword } from 'lucide-react';
+import { Home, Sun, Moon, Volume2, VolumeX, Sword, Trophy } from 'lucide-react';
 import { toggleSound, isSoundEnabled } from '@/utils/sounds';
 import { GamesHubLogo } from '@/components/shared/GamesHubLogo';
 
@@ -18,7 +18,8 @@ export const Navbar: React.FC = () => {
     setSoundEnabled(newState);
   };
 
-  const isRPG = location.pathname.startsWith('/rpg');
+  const isRPG         = location.pathname.startsWith('/rpg');
+  const isLeaderboard = location.pathname === '/leaderboard';
 
   return (
     <nav className="sticky top-0 z-50 glass border-b border-white/30 dark:border-white/10">
@@ -66,6 +67,17 @@ export const Navbar: React.FC = () => {
                   }`}>
                   <Home size={18} />
                   <span className="hidden sm:inline text-sm">Home</span>
+                </Link>
+
+                {/* Leaderboard */}
+                <Link to="/leaderboard"
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                    isLeaderboard
+                      ? 'text-yellow-600 dark:text-yellow-400 bg-yellow-50/50 dark:bg-yellow-900/20'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400'
+                  }`}>
+                  <Trophy size={18} />
+                  <span className="hidden sm:inline text-sm">Scores</span>
                 </Link>
 
                 {/* RPG */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
@@ -71,7 +71,7 @@ const SIMPLE_GAMES = [
     id: 'rps',
     name: 'Rock Paper Scissors',
     description: 'Best of 5 rounds',
-    icon: '🫧',
+    icon: '🧧',
     gradient:  'from-teal-400 to-cyan-500',
     glowColor: 'shadow-teal-300/60 dark:shadow-teal-500/40',
     route: '/games/rockpaperscissors',
@@ -83,7 +83,7 @@ const SIMPLE_GAMES = [
     id: 'pictionary',
     name: 'Pictionary',
     description: 'Draw and guess the word',
-    icon: '🎴',
+    icon: '🎤',
     gradient:  'from-orange-400 to-rose-500',
     glowColor: 'shadow-orange-300/60 dark:shadow-orange-500/40',
     route: '/games/pictionary',
@@ -138,7 +138,7 @@ const RPG_GAMES = [
     tagline: 'Co-op Noir Detective Adventure',
     desc: 'Crack 10+ thrilling cases in 1940s noir streets — interrogate suspects & analyse evidence together.',
     icon: '🔍',
-    pills: ['🕵️ 10+ Cases', '🔎 Evidence Board', '🎭 Split Roles'],
+    pills: ['🕵️ 10+ Cases', '🔎 Evidence Board', '🎠 Split Roles'],
     gradient: 'from-indigo-600 via-purple-600 to-violet-700',
     glow: 'shadow-indigo-500/40',
     border: 'border-indigo-500/30',
@@ -165,6 +165,18 @@ const timeAgo = (date: Date): string => {
   return `${Math.floor(diffDays / 30)}mo ago`;
 };
 
+// Stable star particle data — computed once per module load, never on re-render
+const STARS = Array.from({ length: 60 }, (_, i) => ({
+  key: i,
+  width:  `${(((i * 7 + 3) % 20) / 10 + 1)}px`,
+  height: `${(((i * 13 + 5) % 20) / 10 + 1)}px`,
+  top:    `${(i * 37 + 11) % 100}%`,
+  left:   `${(i * 53 + 7)  % 100}%`,
+  opacity: (((i * 17) % 60) / 100 + 0.2),
+  animDuration: `${2 + ((i * 11) % 30) / 10}s`,
+  animDelay:    `${((i * 19) % 40) / 10}s`,
+}));
+
 export const Home: React.FC = () => {
   const { user }                             = useAuth();
   const { stats, loading: statsLoading }     = usePlayerStats();
@@ -180,6 +192,27 @@ export const Home: React.FC = () => {
     wins:         stats.wins,
     favoriteGame: stats.favoriteGame || '—',
   };
+
+  // Memoize the star particles so they don’t re-render on every state update
+  const starParticles = useMemo(() => (
+    <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+      {STARS.map(s => (
+        <div
+          key={s.key}
+          className="absolute rounded-full bg-white"
+          style={{
+            width:           s.width,
+            height:          s.height,
+            top:             s.top,
+            left:            s.left,
+            opacity:         s.opacity,
+            animation:       `pulse ${s.animDuration} ease-in-out infinite`,
+            animationDelay:  s.animDelay,
+          }}
+        />
+      ))}
+    </div>
+  ), []); // empty deps — stars never change
 
   return (
     <div className="min-h-screen">
@@ -271,29 +304,11 @@ export const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════
-           RPG ADVENTURES SECTION — cinematic dark portal
-          ═══════════════════════════════════════════════════════════ */}
+      {/* RPG SECTION */}
       <div className="relative overflow-hidden bg-gradient-to-b from-gray-950 via-purple-950/60 to-gray-950 py-20 px-4">
 
-        {/* Star particles — pure CSS */}
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          {Array.from({ length: 60 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full bg-white"
-              style={{
-                width:  `${Math.random() * 2 + 1}px`,
-                height: `${Math.random() * 2 + 1}px`,
-                top:    `${Math.random() * 100}%`,
-                left:   `${Math.random() * 100}%`,
-                opacity: Math.random() * 0.6 + 0.2,
-                animation: `pulse ${2 + Math.random() * 3}s ease-in-out infinite`,
-                animationDelay: `${Math.random() * 4}s`,
-              }}
-            />
-          ))}
-        </div>
+        {/* Star particles — memoized, no flicker on re-render */}
+        {starParticles}
 
         {/* Glow blobs */}
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -304,7 +319,6 @@ export const Home: React.FC = () => {
 
         <div className="relative max-w-5xl mx-auto">
 
-          {/* Section header */}
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-xs text-purple-300 font-semibold mb-4 backdrop-blur">
               <Star size={12} className="text-yellow-400" fill="currentColor" />
@@ -321,7 +335,6 @@ export const Home: React.FC = () => {
             </p>
           </div>
 
-          {/* RPG Game cards */}
           <div className="grid md:grid-cols-2 gap-8 mb-10">
             {RPG_GAMES.map(game => (
               <Link
@@ -329,37 +342,20 @@ export const Home: React.FC = () => {
                 to={game.route}
                 className={`group relative overflow-hidden rounded-3xl border ${game.border} bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl ${game.glow} flex flex-col`}
               >
-                {/* Top gradient bar */}
                 <div className={`h-1.5 w-full bg-gradient-to-r ${game.gradient}`} />
-
                 <div className="p-7 flex-1 flex flex-col">
-                  {/* Icon + badge */}
                   <div className="flex items-start justify-between mb-5">
-                    <div className="text-6xl group-hover:scale-110 transition-transform duration-300 drop-shadow-lg">
-                      {game.icon}
-                    </div>
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full backdrop-blur ${game.badgeColor}`}>
-                      {game.badge}
-                    </span>
+                    <div className="text-6xl group-hover:scale-110 transition-transform duration-300 drop-shadow-lg">{game.icon}</div>
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full backdrop-blur ${game.badgeColor}`}>{game.badge}</span>
                   </div>
-
-                  {/* Title + tagline */}
                   <h3 className="text-2xl font-bold text-white mb-1">{game.name}</h3>
-                  <p className={`text-sm font-medium mb-3 bg-gradient-to-r ${game.gradient} bg-clip-text text-transparent`}>
-                    {game.tagline}
-                  </p>
+                  <p className={`text-sm font-medium mb-3 bg-gradient-to-r ${game.gradient} bg-clip-text text-transparent`}>{game.tagline}</p>
                   <p className="text-gray-400 text-sm leading-relaxed mb-5">{game.desc}</p>
-
-                  {/* Feature pills */}
                   <div className="flex flex-wrap gap-2 mb-6">
                     {game.pills.map(p => (
-                      <span key={p} className="text-xs bg-white/10 text-gray-300 border border-white/10 px-3 py-1 rounded-full">
-                        {p}
-                      </span>
+                      <span key={p} className="text-xs bg-white/10 text-gray-300 border border-white/10 px-3 py-1 rounded-full">{p}</span>
                     ))}
                   </div>
-
-                  {/* CTA */}
                   <div className={`mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gradient-to-r ${game.gradient} text-white font-semibold text-sm transition-all group-hover:opacity-90`}>
                     {game.id === 'heartbound' ? <Heart size={16} fill="currentColor" /> : <Search size={16} />}
                     Enter World
@@ -370,12 +366,8 @@ export const Home: React.FC = () => {
             ))}
           </div>
 
-          {/* See all link */}
           <div className="text-center">
-            <Link
-              to="/rpg"
-              className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 font-semibold transition-colors text-sm border border-purple-500/30 hover:border-purple-400/50 px-6 py-2.5 rounded-full backdrop-blur bg-white/5 hover:bg-white/10"
-            >
+            <Link to="/rpg" className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 font-semibold transition-colors text-sm border border-purple-500/30 hover:border-purple-400/50 px-6 py-2.5 rounded-full backdrop-blur bg-white/5 hover:bg-white/10">
               <Sparkles size={14} />
               Explore All RPG Games
               <ArrowRight size={14} />
