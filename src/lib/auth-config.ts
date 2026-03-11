@@ -6,8 +6,15 @@
 export const ALLOWED_EMAILS = [
   'sinharonitraj@gmail.com',       // Player 1 — Ronit
   'radhikadidwania567@gmail.com',  // Player 2 — Radhika
-  'shizzandsparkles@gmail.com',    // Owner / Test
+  'shizzandsparkles@gmail.com',    // Owner / Tester
 ];
+
+/** The testing account that can play with BOTH Ronit and Radhika */
+export const TEST_ACCOUNT_EMAIL = 'shizzandsparkles@gmail.com';
+
+/** Returns true if the email is the designated testing account */
+export const isTestAccount = (email: string): boolean =>
+  email.toLowerCase() === TEST_ACCOUNT_EMAIL.toLowerCase();
 
 export const isEmailAllowed = (email: string): boolean =>
   ALLOWED_EMAILS.some(a => a.toLowerCase() === email.toLowerCase());
@@ -52,12 +59,12 @@ export const getPlayerEmoji = (email: string): string => {
 /**
  * Returns the partner's email for a given player.
  * Ronit  ↔ Radhika (bidirectional)
- * Shizz has no partner.
+ * Shizz  → null (test account — bypasses partner restriction, can play with anyone)
  */
 export const getPartnerEmail = (email: string): string | null => {
   if (email === 'sinharonitraj@gmail.com')      return 'radhikadidwania567@gmail.com';
   if (email === 'radhikadidwania567@gmail.com')  return 'sinharonitraj@gmail.com';
-  return null; // Shizz / unknown — no partner
+  return null; // Shizz / unknown — no fixed partner (test account bypasses this)
 };
 
 /**
@@ -75,3 +82,12 @@ export const getPartnerEmoji = (email: string): string | null => {
   const partnerEmail = getPartnerEmail(email);
   return partnerEmail ? getPlayerEmoji(partnerEmail) : null;
 };
+
+/**
+ * For the test account: returns both real player emails so Shizz
+ * can act as either player's partner in multiplayer sessions.
+ */
+export const getTestPartners = (): { email: string; name: string }[] => [
+  { email: 'sinharonitraj@gmail.com',      name: 'Ronit'   },
+  { email: 'radhikadidwania567@gmail.com', name: 'Radhika' },
+];

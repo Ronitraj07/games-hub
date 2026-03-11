@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useGameInvite } from '@/hooks/firebase/useGameInvite';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDisplayNameFromEmail, getPartnerEmail, getPartnerName } from '@/lib/auth-config';
+import {
+  getDisplayNameFromEmail,
+  getPartnerEmail,
+  getPartnerName,
+  isTestAccount,
+} from '@/lib/auth-config';
 import { Copy, Check, X, Users, LogIn, Loader2, Link2, Mail, Send } from 'lucide-react';
 
 interface InviteModalProps {
@@ -15,25 +20,24 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
   const { status, roomId, error, createRoom, joinRoom, cancelRoom } =
     useGameInvite(gameType);
 
-  const [tab,         setTab]         = useState<'host' | 'join'>('host');
-  const [joinCode,    setJoinCode]    = useState('');
-  const [copied,      setCopied]      = useState<'code' | 'link' | null>(null);
-  const [joinError,   setJoinError]   = useState('');
-  const [joining,     setJoining]     = useState(false);
+  const [tab,          setTab]          = useState<'host' | 'join'>('host');
+  const [joinCode,     setJoinCode]     = useState('');
+  const [copied,       setCopied]       = useState<'code' | 'link' | null>(null);
+  const [joinError,    setJoinError]    = useState('');
+  const [joining,      setJoining]      = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus,  setEmailStatus]  = useState<'idle' | 'sent' | 'error'>('idle');
   const [emailError,   setEmailError]   = useState('');
 
-  // Wait for auth to resolve before deriving partner
-  // Fallback: if user is somehow null after auth, derive from empty string (shows no email btn)
   const myEmail      = user?.email ?? '';
   const myName       = myEmail ? getDisplayNameFromEmail(myEmail) : 'You';
   const partnerEmail = myEmail ? getPartnerEmail(myEmail) : null;
   const partnerName  = myEmail ? getPartnerName(myEmail) : null;
+  const isTester     = myEmail ? isTestAccount(myEmail) : false;
 
   // Auto-create room when host tab opens (wait for auth)
   useEffect(() => {
-    if (authLoading) return;                      // don't create until user is known
+    if (authLoading) return;
     if (tab === 'host' && status === 'idle') createRoom();
   }, [tab, authLoading]);
 
@@ -144,7 +148,6 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
           {tab === 'host' && (
             <div className="space-y-4">
 
-              {/* Auth/Firebase loading */}
               {(authLoading || status === 'creating') && (
                 <div className="flex items-center justify-center gap-3 py-8">
                   <Loader2 size={22} className="animate-spin text-pink-500" />
@@ -157,7 +160,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
               {!authLoading && (status === 'waiting' || status === 'joined') && roomId && (
                 <>
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                    Share with {partnerName ?? 'your partner'}:
+                    Share with {isTester ? 'your partner' : (partnerName ?? 'your partner')}:
                   </p>
 
                   {/* Room code */}
@@ -183,8 +186,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
                     </button>
                   </div>
 
-                  {/* Email invite — shown for Ronit & Radhika only (partnerEmail non-null) */}
-                  {partnerEmail ? (
+                  {/* Email invite — shown for Ronit & Radhika only (partnerEmail non-null && not tester) */}
+                  {!isTester && partnerEmail && (
                     <div className="border border-pink-200 dark:border-pink-800 rounded-2xl p-4 bg-pink-50/50 dark:bg-pink-900/10 space-y-2">
                       <div className="flex items-center gap-2 text-sm text-pink-600 dark:text-pink-300">
                         <Mail size={15} />
@@ -217,24 +220,20 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
                         </div>
                       )}
                     </div>
-                  ) : (
-                    /* Fallback for Shizz account — no partner configured */
-                    <p className="text-xs text-gray-400 text-center">
-                      No partner email configured for this account.
-                    </p>
                   )}
+                  {/* Test account: no email invite block, no fallback text — just copy buttons */}
 
                   {/* Waiting / joined */}
                   {status === 'waiting' && (
                     <div className="flex items-center justify-center gap-3 py-2 text-gray-500 dark:text-gray-400">
                       <Loader2 size={16} className="animate-spin text-purple-400" />
-                      <span className="text-sm">Waiting for {partnerName ?? 'partner'} to join…</span>
+                      <span className="text-sm">Waiting for {isTester ? 'partner' : (partnerName ?? 'partner')} to join…</span>
                     </div>
                   )}
                   {status === 'joined' && (
                     <div className="flex items-center justify-center gap-2 py-2 text-green-600 dark:text-green-400">
                       <Check size={18} />
-                      <span className="text-sm font-semibold">{partnerName ?? 'Partner'} joined! Starting game…</span>
+                      <span className="text-sm font-semibold">{isTester ? 'Partner' : (partnerName ?? 'Partner')} joined! Starting game…</span>
                     </div>
                   )}
                 </>
@@ -252,7 +251,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ gameType, onClose, onR
           {tab === 'join' && (
             <div className="space-y-4">
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                Enter the 6-character code {partnerName ?? 'your partner'} shared:
+                Enter the 6-character code {isTester ? 'your partner' : (partnerName ?? 'your partner')} shared:
               </p>
 
               <input
