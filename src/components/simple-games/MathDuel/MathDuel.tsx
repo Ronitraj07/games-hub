@@ -63,12 +63,10 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const [gameMode, setGameMode] = useState<GameMode|null>(null);
   const [aiDiff,   setAiDiff]   = useState<AIDifficulty>('medium');
 
-  // Room-based vs-partner state
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [isHost,       setIsHost]       = useState(false);
   const [shouldHostStart, setShouldHostStart] = useState(false);
 
-  // Deep-link join support
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const room   = params.get('room');
@@ -113,7 +111,6 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isP1 = gameState?.p1Email === userKey;
   const curQ = gameState?.questions?.[gameState.current];
 
-  // Record online result when finished (once)
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
     const myScore  = isP1 ? gameState.p1Score : gameState.p2Score;
@@ -169,7 +166,6 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return()=>{if(aiTimerRef.current)clearTimeout(aiTimerRef.current!);};
   },[gameMode,round,showFb,problem,aiDiff,selected,handleLocalAnswer]);
 
-  // Record local/AI result when game ends
   useEffect(() => {
     if (!gameOver || localRecorded || !userKey || gameMode === 'vs-partner') return;
     setLocalRecorded(true);
@@ -213,13 +209,13 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     updateGameState({...initialOnline,questions:qs,p2Email:'opponent',status:'active',mode:'vs-partner'});
   };
 
-  // Trigger online seed only for host after room is known
   useEffect(() => {
     if (!shouldHostStart || !activeRoomId || !isHost) return;
     startOnline();
     setShouldHostStart(false);
   }, [shouldHostStart, activeRoomId, isHost, safeSession]);
 
+  // ── LOBBY ──
   if(!gameMode) return(
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
@@ -252,19 +248,20 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     </div>
   );
 
+  // ── RESULTS ──
   if(gameOver||gameState?.status==='finished'){
     const isOnline=gameMode==='vs-partner';
     const myFinal=isOnline?(isP1?gameState!.p1Score:gameState!.p2Score):score;
     const oppFinal=isOnline?(isP1?gameState!.p2Score:gameState!.p1Score):aiScore;
     return(
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="h-screen flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md w-full text-center">
           <div className="text-6xl mb-4">{(!isOnline&&correct/TOTAL_Q>=.8)||myFinal>oppFinal?'🏆':myFinal===oppFinal?'🤝':'💪'}</div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">Duel Over!</h2>
-          {gameMode==='vs-ai'&&<p className="text-gray-500 mb-6">{correct}/{TOTAL_Q} correct · AI scored {aiScore}</p>}
-          {gameMode==='vs-partner'&&<p className="text-gray-500 mb-6">You: {myFinal} · Partner: {oppFinal}</p>}
-          {gameMode==='solo'&&<p className="text-gray-500 mb-6">{correct}/{TOTAL_Q} correct · {diff} mode</p>}
-          <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-6 mb-6">
+          {gameMode==='vs-ai'&&<p className="text-gray-500 mb-4">{correct}/{TOTAL_Q} correct · AI scored {aiScore}</p>}
+          {gameMode==='vs-partner'&&<p className="text-gray-500 mb-4">You: {myFinal} · Partner: {oppFinal}</p>}
+          {gameMode==='solo'&&<p className="text-gray-500 mb-4">{correct}/{TOTAL_Q} correct · {diff} mode</p>}
+          <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-5 mb-5">
             <p className="text-5xl font-bold text-green-600 dark:text-green-400">{myFinal}</p>
             <p className="text-gray-500 mt-1">Your Score</p>
           </div>
@@ -282,6 +279,7 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     );
   }
 
+  // ── ACTIVE GAME ──
   const isOnlineActive=gameMode==='vs-partner'&&gameState?.status==='active';
   const activeProblem=isOnlineActive?curQ:problem;
   const activeTimeLeft=isOnlineActive?null:timeLeft;
@@ -289,55 +287,63 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const timerPct=activeTimeLeft?(activeTimeLeft/TIME_PER[activeDiff])*100:100;
 
   return(
-    <div className="min-h-screen p-4">
-      <div className="max-w-lg mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={()=>{setGameMode(null);setActiveRoomId(null);setIsHost(false);}} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-green-500 to-teal-500 bg-clip-text text-transparent">🧮 Math Duel</h1>
-          <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18}/><span className="font-bold">{isOnlineActive?(isP1?gameState?.p1Score:gameState?.p2Score):score}</span></div>
-        </div>
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 py-4">
 
-        <div className="flex justify-center mb-4">
-          <GameModeBadge mode={gameMode} difficulty={gameMode==='vs-ai'?aiDiff:undefined}/>
-        </div>
-
-        {gameMode==='vs-ai'&&<div className="glass-card p-3 mb-4 flex justify-around text-sm">
-          <span>You: <strong>{score}</strong></span>
-          <span>🤖 AI: <strong className={aiAnswered?'text-red-500':''}>{aiScore}</strong></span>
-          {aiAnswered&&<span className="text-xs text-red-400">AI answered!</span>}
-        </div>}
-
-        <div className="glass-card p-6">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-sm text-gray-500">Q {isOnlineActive?gameState!.current+1:round}/{TOTAL_Q}</span>
-            {streak>=2&&<span className="text-sm font-bold text-orange-500">🔥 {streak}x streak!</span>}
-            {activeTimeLeft&&<span className={`font-bold text-lg ${activeTimeLeft<=3?'text-red-500 animate-pulse':'text-gray-600 dark:text-gray-400'}`}>{activeTimeLeft}s</span>}
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={()=>{setGameMode(null);setActiveRoomId(null);setIsHost(false);}} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20}/> Back</button>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-green-500 to-teal-500 bg-clip-text text-transparent">🧮 Math Duel</h1>
+            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18}/><span className="font-bold">{isOnlineActive?(isP1?gameState?.p1Score:gameState?.p2Score):score}</span></div>
           </div>
-          {activeTimeLeft&&<div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-6">
-            <div className={`h-2 rounded-full transition-all ${timerPct>50?'bg-green-500':timerPct>25?'bg-yellow-500':'bg-red-500'}`} style={{width:`${timerPct}%`}}/>
+
+          <div className="flex justify-center mb-3">
+            <GameModeBadge mode={gameMode} difficulty={gameMode==='vs-ai'?aiDiff:undefined}/>
+          </div>
+
+          {gameMode==='vs-ai'&&<div className="glass-card p-3 mb-3 flex justify-around text-sm">
+            <span>You: <strong>{score}</strong></span>
+            <span>🤖 AI: <strong className={aiAnswered?'text-red-500':''}>{aiScore}</strong></span>
+            {aiAnswered&&<span className="text-xs text-red-400">AI answered!</span>}
           </div>}
 
-          <div className="text-center py-8 mb-6">
-            <p className="text-4xl font-bold text-gray-900 dark:text-white tracking-wide">{activeProblem?.question}</p>
-          </div>
+          {/* Game card */}
+          <div className="glass-card p-5">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-gray-500">Q {isOnlineActive?gameState!.current+1:round}/{TOTAL_Q}</span>
+              {streak>=2&&<span className="text-sm font-bold text-orange-500">🔥 {streak}x streak!</span>}
+              {activeTimeLeft!=null&&<span className={`font-bold text-lg ${activeTimeLeft<=3?'text-red-500 animate-pulse':'text-gray-600 dark:text-gray-400'}`}>{activeTimeLeft}s</span>}
+            </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {activeProblem?.options.map((option,i)=>{
-              let style='glass-btn border-0 hover:ring-2 hover:ring-green-400';
-              if(showFb&&!isOnlineActive){
-                if(option===activeProblem.answer)style='bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
-                else if(option===selected)style='bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
-                else style='opacity-40 glass-btn border-0';
-              }
-              return(
-                <button key={i}
-                  onClick={()=>isOnlineActive?handleOnlineAnswer(option):handleLocalAnswer(option)}
-                  disabled={showFb&&!isOnlineActive}
-                  className={`${style} rounded-xl py-5 text-2xl font-bold text-gray-800 dark:text-white transition-all hover:scale-105 active:scale-95`}>
-                  {option}
-                </button>
-              );
-            })}
+            {activeTimeLeft!=null&&<div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-4">
+              <div className={`h-2 rounded-full transition-all ${timerPct>50?'bg-green-500':timerPct>25?'bg-yellow-500':'bg-red-500'}`} style={{width:`${timerPct}%`}}/>
+            </div>}
+
+            {/* Question */}
+            <div className="text-center py-5 mb-4">
+              <p className="text-4xl font-bold text-gray-900 dark:text-white tracking-wide">{activeProblem?.question}</p>
+            </div>
+
+            {/* Options 2x2 grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {activeProblem?.options.map((option,i)=>{
+                let style='glass-btn border-0 hover:ring-2 hover:ring-green-400';
+                if(showFb&&!isOnlineActive){
+                  if(option===activeProblem.answer)style='bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500';
+                  else if(option===selected)style='bg-red-100 dark:bg-red-900/40 ring-2 ring-red-500';
+                  else style='opacity-40 glass-btn border-0';
+                }
+                return(
+                  <button key={i}
+                    onClick={()=>isOnlineActive?handleOnlineAnswer(option):handleLocalAnswer(option)}
+                    disabled={showFb&&!isOnlineActive}
+                    className={`${style} rounded-xl py-4 text-2xl font-bold text-gray-800 dark:text-white transition-all hover:scale-105 active:scale-95`}>
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
