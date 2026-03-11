@@ -57,9 +57,21 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     recorded: false,
   };
 
-  const { gameState, updateGameState, loading } = useRealtimeGame<Connect4State>(
-    safeSession, 'connect4', initial
-  );
+  const { gameState, updateGameState, patchGameState, loading } =
+    useRealtimeGame<Connect4State>(safeSession, 'connect4', initial);
+
+  // --- Player registration ---
+  // When player2 slot is empty and this user is not player1, register as player2
+  useEffect(() => {
+    if (!gameState || !userKey) return;
+    if (gameState.status !== 'active') return;
+    if (gameState.mode !== 'vs-partner') return;
+    if (gameState.players.player1 === userKey) return;
+    if (gameState.players.player2 === userKey) return;
+    if (!gameState.players.player2 || gameState.players.player2 === 'opponent') {
+      patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
+    }
+  }, [gameState?.status, gameState?.players?.player2, userKey]);
 
   const isP1     = gameState?.players.player1 === userKey;
   const myColor  = isP1 ? 'from-pink-500 to-rose-500' : 'from-yellow-400 to-orange-500';
@@ -88,7 +100,6 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai' || gameState.status !== 'active') return;
     if (gameState.currentPlayer === gameState.players.player1) return;
-
     aiTimer.current = setTimeout(() => {
       const board = gameState.board.map(r => [...r]);
       const col   = getConnect4AIMove(board, 'AI', gameState.players.player1, gameState.aiDifficulty as C4Difficulty);
@@ -114,16 +125,13 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     if (!gameState || gameState.status !== 'active') return;
     if (isAIMode && gameState.currentPlayer !== gameState.players.player1) return;
     if (!isAIMode && !isMyTurn) return;
-
     let row = -1;
     for (let r = ROWS-1; r >= 0; r--) { if (!gameState.board[r]?.[col]) { row = r; break; } }
     if (row === -1) return;
-
     const newBoard = gameState.board.map(r => [...r]);
     newBoard[row][col] = userKey ?? '';
     const cells = checkWinner(newBoard, row, col, userKey ?? '');
     const full  = newBoard[0].every(c => c !== null);
-
     if (cells) {
       updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false });
     } else if (full) {
@@ -150,12 +158,13 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const startVsPartner = () => {
     updateGameState({
       ...initial,
-      players: { player1: userKey ?? '', player2: 'opponent' },
+      players: { player1: userKey ?? '', player2: null },
       status: 'active', mode: 'vs-partner',
+      currentPlayer: userKey ?? '',
     });
   };
 
-  const reset = () => updateGameState(initial);
+  const reset = () => updateGameState({ ...initial, players: { player1: userKey ?? '', player2: null } });
   const isWin = (r: number, c: number) => gameState?.winningCells?.some(([wr,wc]: number[]) => wr===r && wc===c) || false;
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>;
@@ -179,11 +188,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               gradient="from-pink-500 to-purple-500"
               description="Drop pieces and connect four in a row!"
               supportsAI
-              aiLabels={{
-                easy:   'random moves mostly',
-                medium: 'blocks your wins',
-                hard:   'minimax depth-4 — good luck',
-              }}
+              aiLabels={{ easy: 'random moves mostly', medium: 'blocks your wins', hard: 'minimax depth-4 — good luck' }}
               gameType="Connect4"
               onStartVsAI={startVsAI}
               onStartVsPartner={startVsPartner}
@@ -202,7 +207,9 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 <p className={`font-semibold text-lg ${
                   isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'
                 }`}>
-                  {isMyTurn ? 'Your turn!' : isAIMode ? '🤖 AI thinking…' : "Opponent's turn…"}
+                  {!gameState.players.player2 ? 'Waiting for partner to join…' :
+                   isMyTurn ? 'Your turn!' :
+                   isAIMode ? '🤖 AI thinking…' : "Opponent's turn…"}
                 </p>
               )}
               {gameState.status === 'finished' && (
@@ -259,7 +266,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${oppColor}`} />
-                <span className="text-sm text-gray-700 dark:text-gray-300">{isAIMode ? 'AI' : 'Opponent'}</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">{isAIMode ? 'AI' : 'Partner'}</span>
               </div>
             </div>
 

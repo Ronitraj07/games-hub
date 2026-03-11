@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useGameStats } from '@/hooks/useGameStats';
@@ -18,7 +18,6 @@ const CHOICES: { value: RPSChoice; emoji: string; label: string; beats: RPSChoic
 ];
 
 const TOTAL_ROUNDS = 5;
-
 type Result = 'win' | 'lose' | 'draw';
 const getResult = (p: RPSChoice, ai: RPSChoice): Result => {
   if (p === ai) return 'draw';
@@ -43,7 +42,7 @@ interface RPSOnlineState {
 export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const { recordGame } = useGameStats();
-  const userKey  = user?.email ?? null;
+  const userKey = user?.email ?? null;
 
   const [mode,         setMode]         = useState<GameMode | null>(null);
   const [aiDiff,       setAiDiff]       = useState<AIDifficulty>('medium');
@@ -72,35 +71,46 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     recorded: false,
   };
 
-  const { gameState, updateGameState, loading } =
+  const { gameState, updateGameState, patchGameState, loading } =
     useRealtimeGame<RPSOnlineState>(safeSession, 'rps', initialOnline);
 
-  const isP1Online      = gameState?.p1Email === userKey;
+  const isP1Online = gameState?.p1Email === userKey;
+
+  // --- Player registration: second player registers as p2 ---
+  useEffect(() => {
+    if (!gameState || !userKey) return;
+    if (gameState.status !== 'picking') return;
+    if (gameState.p1Email === userKey) return;  // already p1
+    if (gameState.p2Email === userKey) return;  // already registered
+    if (!gameState.p2Email || gameState.p2Email === 'opponent') {
+      patchGameState({ p2Email: userKey } as any);
+    }
+  }, [gameState?.status, gameState?.p2Email, userKey]);
+
   const myOnlineChoice  = isP1Online ? gameState?.p1Choice : gameState?.p2Choice;
   const oppOnlineChoice = isP1Online ? gameState?.p2Choice : gameState?.p1Choice;
 
   const recordAIResult = (pScore: number, aScore: number) => {
     if (aiRecorded || !userKey) return;
     setAiRecorded(true);
-    const result = pScore > aScore ? 'win' : pScore < aScore ? 'loss' : 'draw';
-    recordGame({ gameType: 'rps', playerEmail: userKey, result, score: pScore, mode: 'vs-ai' });
+    const res = pScore > aScore ? 'win' : pScore < aScore ? 'loss' : 'draw';
+    recordGame({ gameType: 'rps', playerEmail: userKey, result: res, score: pScore, mode: 'vs-ai' });
   };
 
   const recordOnlineResult = (gs: RPSOnlineState) => {
     if (gs.recorded || !userKey) return;
     const myScore  = isP1Online ? gs.p1Score : gs.p2Score;
     const oppScore = isP1Online ? gs.p2Score : gs.p1Score;
-    const result   = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const res      = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
     const opp      = isP1Online ? (gs.p2Email ?? undefined) : gs.p1Email;
-    recordGame({ gameType: 'rps', playerEmail: userKey, result, score: myScore, mode: 'vs-partner', opponentEmail: opp });
+    recordGame({ gameType: 'rps', playerEmail: userKey, result: res, score: myScore, mode: 'vs-partner', opponentEmail: opp });
     updateGameState({ ...gs, recorded: true });
   };
 
   const handleAIChoice = (choice: RPSChoice) => {
     if (animating || gameOver) return;
     setAnimating(true);
-    setPlayerChoice(choice);
-    setAiChoice(null); setResult(null);
+    setPlayerChoice(choice); setAiChoice(null); setResult(null);
     setTimeout(() => {
       const cpu = getRPSAIMove(aiHistory, aiDiff as RPSDifficulty);
       const res = getResult(choice, cpu);
@@ -112,13 +122,8 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
       if (res === 'win')       { setPlayerScore(newP); playCorrect(); }
       else if (res === 'lose') { setAiScore(newA);     playWrong(); }
       else                     { playClick(); }
-      const isLast = round >= TOTAL_ROUNDS;
-      if (isLast) {
-        setGameOver(true);
-        recordAIResult(newP, newA);
-      } else {
-        setRound(r => r + 1);
-      }
+      if (round >= TOTAL_ROUNDS) { setGameOver(true); recordAIResult(newP, newA); }
+      else { setRound(r => r + 1); }
       setAnimating(false);
     }, 800);
   };
@@ -159,25 +164,14 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
 
   const nextRoundOnline = () => {
     if (!gameState) return;
-    updateGameState({
-      ...gameState,
-      p1Choice: null, p2Choice: null,
-      round: gameState.round + 1,
-      status: 'picking',
-    });
+    updateGameState({ ...gameState, p1Choice: null, p2Choice: null, round: gameState.round + 1, status: 'picking' });
   };
 
   const startOnlineGame = () => {
-    updateGameState({
-      ...initialOnline,
-      p1Email: userKey ?? '',
-      p2Email: 'opponent',
-      status: 'picking',
-      mode: 'vs-partner',
-    });
+    updateGameState({ ...initialOnline, p1Email: userKey ?? '', p2Email: null, status: 'picking', mode: 'vs-partner' });
   };
 
-  const resetOnline = () => updateGameState(initialOnline);
+  const resetOnline = () => updateGameState({ ...initialOnline, p1Email: userKey ?? '', p2Email: null });
 
   const handleStartVsAI      = (diff: AIDifficulty) => { setAiDiff(diff); setMode('vs-ai'); resetAI(); };
   const handleStartVsPartner = (_roomId: string, _isHost: boolean) => { setMode('vs-partner'); startOnlineGame(); };
@@ -212,11 +206,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             gradient="from-orange-500 to-pink-500"
             description="5 rounds — best score wins!"
             supportsAI
-            aiLabels={{
-              easy:   'pure random — unpredictable',
-              medium: '50% chance to counter your last move',
-              hard:   'analyses your pattern — adapts',
-            }}
+            aiLabels={{ easy: 'pure random — unpredictable', medium: '50% chance to counter your last move', hard: 'analyses your pattern — adapts' }}
             gameType="RPS"
             onStartVsAI={handleStartVsAI}
             onStartVsPartner={handleStartVsPartner}
@@ -235,13 +225,9 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             <ArrowLeft size={20} /> Back
           </button>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
-          <button onClick={resetAI} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
+          <button onClick={resetAI} className="glass-btn p-2 rounded-xl"><RefreshCw size={20} /></button>
         </div>
-
-        <div className="flex justify-center mb-4">
-          <GameModeBadge mode="vs-ai" difficulty={aiDiff} />
-        </div>
-
+        <div className="flex justify-center mb-4"><GameModeBadge mode="vs-ai" difficulty={aiDiff} /></div>
         <div className="glass-card p-4 mb-4">
           <div className="flex justify-between items-center">
             <div className="text-center flex-1">
@@ -258,7 +244,6 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             </div>
           </div>
         </div>
-
         <div className="glass-card p-6 mb-4">
           <div className="flex justify-between items-center mb-6">
             <div className="text-center flex-1">
@@ -286,7 +271,7 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
                 <button key={c.value} onClick={() => handleAIChoice(c.value)} disabled={animating}
                   className="glass-btn rounded-xl p-4 text-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50">
                   <div className="text-4xl mb-1">{c.emoji}</div>
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{c.label}</div>
+                  <div className="text-sm font-medium">{c.label}</div>
                 </button>
               ))}
             </div>
@@ -294,18 +279,16 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
           {gameOver && (
             <div className="text-center">
               <div className="text-5xl mb-3">{playerScore > aiScore ? '🏆' : playerScore < aiScore ? '🤖' : '🤝'}</div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              <h2 className="text-3xl font-bold text-white mb-2">
                 {playerScore > aiScore ? 'You Win! 🏆' : playerScore < aiScore ? 'AI Wins! 🤖' : "It's a Tie! 🤝"}
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{playerScore} – {aiScore} after {TOTAL_ROUNDS} rounds</p>
-              <button onClick={resetAI}
-                className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition flex items-center gap-2 mx-auto">
+              <p className="text-gray-400 mb-6">{playerScore} – {aiScore} after {TOTAL_ROUNDS} rounds</p>
+              <button onClick={resetAI} className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl flex items-center gap-2 mx-auto">
                 <RefreshCw size={18} /> Play Again
               </button>
             </div>
           )}
         </div>
-
         {history.length > 0 && (
           <div className="glass-card p-4">
             <h3 className="text-sm font-semibold text-gray-500 mb-3">Round History</h3>
@@ -335,18 +318,13 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
     <div className="min-h-screen p-4">
       <div className="max-w-lg mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => { resetOnline(); setMode(null); }}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+          <button onClick={() => { resetOnline(); setMode(null); }} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
           </button>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">✊ Rock Paper Scissors</h1>
-          <button onClick={resetOnline} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RefreshCw size={20} /></button>
+          <button onClick={resetOnline} className="glass-btn p-2 rounded-xl"><RefreshCw size={20} /></button>
         </div>
-
-        <div className="flex justify-center mb-4">
-          <GameModeBadge mode="vs-partner" />
-        </div>
-
+        <div className="flex justify-center mb-4"><GameModeBadge mode="vs-partner" /></div>
         <div className="glass-card p-4 mb-4">
           <div className="flex justify-between items-center">
             <div className="text-center flex-1">
@@ -363,9 +341,11 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
             </div>
           </div>
         </div>
-
         <div className="glass-card p-6 mb-4">
-          {gameState?.status === 'picking' && (
+          {!gameState?.p2Email && (
+            <p className="text-center text-gray-400 py-4">Waiting for partner to join…</p>
+          )}
+          {gameState?.p2Email && gameState?.status === 'picking' && (
             <>
               <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
                 {myOnlineChoice ? (
@@ -381,14 +361,13 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
                     <button key={c.value} onClick={() => pickOnline(c.value)}
                       className="glass-btn rounded-xl p-4 text-center transition-all hover:scale-105 active:scale-95">
                       <div className="text-4xl mb-1">{c.emoji}</div>
-                      <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{c.label}</div>
+                      <div className="text-sm font-medium">{c.label}</div>
                     </button>
                   ))}
                 </div>
               )}
             </>
           )}
-
           {bothRevealed && gameState?.status !== 'finished' && (
             <>
               <div className="flex justify-between items-center mb-6">
@@ -403,20 +382,18 @@ export const RockPaperScissors: React.FC<{ sessionId?: string }> = ({ sessionId 
                 </div>
               </div>
               <button onClick={nextRoundOnline}
-                className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
+                className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
                 Next Round →
               </button>
             </>
           )}
-
           {gameState?.status === 'finished' && (
             <div className="text-center">
               <div className="text-5xl mb-3">{myScore > oppScore ? '🏆' : myScore < oppScore ? '💔' : '🤝'}</div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
+              <h2 className="text-3xl font-bold text-white mb-6">
                 {myScore > oppScore ? 'You Win! 🏆' : myScore < oppScore ? 'Partner Wins!' : "It's a Tie! 🤝"}
               </h2>
-              <button onClick={resetOnline}
-                className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition">
+              <button onClick={resetOnline} className="bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold px-8 py-3 rounded-xl">
                 <RefreshCw size={18} className="inline mr-2" /> Play Again
               </button>
             </div>
