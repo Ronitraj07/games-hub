@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { Celebration, MiniCelebration } from '@/components/shared/Celebration';
+import { GameLobby } from '@/components/shared/GameLobby';
+import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playClick, playFlip, playMatch, playWrong, playWin } from '@/utils/sounds';
 import { Brain, Trophy, Users, RotateCcw, ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -15,7 +18,8 @@ interface MemoryMatchGameState {
   currentPlayer: string;
   status: 'waiting' | 'active' | 'finished';
   gridSize: 4 | 6;
-  gameMode: 'solo' | 'versus';
+  gameMode: 'solo' | 'vs-partner';
+  p2Email?: string;
   recorded?: boolean;
 }
 
@@ -38,9 +42,17 @@ const generateCards = (gridSize: 4 | 6, theme: keyof typeof EMOJI_SETS = 'romant
   return pairs.map((symbol, id) => ({ id, symbol, isFlipped: false, isMatched: false }));
 };
 
+type GameMode = 'solo' | 'vs-partner';
+
 export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user } = useAuth();
   const { recordGame } = useGameStats();
+  const location = useLocation();
+
+  const [gameMode, setGameMode] = useState<GameMode | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [shouldHostStart, setShouldHostStart] = useState(false);
   const [gridSize, setGridSize] = useState<4 | 6>(4);
   const [theme, setTheme] = useState<keyof typeof EMOJI_SETS>('romantic');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -48,6 +60,13 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
   const userKey     = user?.email ?? null;
   const safeUserKey = userKey ? sanitizeFirebasePath(userKey) : null;
+
+  // Room-aware session key
+  const safeSession = activeRoomId
+    ? `memorymatch-room-${sanitizeFirebasePath(activeRoomId)}`
+    : sessionId
+    ? sanitizeFirebasePath(sessionId)
+    : `memorymatch-${safeUserKey ?? 'guest'}`;
 
   const initialState: MemoryMatchGameState = {
     cards: [],
@@ -61,7 +80,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   };
 
   const { gameState, updateGameState, loading } = useRealtimeGame<MemoryMatchGameState>(
-    sessionId || 'memorymatch-game', 'memorymatch', initialState
+    safeSession, 'memorymatch', initialState
   );
 
   const safePlayers = (gameState?.players && typeof gameState.players === 'object') ? gameState.players : {};
@@ -69,6 +88,26 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const safeCards   = Array.isArray(gameState?.cards) ? gameState!.cards : [];
   const safeFlipped = Array.isArray(gameState?.flippedCards) ? gameState!.flippedCards : [];
 
+  // Deep-link join: ?room=CODE
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
+    if (room && !activeRoomId) {
+      setActiveRoomId(room.toUpperCase());
+      setIsHost(false);
+      setGameMode('vs-partner');
+    }
+  }, [location.search, activeRoomId]);
+
+  // Host seeding effect — fires only after safeSession points at the room path
+  useEffect(() => {
+    if (!shouldHostStart || !activeRoomId || !isHost) return;
+    startOnline();
+    setShouldHostStart(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldHostStart, activeRoomId, isHost, safeSession]);
+
+  // Stats recording
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey || !safeUserKey) return;
     const pd = safePlayers[safeUserKey] ?? EMPTY_PLAYER;
@@ -77,26 +116,44 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
       playerEmail: userKey,
       result:      'win',
       score:       pd.score,
-      mode:        'solo',
+      mode:        gameMode === 'vs-partner' ? 'vs-partner' : 'solo',
     });
     updateGameState({ ...gameState, recorded: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.status, gameState?.recorded]);
 
-  const startGame = () => {
+  const startSolo = () => {
     if (!safeUserKey) return;
     playClick();
+    setGameMode('solo');
     updateGameState({
       ...initialState,
       cards: generateCards(gridSize, theme),
       gridSize,
+      gameMode: 'solo',
       status: 'active',
       players: { [safeUserKey]: { score: 0, moves: 0 } },
       recorded: false,
     });
   };
 
+  const startOnline = () => {
+    if (!safeUserKey) return;
+    updateGameState({
+      ...initialState,
+      cards: generateCards(gridSize, theme),
+      gridSize,
+      gameMode: 'vs-partner',
+      status: 'active',
+      players: { [safeUserKey]: { score: 0, moves: 0 } },
+      p2Email: 'opponent',
+      recorded: false,
+    });
+  };
+
   const handleCardClick = (cardId: number) => {
     if (!gameState || gameState.status !== 'active' || !safeUserKey) return;
+    // In vs-partner mode, only host flips cards (turn-based can be added later)
     const card = safeCards.find((c: Card) => c.id === cardId);
     if (!card || card.isFlipped || card.isMatched || safeFlipped.length >= 2) return;
     playFlip();
@@ -143,6 +200,9 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const resetGame = () => {
     playClick();
     setShowCelebration(false);
+    setGameMode(null);
+    setActiveRoomId(null);
+    setIsHost(false);
     updateGameState(initialState);
   };
 
@@ -152,6 +212,80 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     </div>
   );
 
+  // ── Lobby ──────────────────────────────────────────────────────────────────
+  if (!gameMode || (gameMode === 'vs-partner' && gameState?.status === 'waiting' && !gameState?.cards?.length)) {
+    return (
+      <div className="min-h-screen p-4 flex items-center justify-center">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-between mb-6">
+            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+              <ArrowLeft size={20} /> Back
+            </Link>
+          </div>
+
+          {/* Grid size + theme pickers */}
+          <div className="glass-card p-5 mb-4 space-y-4">
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Grid Size</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {([4, 6] as const).map(s => (
+                  <button key={s} onClick={() => { playClick(); setGridSize(s); }}
+                    className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
+                      gridSize === s ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
+                    }`}>
+                    <p className="font-bold text-gray-900 dark:text-white">{s}×{s}</p>
+                    <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs · Easy' : '18 pairs · Hard'}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Theme</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {(Object.keys(EMOJI_SETS) as Array<keyof typeof EMOJI_SETS>).map(t => (
+                  <button key={t} onClick={() => { playClick(); setTheme(t); }}
+                    className={`p-3 rounded-xl border-2 transition-all hover:scale-105 ${
+                      theme === t ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
+                    }`}>
+                    <p className="text-2xl mb-1">{EMOJI_SETS[t][0]}</p>
+                    <p className="text-xs font-semibold capitalize text-gray-700 dark:text-gray-300">{t}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <GameLobby
+            gameName="Memory Match"
+            gameIcon="🧠"
+            gradient="from-blue-500 to-cyan-500"
+            description="Find all matching pairs!"
+            supportsSolo
+            supportsAI={false}
+            gameType="MemoryMatch"
+            onStartSolo={startSolo}
+            onStartVsPartner={(roomId, hostFlag) => {
+              setActiveRoomId(roomId);
+              setIsHost(hostFlag);
+              setGameMode('vs-partner');
+              if (hostFlag) setShouldHostStart(true);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Waiting for host to seed state (guest sees spinner)
+  if (gameMode === 'vs-partner' && gameState?.status === 'waiting') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <Loader2 size={32} className="animate-spin text-blue-500" />
+        <p className="text-gray-500">Waiting for host to start the game…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-4">
       <Celebration show={showCelebration} type="win" message="All Pairs Found! 🎉" onComplete={() => setShowCelebration(false)} />
@@ -159,63 +293,19 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
+          <button onClick={resetGame} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
             <ArrowLeft size={20} /> Back
-          </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">🧠 Memory Match</h1>
-          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
-            <RotateCcw size={20} />
           </button>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">🧠 Memory Match</h1>
+          <div className="flex items-center gap-2">
+            <GameModeBadge mode={gameMode === 'vs-partner' ? 'vs-partner' : 'solo'} />
+            <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400">
+              <RotateCcw size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="glass-card p-6">
-          {(!gameState || gameState.status === 'waiting') && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 glass rounded-2xl mb-3">
-                  <Brain className="w-8 h-8 text-blue-500" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Memory Match</h2>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">Find all the matching pairs!</p>
-              </div>
-
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Grid Size</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {([4, 6] as const).map(s => (
-                    <button key={s} onClick={() => { playClick(); setGridSize(s); }}
-                      className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${
-                        gridSize === s ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
-                      }`}>
-                      <p className="font-bold text-gray-900 dark:text-white">{s}×{s}</p>
-                      <p className="text-xs text-gray-500 mt-1">{s === 4 ? '8 pairs · Easy' : '18 pairs · Hard'}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Theme</h3>
-                <div className="grid grid-cols-3 gap-3">
-                  {(Object.keys(EMOJI_SETS) as Array<keyof typeof EMOJI_SETS>).map(t => (
-                    <button key={t} onClick={() => { playClick(); setTheme(t); }}
-                      className={`p-3 rounded-xl border-2 transition-all hover:scale-105 ${
-                        theme === t ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20' : 'border-transparent glass'
-                      }`}>
-                      <p className="text-2xl mb-1">{EMOJI_SETS[t][0]}</p>
-                      <p className="text-xs font-semibold capitalize text-gray-700 dark:text-gray-300">{t}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <button onClick={startGame} disabled={!safeUserKey}
-                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl transition hover:scale-[1.02]">
-                Start Game
-              </button>
-            </div>
-          )}
-
           {gameState?.status === 'active' && (
             <div className="space-y-5">
               <div className="flex justify-around">
@@ -231,6 +321,13 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                   </div>
                 ))}
               </div>
+
+              {activeRoomId && (
+                <p className="text-center text-xs text-gray-400">
+                  Room: <span className="font-bold text-pink-400">{activeRoomId}</span>
+                  {' · '}{isHost ? 'Host' : 'Guest'}
+                </p>
+              )}
 
               <div className={`grid gap-3 ${gameState.gridSize === 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
                 {safeCards.map((card: Card) => (

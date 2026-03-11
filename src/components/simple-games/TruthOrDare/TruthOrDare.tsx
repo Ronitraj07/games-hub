@@ -1,8 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { ArrowLeft, Plus, X, Shuffle, Lock, Copy, Check, Users } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { ArrowLeft, Plus, X, Shuffle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRealtimeGame, sanitizeFirebasePath } from '@/hooks/firebase/useRealtimeGame';
 import { useAuth } from '@/contexts/AuthContext';
+import { GameLobby } from '@/components/shared/GameLobby';
 
 // ─────────────────────────────────────────────────────────
 //  DECKS
@@ -106,7 +108,7 @@ interface TodState {
   deck: DeckKey;
   adultUnlocked: boolean;
   currentCard: TodCard | null;
-  currentTurn: string;          // email of whose turn it is
+  currentTurn: string;
   player1: string;
   player2: string | null;
   customTruths: string[];
@@ -117,25 +119,26 @@ interface TodState {
 
 const pickRandom = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const generateRoomCode = () =>
-  Math.random().toString(36).substring(2, 8).toUpperCase();
-
 export const TruthOrDare: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const userEmail = user?.email ?? 'guest';
 
+  // ── Room state ──────────────────────────────────────
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [inGame, setInGame] = useState(false);
+
   // ── Local UI state ──────────────────────────────────
-  const [roomInput,     setRoomInput]     = useState('');
-  const [roomId,        setRoomId]        = useState<string | null>(null);
-  const [isHost,        setIsHost]        = useState(false);
   const [showAgeGate,   setShowAgeGate]   = useState(false);
   const [showCustom,    setShowCustom]    = useState(false);
   const [newCustomText, setNewCustomText] = useState('');
   const [newCustomType, setNewCustomType] = useState<CardType>('truth');
-  const [copied,        setCopied]        = useState(false);
 
   // ── Firebase session ────────────────────────────────
-  const safeRoom = roomId ? `tod-${sanitizeFirebasePath(roomId)}` : 'tod-placeholder';
+  const safeRoom = activeRoomId
+    ? `tod-room-${sanitizeFirebasePath(activeRoomId)}`
+    : 'tod-placeholder';
 
   const initialState: TodState = {
     status: 'lobby',
@@ -160,30 +163,27 @@ export const TruthOrDare: React.FC = () => {
   const amPlayer1 = gs?.player1 === userEmail;
   const partnerJoined = !!gs?.player2;
 
-  // ── Room management ─────────────────────────────────
-  const createRoom = () => {
-    const code = generateRoomCode();
-    setRoomId(code);
-    setIsHost(true);
-  };
-
-  const joinRoom = () => {
-    const code = roomInput.trim().toUpperCase();
-    if (!code) return;
-    setRoomId(code);
-    setIsHost(false);
-  };
-
-  // When guest joins, write their email into player2
+  // ── Deep-link join: ?room=CODE ──────────────────────
   React.useEffect(() => {
-    if (!roomId || isHost || !gs) return;
-    if (gs.player1 === userEmail) return; // already host
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
+    if (room && !activeRoomId) {
+      setActiveRoomId(room.toUpperCase());
+      setIsHost(false);
+      setInGame(true);
+    }
+  }, [location.search, activeRoomId]);
+
+  // ── Guest joins: write player2 into Firebase ────────
+  React.useEffect(() => {
+    if (!activeRoomId || isHost || !gs) return;
+    if (gs.player1 === userEmail) return;
     if (!gs.player2 && gs.player1 !== userEmail) {
       updateGameState({ ...gs, player2: userEmail, status: 'active' });
     }
-  }, [roomId, isHost, gs?.player1, gs?.player2]);
+  }, [activeRoomId, isHost, gs?.player1, gs?.player2]);
 
-  // Host starts game when partner joins
+  // ── Host starts when partner joins ─────────────────
   React.useEffect(() => {
     if (!isHost || !gs) return;
     if (gs.player2 && gs.status === 'lobby') {
@@ -191,11 +191,15 @@ export const TruthOrDare: React.FC = () => {
     }
   }, [gs?.player2]);
 
-  const copyCode = () => {
-    if (!roomId) return;
-    navigator.clipboard.writeText(roomId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // ── Host seeds room on InviteModal ready ────────────
+  const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
+    setActiveRoomId(roomId);
+    setIsHost(hostFlag);
+    setInGame(true);
+    if (hostFlag) {
+      // Host seeds initial state once safeRoom path is ready
+      // The guest-join effect above will activate the game
+    }
   };
 
   // ── Deck selection ───────────────────────────────────
@@ -253,78 +257,57 @@ export const TruthOrDare: React.FC = () => {
     setNewCustomText('');
   };
 
+  const leaveGame = () => {
+    setActiveRoomId(null);
+    setIsHost(false);
+    setInGame(false);
+  };
+
   // ─────────────────────────────────────────────────────
-  //  RENDER — no room yet
+  //  RENDER — Lobby (no room yet)
   // ─────────────────────────────────────────────────────
-  if (!roomId) return (
+  if (!inGame || !activeRoomId) return (
     <div className="min-h-screen p-4">
-      <div className="max-w-sm mx-auto pt-16">
-        <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-pink-500 transition mb-10 text-sm">
+      <div className="max-w-md mx-auto pt-8">
+        <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-pink-500 transition mb-8 text-sm">
           <ArrowLeft size={16} /> Back
         </Link>
-        <div className="text-center mb-10">
-          <div className="text-7xl mb-4">🔥</div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-500 to-pink-500 bg-clip-text text-transparent">
-            Truth or Dare
-          </h1>
-          <p className="text-gray-400 mt-2 text-sm">Real-time · Two players · Two devices</p>
-        </div>
-
-        <div className="space-y-4">
-          <button onClick={createRoom}
-            className="w-full py-4 rounded-2xl font-bold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-3">
-            <Users size={20} /> Create Room
-          </button>
-
-          <div className="relative flex items-center gap-2">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-gray-500 text-xs">or join with code</span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              value={roomInput}
-              onChange={e => setRoomInput(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && joinRoom()}
-              placeholder="Room code"
-              maxLength={6}
-              className="flex-1 glass border-0 rounded-xl px-4 py-3 text-center text-xl font-bold tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
-            />
-            <button onClick={joinRoom}
-              className="px-5 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 transition-transform">
-              Join
-            </button>
-          </div>
-        </div>
+        <GameLobby
+          gameName="Truth or Dare"
+          gameIcon="🔥"
+          gradient="from-rose-500 to-pink-500"
+          description="Real-time · Two players · Two devices"
+          supportsSolo={false}
+          supportsAI={false}
+          gameType="TruthOrDare"
+          onStartVsPartner={handleStartVsPartner}
+        />
       </div>
     </div>
   );
 
   // ─────────────────────────────────────────────────────
-  //  RENDER — waiting for partner
+  //  RENDER — Waiting for partner
   // ─────────────────────────────────────────────────────
   if (isHost && !partnerJoined) return (
     <div className="min-h-screen p-4 flex items-center justify-center">
       <div className="glass-card max-w-sm w-full p-10 text-center">
         <div className="text-6xl mb-4 animate-pulse">⏳</div>
         <h2 className="text-xl font-bold text-white mb-2">Room Created!</h2>
-        <p className="text-gray-400 text-sm mb-6">Share this code with your partner</p>
+        <p className="text-gray-400 text-sm mb-6">Waiting for partner to join…</p>
         <div className="glass rounded-2xl px-6 py-4 mb-4">
-          <p className="text-4xl font-black tracking-widest text-pink-400">{roomId}</p>
+          <p className="text-4xl font-black tracking-widest text-pink-400">{activeRoomId}</p>
         </div>
-        <button onClick={copyCode}
-          className="flex items-center gap-2 mx-auto text-sm text-gray-400 hover:text-pink-400 transition">
-          {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-          {copied ? 'Copied!' : 'Copy code'}
+        <button onClick={leaveGame}
+          className="text-sm text-gray-500 hover:text-red-400 transition mt-4">
+          ← Leave room
         </button>
-        <p className="text-gray-500 text-xs mt-6">Waiting for partner to join…</p>
       </div>
     </div>
   );
 
   // ─────────────────────────────────────────────────────
-  //  RENDER — game active
+  //  RENDER — Game active
   // ─────────────────────────────────────────────────────
   const deck = DECKS[gs?.deck ?? 'romantic'];
 
@@ -356,7 +339,7 @@ export const TruthOrDare: React.FC = () => {
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <button onClick={() => setRoomId(null)}
+          <button onClick={leaveGame}
             className="flex items-center gap-2 text-gray-400 hover:text-pink-400 transition text-sm">
             <ArrowLeft size={18} /> Leave
           </button>
@@ -364,7 +347,7 @@ export const TruthOrDare: React.FC = () => {
             <h1 className={`text-xl font-bold bg-gradient-to-r ${deck.color} bg-clip-text text-transparent`}>
               🔥 Truth or Dare
             </h1>
-            <p className="text-xs text-gray-500">Room: <span className="text-pink-400 font-bold">{roomId}</span></p>
+            <p className="text-xs text-gray-500">Room: <span className="text-pink-400 font-bold">{activeRoomId}</span></p>
           </div>
           <button onClick={() => setShowCustom(s => !s)}
             className="glass-btn p-2 rounded-xl text-gray-400">
@@ -465,7 +448,7 @@ export const TruthOrDare: React.FC = () => {
           )}
         </div>
 
-        {/* Draw buttons — only active on your turn */}
+        {/* Draw buttons */}
         <div className={`grid grid-cols-3 gap-3 mb-5 transition-opacity ${
           isMyTurn ? 'opacity-100' : 'opacity-30 pointer-events-none'
         }`}>
