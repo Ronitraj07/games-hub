@@ -21,6 +21,10 @@ const BRUSH_SIZES = [3, 6, 10, 16];
 const DRAW_TIME   = 90;
 const GUESS_TIME  = 30;
 
+// Internal canvas resolution (fixed, high quality)
+const CANVAS_W = 600;
+const CANVAS_H = 400;
+
 interface PictionaryOnlineState {
   word:         string;
   drawerEmail:  string;
@@ -60,10 +64,10 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     }
   }, [location.search, activeRoomId]);
 
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const lastPos      = useRef<{ x: number; y: number } | null>(null);
-  const syncTimer    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canvasRef      = useRef<HTMLCanvasElement>(null);
+  const containerRef   = useRef<HTMLDivElement>(null);
+  const lastPos        = useRef<{ x: number; y: number } | null>(null);
+  const syncTimer      = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [drawing,       setDrawing]       = useState(false);
   const [color,         setColor]         = useState('#1a1a1a');
@@ -128,35 +132,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   useEffect(() => { clearCanvas(); }, [phase]);
 
-  // Sync canvas size to wrapper on mount and resize
-  useEffect(() => {
-    const syncSize = () => {
-      const wrap = canvasWrapRef.current;
-      const c    = canvasRef.current;
-      if (!wrap || !c) return;
-      const w = wrap.clientWidth;
-      const h = Math.round(w * (2 / 3)); // 3:2 ratio
-      if (c.width !== w || c.height !== h) {
-        // Preserve drawing by snapshotting first
-        const snap = c.toDataURL();
-        c.width  = w;
-        c.height = h;
-        const ctx = getCtx();
-        if (!ctx) return;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        if (snap !== 'data:,') {
-          const img = new Image();
-          img.onload = () => ctx.drawImage(img, 0, 0, w, h);
-          img.src    = snap;
-        }
-      }
-    };
-    syncSize();
-    window.addEventListener('resize', syncSize);
-    return () => window.removeEventListener('resize', syncSize);
-  }, [phase, gameMode]);
-
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
     syncTimer.current = setInterval(() => {
@@ -170,7 +145,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   useEffect(() => {
     if (!isGuesser || !gameState?.canvasData || gameMode !== 'vs-partner') return;
     const img    = new Image();
-    img.onload   = () => { const ctx = getCtx(); if (!ctx) return; ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height); };
+    img.onload   = () => { const ctx = getCtx(); if (!ctx) return; ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H); };
     img.src      = gameState.canvasData;
   }, [gameState?.canvasData]);
 
@@ -296,11 +271,22 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     clearCanvas(); setTimeLeft(DRAW_TIME); setGuess('');
   };
 
+  // ── Draw helpers ──
+  // Maps pointer position to internal canvas coordinates
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
-    const c = getCanvas()!; const rect = c.getBoundingClientRect();
-    const sx = c.width / rect.width, sy = c.height / rect.height;
-    if ('touches' in e) return { x: (e.touches[0].clientX - rect.left) * sx, y: (e.touches[0].clientY - rect.top) * sy };
-    return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
+    const c = getCanvas()!;
+    const rect = c.getBoundingClientRect();
+    // Scale from display size to internal canvas resolution
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = CANVAS_H / rect.height;
+    if ('touches' in e) return {
+      x: (e.touches[0].clientX - rect.left) * scaleX,
+      y: (e.touches[0].clientY - rect.top)  * scaleY,
+    };
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
+    };
   };
 
   const canDraw = gameMode === 'solo'
@@ -344,38 +330,40 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   if (loading) return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin" size={32} /></div>;
 
-  // ─── LOBBY ───
+  // ── LOBBY ──
   if (!gameMode || phase === 'idle') return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
-          <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{score}</span></div>
-        </div>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <GameLobby
-            gameName="Pictionary"
-            gameIcon="🎨"
-            gradient="from-pink-500 to-rose-500"
-            description="Draw the word — your partner guesses!"
-            supportsSolo
-            supportsAI={false}
-            gameType="Pictionary"
-            onStartSolo={() => { setGameMode('solo'); startSolo(); }}
-            onStartVsPartner={(roomId, hostFlag) => {
-              setGameMode('vs-partner');
-              setActiveRoomId(roomId);
-              setIsHost(hostFlag);
-              if (hostFlag) setShouldHostStart(true);
-            }}
-          />
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto p-4 pb-8">
+          <div className="flex items-center justify-between mb-4">
+            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</Link>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{score}</span></div>
+          </div>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <GameLobby
+              gameName="Pictionary"
+              gameIcon="🎨"
+              gradient="from-pink-500 to-rose-500"
+              description="Draw the word — your partner guesses!"
+              supportsSolo
+              supportsAI={false}
+              gameType="Pictionary"
+              onStartSolo={() => { setGameMode('solo'); startSolo(); }}
+              onStartVsPartner={(roomId, hostFlag) => {
+                setGameMode('vs-partner');
+                setActiveRoomId(roomId);
+                setIsHost(hostFlag);
+                if (hostFlag) setShouldHostStart(true);
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 
-  // ─── ACTIVE GAME ───
+  // ── ACTIVE GAME ──
   const activePhase     = gameMode === 'vs-partner' ? gameState?.phase : phase;
   const activeWord      = gameMode === 'vs-partner' ? gameState?.word  : word;
   const activeResult    = gameMode === 'vs-partner' ? gameState?.result : result;
@@ -388,7 +376,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="max-w-2xl mx-auto p-4 pb-8">
 
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
@@ -415,7 +403,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
           {(activePhase === 'drawing' || activePhase === 'guessing') && !isOnlineWaiting && (
             <div className="space-y-2">
-              {/* Timer bar */}
+              {/* Info bar */}
               <div className="glass-card p-3">
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-gray-600 dark:text-gray-400 text-sm">
@@ -425,32 +413,34 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                       : (isGuesser || gameMode === 'solo' ? ' 👀 Guess!' : ' Guesser is typing…')}
                   </span>
                   {(isDrawer || gameMode === 'solo') && activePhase === 'drawing' &&
-                    <span className="text-base font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
-                  <span className={`font-bold text-base ${timerColor}`}>{timeLeft}s</span>
+                    <span className="text-sm font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
+                  <span className={`font-bold ${timerColor}`}>{timeLeft}s</span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1.5">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
                   <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-1.5 rounded-full transition-all"
                     style={{ width: `${activePhase === 'drawing' ? (timeLeft / DRAW_TIME) * 100 : (timeLeft / GUESS_TIME) * 100}%` }} />
                 </div>
               </div>
 
-              {/* Canvas — responsive, 3:2 aspect ratio */}
-              <div className="glass-card overflow-hidden">
-                <div ref={canvasWrapRef} className="w-full">
-                  <canvas
-                    ref={canvasRef}
-                    className={`w-full block touch-none ${canDraw ? 'cursor-crosshair' : 'cursor-default'}`}
-                    style={{ background: '#ffffff', display: 'block' }}
-                    onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
-                    onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
-                  />
-                </div>
+              {/* Canvas — responsive: full container width, internal resolution 600×400 */}
+              <div ref={containerRef} className="glass-card overflow-hidden w-full">
+                <canvas
+                  ref={canvasRef}
+                  width={CANVAS_W}
+                  height={CANVAS_H}
+                  className={`w-full touch-none block ${
+                    canDraw ? 'cursor-crosshair' : 'cursor-default'
+                  }`}
+                  style={{ background: '#ffffff', aspectRatio: '3/2' }}
+                  onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+                  onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+                />
               </div>
 
               {/* Drawing toolbar */}
               {canDraw && (
                 <div className="glass-card p-3">
-                  <div className="flex gap-2 mb-2 flex-wrap items-center">
+                  <div className="flex gap-1.5 mb-2 flex-wrap items-center">
                     {COLORS.map(c => (
                       <button key={c} onClick={() => { setColor(c); setErasing(false); }}
                         className={`w-7 h-7 rounded-full border-2 transition hover:scale-110 ${
@@ -459,7 +449,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                     ))}
                     <button onClick={() => setErasing(e => !e)}
                       className={`p-1.5 rounded-lg transition ${erasing ? 'bg-blue-500 text-white' : 'glass-btn text-gray-700 dark:text-gray-300'}`}>
-                      <Eraser size={14} />
+                      <Eraser size={15} />
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -483,8 +473,8 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                   <form onSubmit={gameMode === 'solo' ? handleSoloGuess : handleOnlineGuessSubmit} className="flex gap-2">
                     <input type="text" value={guess} onChange={e => setGuess(e.target.value)}
                       placeholder="Your guess…" autoFocus
-                      className="flex-1 glass border-0 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
-                    <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition">
+                      className="flex-1 glass border-0 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
+                    <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-5 py-2 rounded-xl transition">
                       Guess!
                     </button>
                   </form>
@@ -516,6 +506,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               </div>
             </div>
           )}
+
         </div>
       </div>
     </div>
