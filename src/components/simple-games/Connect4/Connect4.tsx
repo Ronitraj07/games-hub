@@ -6,7 +6,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { RotateCcw, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { getConnect4AIMove } from '@/lib/connect4-ai';
 import type { C4Difficulty } from '@/lib/connect4-ai';
 import type { AIDifficulty, GameMode } from '@/components/shared/GameLobby';
@@ -38,40 +38,55 @@ const checkWinner = (board: (string|null)[][], row: number, col: number, player:
   return null;
 };
 
-export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
-  const { user } = useAuth();
+export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSession }) => {
+  const { user }       = useAuth();
   const { recordGame } = useGameStats();
-  const userKey  = user?.email ?? null;
-  const aiTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [hovered, setHovered] = useState<number|null>(null);
+  const location       = useLocation();
+  const userKey        = user?.email ?? null;
+  const aiTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingInit    = useRef<Connect4State | null>(null);
+  const [hovered,      setHovered]      = useState<number|null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [isHost,       setIsHost]       = useState(false);
 
-  const safeSession = sessionId
-    ? sanitizeFirebasePath(sessionId)
-    : `connect4-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
+  // Read ?room= from URL (invite link)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const room   = params.get('room');
+    if (room && !activeRoomId) { setActiveRoomId(room.toUpperCase()); setIsHost(false); }
+  }, [location.search]);
 
-  const initial: Connect4State = {
-    board: emptyBoard(), currentPlayer: userKey ?? '',
-    players: { player1: userKey ?? '', player2: null },
-    winner: null, winningCells: null, status: 'waiting',
-    isDraw: false, mode: 'vs-partner', aiDifficulty: 'medium',
-    recorded: false,
-  };
+  const safeSession = activeRoomId
+    ? `connect4-room-${sanitizeFirebasePath(activeRoomId)}`
+    : propSession
+    ? sanitizeFirebasePath(propSession)
+    : `connect4-ai-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
+
+  const makeInitial = (p1: string, mode: GameMode = 'vs-partner', diff: AIDifficulty = 'medium'): Connect4State => ({
+    board: emptyBoard(), currentPlayer: p1,
+    players: { player1: p1, player2: null },
+    winner: null, winningCells: null, status: 'active',
+    isDraw: false, mode, aiDifficulty: diff, recorded: false,
+  });
 
   const { gameState, updateGameState, patchGameState, loading } =
-    useRealtimeGame<Connect4State>(safeSession, 'connect4', initial);
+    useRealtimeGame<Connect4State>(safeSession, 'connect4', makeInitial(userKey ?? ''));
 
-  // --- Player registration ---
-  // When player2 slot is empty and this user is not player1, register as player2
+  // Player 2 registration
   useEffect(() => {
     if (!gameState || !userKey) return;
-    if (gameState.status !== 'active') return;
     if (gameState.mode !== 'vs-partner') return;
     if (gameState.players.player1 === userKey) return;
     if (gameState.players.player2 === userKey) return;
-    if (!gameState.players.player2 || gameState.players.player2 === 'opponent') {
-      patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
-    }
-  }, [gameState?.status, gameState?.players?.player2, userKey]);
+    patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
+  }, [gameState?.players?.player1, gameState?.players?.player2, userKey, gameState?.mode]);
+
+  // Write pending initial state after host's safeSession updates
+  useEffect(() => {
+    if (!pendingInit.current || !activeRoomId || !isHost) return;
+    updateGameState(pendingInit.current);
+    pendingInit.current = null;
+  }, [activeRoomId, isHost, safeSession]);
 
   const isP1     = gameState?.players.player1 === userKey;
   const myColor  = isP1 ? 'from-pink-500 to-rose-500' : 'from-yellow-400 to-orange-500';
@@ -80,23 +95,21 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const isMyTurn = isAIMode
     ? gameState?.currentPlayer === gameState?.players.player1
     : gameState?.currentPlayer === userKey;
+  const partnerReady = !!(gameState?.players?.player2);
 
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
-    const isAI  = gameState.mode === 'vs-ai';
-    const isWin = gameState.winner === userKey;
+    const isWin  = gameState.winner === userKey;
     const result = gameState.isDraw ? 'draw' : isWin ? 'win' : 'loss';
     recordGame({
-      gameType:    'connect4',
-      playerEmail: userKey,
-      result,
-      score:       isWin ? 10 : 0,
-      mode:        isAI ? 'vs-ai' : 'vs-partner',
-      opponentEmail: isAI ? undefined : (gameState.players.player2 ?? undefined),
+      gameType: 'connect4', playerEmail: userKey, result, score: isWin ? 10 : 0,
+      mode: gameState.mode === 'vs-ai' ? 'vs-ai' : 'vs-partner',
+      opponentEmail: gameState.mode === 'vs-ai' ? undefined : (gameState.players.player2 ?? undefined),
     });
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
 
+  // AI move
   useEffect(() => {
     if (!gameState || gameState.mode !== 'vs-ai' || gameState.status !== 'active') return;
     if (gameState.currentPlayer === gameState.players.player1) return;
@@ -108,22 +121,18 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       for (let r = ROWS-1; r >= 0; r--) { if (!board[r][col]) { row = r; break; } }
       if (row === -1) return;
       board[row][col] = 'AI';
-      const cells  = checkWinner(board, row, col, 'AI');
-      const full   = board[0].every(c => c !== null);
-      if (cells) {
-        updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished', recorded: false });
-      } else if (full) {
-        updateGameState({ ...gameState, board, isDraw: true, status: 'finished', recorded: false });
-      } else {
-        updateGameState({ ...gameState, board, currentPlayer: gameState.players.player1 });
-      }
+      const cells = checkWinner(board, row, col, 'AI');
+      const full  = board[0].every(c => c !== null);
+      if (cells)      updateGameState({ ...gameState, board, winner: 'AI', winningCells: cells, status: 'finished', recorded: false });
+      else if (full)  updateGameState({ ...gameState, board, isDraw: true, status: 'finished', recorded: false });
+      else            updateGameState({ ...gameState, board, currentPlayer: gameState.players.player1 });
     }, 500);
     return () => { if (aiTimer.current) clearTimeout(aiTimer.current); };
   }, [gameState?.currentPlayer, gameState?.status, gameState?.mode]);
 
   const handleColumnClick = (col: number) => {
     if (!gameState || gameState.status !== 'active') return;
-    if (isAIMode && gameState.currentPlayer !== gameState.players.player1) return;
+    if (isAIMode  && gameState.currentPlayer !== gameState.players.player1) return;
     if (!isAIMode && !isMyTurn) return;
     let row = -1;
     for (let r = ROWS-1; r >= 0; r--) { if (!gameState.board[r]?.[col]) { row = r; break; } }
@@ -132,40 +141,49 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     newBoard[row][col] = userKey ?? '';
     const cells = checkWinner(newBoard, row, col, userKey ?? '');
     const full  = newBoard[0].every(c => c !== null);
-    if (cells) {
-      updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false });
-    } else if (full) {
-      updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false });
-    } else {
-      const next = isAIMode ? 'AI' : (
-        gameState.currentPlayer === gameState.players.player1
-          ? gameState.players.player2 ?? ''
-          : gameState.players.player1
-      );
-      updateGameState({ ...gameState, board: newBoard, currentPlayer: next });
-    }
+    if (cells)     { updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false }); return; }
+    if (full)      { updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false }); return; }
+    const next = isAIMode ? 'AI' : (
+      gameState.currentPlayer === gameState.players.player1
+        ? (gameState.players.player2 ?? '')
+        : gameState.players.player1
+    );
+    updateGameState({ ...gameState, board: newBoard, currentPlayer: next });
   };
 
   const startVsAI = (diff: AIDifficulty) => {
+    setActiveRoomId(null); setIsHost(false);
+    updateGameState({ ...makeInitial(userKey ?? '', 'vs-ai', diff), players: { player1: userKey ?? '', player2: 'AI' } });
+  };
+
+  // Called by GameLobby → InviteModal onReady
+  const handleStartVsPartner = (roomId: string, hostFlag: boolean) => {
+    setIsHost(hostFlag);
+    setActiveRoomId(roomId);
+    if (hostFlag) {
+      pendingInit.current = { ...makeInitial(userKey ?? '', 'vs-partner'), players: { player1: userKey ?? '', player2: null } };
+    }
+  };
+
+  // Play Again — reset board, keep players & room
+  const playAgain = () => {
+    if (!gameState) return;
     updateGameState({
-      ...initial,
-      players: { player1: userKey ?? '', player2: 'AI' },
-      status: 'active', mode: 'vs-ai', aiDifficulty: diff,
-      currentPlayer: userKey ?? '',
+      ...makeInitial(gameState.players.player1, gameState.mode, gameState.aiDifficulty),
+      players: gameState.players,
     });
   };
 
-  const startVsPartner = () => {
-    updateGameState({
-      ...initial,
-      players: { player1: userKey ?? '', player2: null },
-      status: 'active', mode: 'vs-partner',
-      currentPlayer: userKey ?? '',
-    });
+  // Leave — back to lobby
+  const resetGame = () => {
+    setActiveRoomId(null); setIsHost(false);
+    updateGameState({ ...makeInitial(userKey ?? ''), status: 'waiting' });
   };
 
-  const reset = () => updateGameState({ ...initial, players: { player1: userKey ?? '', player2: null } });
-  const isWin = (r: number, c: number) => gameState?.winningCells?.some(([wr,wc]: number[]) => wr===r && wc===c) || false;
+  const isWinCell = (r: number, c: number) =>
+    gameState?.winningCells?.some(([wr,wc]: number[]) => wr===r && wc===c) || false;
+
+  const inSession = !!(activeRoomId || (gameState?.mode === 'vs-ai' && gameState?.status !== 'waiting'));
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><LoadingSpinner /></div>;
 
@@ -177,29 +195,35 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             <ArrowLeft size={20} /> Back
           </Link>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">💎 Connect 4</h1>
-          <button onClick={reset} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
+          <button onClick={resetGame} className="glass-btn p-2 rounded-xl text-gray-600 dark:text-gray-400"><RotateCcw size={20} /></button>
         </div>
 
-        {(!gameState || gameState.status === 'waiting') && (
+        {/* LOBBY */}
+        {!inSession && (
           <div className="flex items-center justify-center min-h-[60vh]">
             <GameLobby
-              gameName="Connect 4"
-              gameIcon="💎"
+              gameName="Connect 4" gameIcon="💎"
               gradient="from-pink-500 to-purple-500"
               description="Drop pieces and connect four in a row!"
               supportsAI
               aiLabels={{ easy: 'random moves mostly', medium: 'blocks your wins', hard: 'minimax depth-4 — good luck' }}
               gameType="Connect4"
               onStartVsAI={startVsAI}
-              onStartVsPartner={startVsPartner}
+              onStartVsPartner={handleStartVsPartner}
             />
           </div>
         )}
 
-        {gameState && gameState.status !== 'waiting' && (
+        {/* GAME */}
+        {inSession && gameState && (
           <div className="space-y-4">
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-2 flex-wrap">
               <GameModeBadge mode={gameState.mode} difficulty={gameState.mode === 'vs-ai' ? (gameState.aiDifficulty as AIDifficulty) : undefined} />
+              {activeRoomId && (
+                <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
+                  Room: {activeRoomId}
+                </span>
+              )}
             </div>
 
             <div className="glass-card p-4 text-center">
@@ -207,7 +231,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 <p className={`font-semibold text-lg ${
                   isMyTurn ? 'text-pink-600 dark:text-pink-400' : 'text-gray-500'
                 }`}>
-                  {!gameState.players.player2 ? 'Waiting for partner to join…' :
+                  {!partnerReady && gameState.mode === 'vs-partner' ? 'Waiting for partner to join…' :
                    isMyTurn ? 'Your turn!' :
                    isAIMode ? '🤖 AI thinking…' : "Opponent's turn…"}
                 </p>
@@ -241,14 +265,14 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                       className="aspect-square rounded-full transition-all duration-300 hover:scale-105 disabled:cursor-not-allowed"
                       style={{
                         background: cell
-                          ? isWin(r,c)
+                          ? isWinCell(r,c)
                             ? 'linear-gradient(135deg,#fbbf24,#f59e0b)'
                             : cell === gameState.players.player1
                             ? 'linear-gradient(135deg,#ec4899,#f43f5e)'
                             : 'linear-gradient(135deg,#facc15,#f97316)'
                           : 'rgba(255,255,255,0.3)',
                         boxShadow: cell
-                          ? isWin(r,c)
+                          ? isWinCell(r,c)
                             ? '0 0 16px rgba(251,191,36,.8),inset 0 2px 4px rgba(255,255,255,.3)'
                             : 'inset 0 2px 4px rgba(0,0,0,.1)'
                           : 'inset 0 2px 8px rgba(0,0,0,.15)',
@@ -271,10 +295,16 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
             </div>
 
             {gameState.status === 'finished' && (
-              <button onClick={reset}
-                className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl transition hover:scale-[1.02]">
-                Play Again 💕
-              </button>
+              <div className="flex gap-3">
+                <button onClick={playAgain}
+                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-3 rounded-xl hover:scale-[1.02] transition">
+                  Play Again 💕
+                </button>
+                <button onClick={resetGame}
+                  className="glass-btn px-5 py-3 rounded-xl text-gray-400 text-sm font-medium hover:text-red-400 transition">
+                  Leave
+                </button>
+              </div>
             )}
           </div>
         )}
