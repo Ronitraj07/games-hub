@@ -61,7 +61,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   const userKey     = user?.email ?? null;
   const safeUserKey = userKey ? sanitizeFirebasePath(userKey) : null;
 
-  // Room-aware session key
   const safeSession = activeRoomId
     ? `memorymatch-room-${sanitizeFirebasePath(activeRoomId)}`
     : sessionId
@@ -99,7 +98,7 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
     }
   }, [location.search, activeRoomId]);
 
-  // Host seeding effect — fires only after safeSession points at the room path
+  // Host seeding effect
   useEffect(() => {
     if (!shouldHostStart || !activeRoomId || !isHost) return;
     startOnline();
@@ -107,14 +106,27 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldHostStart, activeRoomId, isHost, safeSession]);
 
-  // Stats recording
+  // Stats recording — fix: compute proper win/loss/draw for vs-partner
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey || !safeUserKey) return;
     const pd = safePlayers[safeUserKey] ?? EMPTY_PLAYER;
+
+    let result: 'win' | 'loss' | 'draw' = 'win'; // solo always a win
+    if (gameMode === 'vs-partner') {
+      // Find partner's safeKey (any key that isn't ours)
+      const partnerKey = Object.keys(safePlayers).find(k => k !== safeUserKey);
+      const partnerData = partnerKey ? safePlayers[partnerKey] : null;
+      if (partnerData) {
+        result = pd.score > partnerData.score ? 'win'
+               : pd.score < partnerData.score ? 'loss'
+               : 'draw';
+      }
+    }
+
     recordGame({
       gameType:    'memorymatch',
       playerEmail: userKey,
-      result:      'win',
+      result,
       score:       pd.score,
       mode:        gameMode === 'vs-partner' ? 'vs-partner' : 'solo',
     });
@@ -153,7 +165,6 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
 
   const handleCardClick = (cardId: number) => {
     if (!gameState || gameState.status !== 'active' || !safeUserKey) return;
-    // In vs-partner mode, only host flips cards (turn-based can be added later)
     const card = safeCards.find((c: Card) => c.id === cardId);
     if (!card || card.isFlipped || card.isMatched || safeFlipped.length >= 2) return;
     playFlip();

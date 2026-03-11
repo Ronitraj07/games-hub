@@ -97,11 +97,22 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     recorded: false,
   };
 
-  const { gameState, updateGameState, loading } =
+  const { gameState, updateGameState, patchGameState, loading } =
     useRealtimeGame<PictionaryOnlineState>(safeSession, 'pictionary', initialOnline);
 
   const isDrawer  = gameState?.drawerEmail  === userKey;
   const isGuesser = gameState?.guesserEmail === userKey;
+
+  // ─── Guest registers as guesser once host has seeded the game ───
+  useEffect(() => {
+    if (!gameState || gameMode !== 'vs-partner' || !userKey) return;
+    if (gameState.status === 'waiting') return;          // not started yet
+    if (gameState.drawerEmail === userKey) return;       // I'm the drawer
+    if (gameState.guesserEmail === userKey) return;      // already registered
+    if (gameState.guesserEmail !== '') return;           // someone else took the seat
+    // Register as guesser
+    patchGameState({ guesserEmail: userKey } as any);
+  }, [gameState?.status, gameState?.drawerEmail, gameState?.guesserEmail, userKey, gameMode]);
 
   // ─── Record online result when finished (once) ───
   useEffect(() => {
@@ -125,13 +136,13 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   useEffect(() => { clearCanvas(); }, [phase]);
 
-  // Sync canvas to Firebase every 2s (drawer only)
+  // Sync canvas to Firebase every 2s — drawer only, use patchGameState to avoid full overwrites
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
     syncTimer.current = setInterval(() => {
       const c = getCanvas(); if (!c) return;
       const data = c.toDataURL('image/jpeg', 0.4);
-      updateGameState({ ...gameState!, canvasData: data });
+      patchGameState({ canvasData: data } as any);
     }, 2000);
     return () => { if (syncTimer.current) clearInterval(syncTimer.current); };
   }, [gameMode, isDrawer, gameState?.phase]);
@@ -161,14 +172,18 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => clearInterval(t);
   }, [phase, gameMode]);
 
-  // Online drawing timer (drawer only)
+  // Online drawing timer — ONLY the drawer owns this timer to prevent dual writes
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
+    setTimeLeft(DRAW_TIME);
     const t = setInterval(() => {
       setTimeLeft(p => {
         if (p <= 1) {
           clearInterval(t);
-          updateGameState({ ...gameState!, phase: 'guessing', canvasData: getCanvas()?.toDataURL('image/jpeg', 0.4) || '' });
+          // Flush final canvas state then transition phase
+          const c = getCanvas();
+          const finalData = c ? c.toDataURL('image/jpeg', 0.4) : '';
+          updateGameState({ ...gameState!, phase: 'guessing', canvasData: finalData });
           setTimeLeft(GUESS_TIME);
           return 0;
         }
@@ -178,9 +193,10 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     return () => clearInterval(t);
   }, [gameState?.phase, isDrawer, gameMode]);
 
-  // Online guessing timer (guesser only)
+  // Online guessing timer — ONLY the guesser owns this timer to prevent dual writes
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isGuesser || gameState?.phase !== 'guessing') return;
+    setTimeLeft(GUESS_TIME);
     const t = setInterval(() => {
       setTimeLeft(p => {
         if (p <= 1) { clearInterval(t); updateGameState({ ...gameState!, result: 'timeout', phase: 'result' }); return 0; }
@@ -221,7 +237,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       ...initialOnline,
       word:         newWord,
       drawerEmail:  userKey ?? '',
-      guesserEmail: '',
+      guesserEmail: '',           // cleared so guest can register
       status:       'active',
       phase:        'drawing',
     });

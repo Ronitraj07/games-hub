@@ -61,24 +61,24 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     }
   }, [location.search]);
 
-  // Shared Firebase path — keyed by room code so BOTH players hit the same node
   const safeSession = activeRoomId
     ? `tictactoe-room-${sanitizeFirebasePath(activeRoomId)}`
     : propSession
     ? sanitizeFirebasePath(propSession)
     : `tictactoe-ai-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
 
+  // Fix: explicitly include recorded:false so Play Again always resets the flag
   const makeInitialState = (p1: string): TicTacToeGameState => ({
     board:         Array(9).fill(null) as BoardState,
     currentPlayer: 'X',
     players:       { player1: p1, player2: null },
     winner:        null,
     winningCells:  null,
-    status:        'active',   // start immediately — no waiting screen mid-session
+    status:        'active',
     isDraw:        false,
     mode:          'vs-human',
     aiDifficulty:  'medium',
-    recorded:      false,
+    recorded:      false,   // ← explicit reset prevents carry-over from previous game
   });
 
   const { gameState, updateGameState, patchGameState, loading } =
@@ -90,7 +90,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     if (gameState.mode !== 'vs-human') return;
     if (gameState.players.player1 === userKey) return;
     if (gameState.players.player2 === userKey) return;
-    // Register as player2 — patch only this field, never overwrite full state
     patchGameState({ players: { ...gameState.players, player2: userKey } } as any);
   }, [gameState?.players?.player1, gameState?.players?.player2, userKey, gameState?.mode]);
 
@@ -170,13 +169,11 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     });
   };
 
-  // InviteModal done — roomId is the shared key
   const handleInviteReady = (roomId: string, hostFlag: boolean) => {
     setShowInvite(false);
     setIsHost(hostFlag);
-    setActiveRoomId(roomId);  // triggers safeSession to update
+    setActiveRoomId(roomId);
     if (hostFlag) {
-      // Store initial state to write once safeSession settles
       pendingInitRef.current = {
         ...makeInitialState(userKey ?? ''),
         status: 'active',
@@ -185,7 +182,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     }
   };
 
-  // After host sets activeRoomId, write initial game state once
   useEffect(() => {
     if (!pendingInitRef.current || !activeRoomId || !isHost) return;
     updateGameState(pendingInitRef.current);
@@ -195,17 +191,16 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
   // Play Again — reset board but KEEP the same roomId and players
   const playAgain = () => {
     if (!gameState) return;
-    // Preserve player registrations, just reset board state
     updateGameState({
       ...makeInitialState(gameState.players.player1),
-      players: gameState.players,   // keep both emails
-      mode:    gameState.mode,
+      players:      gameState.players,
+      mode:         gameState.mode,
       aiDifficulty: gameState.aiDifficulty,
-      status: 'active',
+      status:       'active',
+      recorded:     false,   // ← explicit, belt-and-suspenders
     });
   };
 
-  // Full reset — go back to lobby
   const resetGame = () => {
     setActiveRoomId(null);
     setIsHost(false);
@@ -294,7 +289,6 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
         {/* GAME BOARD */}
         {inSession && (
           <div className="space-y-4">
-            {/* Room code badge */}
             {activeRoomId && (
               <div className="flex justify-center gap-2 flex-wrap">
                 <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-pink-400">
