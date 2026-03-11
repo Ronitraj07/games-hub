@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ref, onValue, set, off } from 'firebase/database';
+import { ref, onValue, set, get, off } from 'firebase/database';
 import { database } from '../../lib/firebase';
 
 // Firebase paths cannot contain . # $ [ ]
@@ -17,12 +17,9 @@ export const sanitizeFirebasePath = (raw: string): string =>
 
 /**
  * Firebase stores JS arrays as objects {"0": val, "1": val, ...}.
- * Crucially, it OMITS null/undefined slots entirely, so a board like
- * [null, 'X', null] becomes {"1": "X"} — and the naive isArrayLike
- * reconstruction skips the null slots, leaving undefined at index 0 & 2.
- *
- * Fix: detect array-like objects by checking if ALL keys are numeric,
- * then rebuild the array up to (maxKey + 1) filling missing slots with null.
+ * It OMITS null/undefined slots entirely, so a board like
+ * [null, 'X', null] becomes {"1": "X"}.
+ * Rebuild the array filling missing slots with null.
  */
 const normalizeFirebaseData = (data: any): any => {
   if (data === null || data === undefined) return data;
@@ -37,7 +34,6 @@ const normalizeFirebaseData = (data: any): any => {
     const maxIndex = Math.max(...keys.map(Number));
     const arr: any[] = [];
     for (let i = 0; i <= maxIndex; i++) {
-      // Fill missing numeric slots (Firebase-omitted nulls) back with null
       arr.push(i in data ? normalizeFirebaseData(data[i]) : null);
     }
     return arr;
@@ -62,15 +58,18 @@ export const useRealtimeGame = <T>(
   gameType: string,
   initialState: T
 ) => {
-  const [gameState, setGameState] = useState<T>(initialState);
-  const [loading, setLoading]     = useState(false);
+  const [gameState, setGameState] = useState<T | null>(null);
+  const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string>('');
-  const localState       = useRef<T>(initialState);
-  const firebaseEnabled  = useRef(isFirebaseConfigured());
+  const localState      = useRef<T>(initialState);
+  const firebaseEnabled = useRef(isFirebaseConfigured());
+  const initialized     = useRef(false);
 
   const safePath = `games/${sanitizeFirebasePath(sessionId)}`;
 
   useEffect(() => {
+    initialized.current = false;
+
     if (!firebaseEnabled.current) {
       setGameState(initialState);
       localState.current = initialState;
@@ -81,14 +80,19 @@ export const useRealtimeGame = <T>(
     setLoading(true);
     const gameRef = ref(database, safePath);
 
-    set(gameRef, initialState).catch(err => {
-      console.warn('Firebase init failed, using local state:', err.message);
-      firebaseEnabled.current = false;
-      setGameState(initialState);
-      localState.current = initialState;
-      setLoading(false);
+    // ✨ KEY FIX: Only write initialState if the room does NOT exist yet.
+    // This prevents any player's page load/re-render from wiping the shared state.
+    get(gameRef).then(snapshot => {
+      if (!snapshot.exists()) {
+        // Room is brand new — write initial state once
+        return set(gameRef, initialState);
+      }
+      // Room already exists — do NOT overwrite, just subscribe below
+    }).catch(err => {
+      console.warn('[useRealtimeGame] init get/set failed:', err.message);
     });
 
+    // Subscribe to live updates
     const unsubscribe = onValue(
       gameRef,
       (snapshot) => {
@@ -98,9 +102,10 @@ export const useRealtimeGame = <T>(
         localState.current = normalized as T;
         setLoading(false);
         setError('');
+        initialized.current = true;
       },
       (err) => {
-        console.warn('Firebase read failed, using local state:', err.message);
+        console.warn('[useRealtimeGame] read error, falling back to local:', err.message);
         firebaseEnabled.current = false;
         setGameState(localState.current);
         setLoading(false);
@@ -112,18 +117,24 @@ export const useRealtimeGame = <T>(
 
   const updateGameState = useCallback(
     async (newState: T) => {
+      // Always update local state immediately for snappy UI
       setGameState(newState);
       localState.current = newState;
+
       if (!firebaseEnabled.current || !database) return;
+
       try {
         const gameRef = ref(database, safePath);
         await set(gameRef, newState);
       } catch (err: any) {
-        console.warn('Firebase write failed, continuing with local state:', err.message);
+        console.warn('[useRealtimeGame] write failed:', err.message);
       }
     },
     [safePath]
   );
 
-  return { gameState, updateGameState, loading, error };
+  // Expose gameState as initialState until Firebase responds (avoids null flicker)
+  const exposedState = gameState ?? initialState;
+
+  return { gameState: exposedState, updateGameState, loading, error };
 };
