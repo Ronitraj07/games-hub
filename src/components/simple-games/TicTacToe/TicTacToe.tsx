@@ -233,8 +233,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto px-4 py-4">
-
+        <div className="max-w-lg mx-auto p-4 pb-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition">
@@ -306,7 +305,7 @@ export const TicTacToe: React.FC<{ sessionId?: string }> = ({ sessionId: propSes
                   }`}>{turnLabel()}</p>
                 )}
                 {gameState?.status === 'finished' && (
-                  <p className="font-bold text-xl text-white">{resultLabel()}</p>
+                  <p className="font-bold text-lg text-white">{resultLabel()}</p>
                 )}
                 {(!gameState || gameState.status === 'waiting') && (
                   <p className="text-gray-400 font-medium">Waiting for partner to join…</p>

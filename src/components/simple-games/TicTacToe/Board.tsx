@@ -6,8 +6,8 @@ export const Board: React.FC<BoardProps> = ({ board, onCellClick, disabled, winn
   const safeBoard = Array.isArray(board) ? board : Array(9).fill(null);
 
   return (
-    <div className="w-full max-w-[340px] mx-auto">
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-4 glass-card">
+    <div className="flex justify-center">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-4 glass-card w-full max-w-[min(100%,340px)]">
         {safeBoard.map((cell, index) => (
           <Cell
             key={index}
