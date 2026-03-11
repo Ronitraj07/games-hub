@@ -1,10 +1,9 @@
 // ============================================================
 // useHeartboundPresence — real-time player positions & states
-// Replaces the basic useHeartboundSync for the new system
 // ============================================================
 import { useEffect, useRef, useCallback } from 'react';
 import { ref, set, onValue, off, serverTimestamp } from 'firebase/database';
-import { db } from '../../lib/firebase';
+import { database } from '../../lib/firebase';  // ← was 'db', correct export is 'database'
 import type { HeartboundPlayerState, IslandId, AnimationState } from '../../types/heartbound.types';
 
 interface UseHeartboundPresenceOptions {
@@ -25,10 +24,9 @@ export function useHeartboundPresence({
   onPlayersUpdate,
 }: UseHeartboundPresenceOptions) {
   const pathKey    = email.replace(/[.#$[\]]/g, '_');
-  const playerRef  = ref(db, `heartbound/players/${pathKey}`);
-  const islandRef  = ref(db, `heartbound/islands/${islandId}/players`);
-  const lastPublish = useRef(0);
-  const pendingState = useRef<Partial<HeartboundPlayerState> | null>(null);
+  const playerRef  = ref(database, `heartbound/players/${pathKey}`);
+  const islandRef  = ref(database, `heartbound/islands/${islandId}/players`);
+  const lastPublish  = useRef(0);
 
   // Mark online on mount, offline on unmount
   useEffect(() => {
