@@ -129,6 +129,20 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setSelected(null); setShowFb(false); setTimeLeft(TIME_PER[d]); setAiAnswered(false);
   },[]);
 
+  const handleLocalAnswer=useCallback((option:number)=>{
+    if(showFb||!problem)return;
+    clearInterval(timerRef.current!);
+    if(aiTimerRef.current)clearTimeout(aiTimerRef.current!);
+    setSelected(option); setShowFb(true);
+    const ok=option===problem.answer;
+    if(ok){const bonus=timeLeft>(TIME_PER[diff]*.6)?10:5;setScore(s=>s+bonus+(streak>=2?5:0));setCorrect(c=>c+1);setStreak(s=>s+1);playCorrect();}
+    else{setStreak(0);playWrong();}
+    setTimeout(()=>{
+      if(round>=TOTAL_Q)setGameOver(true);
+      else{setRound(r=>r+1);nextLocalQ(diff);}
+    },800);
+  },[showFb,problem,timeLeft,diff,streak,round,nextLocalQ]);
+
   useEffect(()=>{
     if(!gameMode||gameMode==='vs-partner'||gameOver||showFb||!problem)return;
     timerRef.current=setInterval(()=>{
@@ -138,7 +152,7 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       });
     },1000);
     return()=>clearInterval(timerRef.current!);
-  },[round,gameMode,gameOver,showFb,problem]);
+  },[round,gameMode,gameOver,showFb,problem,handleLocalAnswer]);
 
   useEffect(()=>{
     if(gameMode!=='vs-ai'||showFb||!problem)return;
@@ -154,20 +168,6 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     },delay);
     return()=>{if(aiTimerRef.current)clearTimeout(aiTimerRef.current!);};
   },[gameMode,round,showFb,problem,aiDiff,selected,handleLocalAnswer]);
-
-  const handleLocalAnswer=useCallback((option:number)=>{
-    if(showFb||!problem)return;
-    clearInterval(timerRef.current!);
-    if(aiTimerRef.current)clearTimeout(aiTimerRef.current!);
-    setSelected(option); setShowFb(true);
-    const ok=option===problem.answer;
-    if(ok){const bonus=timeLeft>(TIME_PER[diff]*.6)?10:5;setScore(s=>s+bonus+(streak>=2?5:0));setCorrect(c=>c+1);setStreak(s=>s+1);playCorrect();}
-    else{setStreak(0);playWrong();}
-    setTimeout(()=>{
-      if(round>=TOTAL_Q)setGameOver(true);
-      else{setRound(r=>r+1);nextLocalQ(diff);}
-    },800);
-  },[showFb,problem,timeLeft,diff,streak,round,nextLocalQ]);
 
   // Record local/AI result when game ends
   useEffect(() => {

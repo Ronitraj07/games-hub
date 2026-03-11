@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { GameProvider } from './contexts/GameContext';
@@ -110,6 +111,7 @@ function App() {
                 <Footer />
               </div>
             </div>
+            <Analytics />
           </Router>
         </GameProvider>
       </AuthProvider>
