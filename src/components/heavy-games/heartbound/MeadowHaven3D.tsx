@@ -1,28 +1,22 @@
 /**
  * MeadowHaven3D — Phase 8: Full 3D Avatar System
  * ─────────────────────────────────────────────────────────────────
- * NEW in this revision
+ * FIXES in this revision
  *
- * 1. AVATARCREATOR PRE-GAME GATE
- *    Before entering the world, players customise their character:
- *    skin tone, hair style/colour, outfit colour, accessory (hat, crown, halo, none).
- *    Config is stored in state and passed into the world.
+ * 1. AVATAR CREATOR PREVIEW
+ *    - Camera moved closer (fov 42→52, z 3.2→2.4) — character fills panel
+ *    - OrbitControls added — mouse drag to rotate, scroll to zoom
+ *    - Auto-rotate when idle to show off the 3D model
+ *    - Better dual lighting on preview
  *
- * 2. SKYCHARACTER — FULL 3D BODY
- *    Replaces the old capsule+sphere placeholder with a proper rigged
- *    character mesh built entirely from primitives:
- *    • Head (sphere) + hair layer (sphere/cone by style) + eyes + blush
- *    • Body (rounded cylinder) + outfit colour stripe
- *    • Two arms (thin cylinders, animated swing while moving)
- *    • Two legs (cylinders, animated walk cycle)
- *    • Accessory on top (hat cone, crown torus, halo ring, none)
- *    • Shadow blob underneath
- *    • Name tag billboard above head
+ * 2. IN-GAME WORLD CAMERA — no longer miniature/diorama
+ *    - CAM_HEIGHT: 15 → 8   (camera sits lower, world feels life-size)
+ *    - CAM_DIST:   20 → 12  (camera follows closer to player)
+ *    - fov: 45 → 62         (wider perspective, more immersive)
+ *    - CameraRig X-offset reduced (follows more directly behind player)
+ *    - lookAt y reduced (targets character center, not above)
  *
- * 3. REMOTE PLAYERS also use SkyCharacter geometry, reading
- *    spriteColor as outfit and defaulting hair/skin/accessory.
- *
- * 4. All existing Phase 7H fixes preserved (spawn, Escape, joystick).
+ * All existing Phase 8 features preserved.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -31,6 +25,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Sky, Stars, Billboard, Text, Cylinder, Sphere, Box,
   Cone, Environment, Points, PointMaterial, Cloud, Torus,
+  OrbitControls,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
@@ -41,18 +36,18 @@ import { NPCS, NPC } from './npcData';
 // ── Constants ──────────────────────────────────────────────────────
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
-const CAM_DIST    = 20;
-const CAM_HEIGHT  = 15;
+const CAM_DIST    = 12;   // ← was 20 — closer follow
+const CAM_HEIGHT  = 8;    // ← was 15 — lower camera = life-size feel
 const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
 // ── Avatar config type ─────────────────────────────────────────────
 export interface AvatarConfig {
-  skinTone:   string;   // hex
-  hairColor:  string;   // hex
+  skinTone:   string;
+  hairColor:  string;
   hairStyle:  'short' | 'long' | 'bun' | 'none';
-  outfitColor:string;   // hex
+  outfitColor:string;
   accessory:  'none' | 'hat' | 'crown' | 'halo';
 }
 
@@ -108,11 +103,9 @@ interface SkyCharacterProps {
   config: AvatarConfig;
   name: string;
   isMe: boolean;
-  /** If provided, character reads this ref every frame for position */
   posRef?: React.MutableRefObject<THREE.Vector3>;
   movingRef?: React.MutableRefObject<boolean>;
   facingRef?: React.MutableRefObject<number>;
-  /** Static position for remote players */
   staticPos?: [number, number, number];
   moving?: boolean;
   facingAngle?: number;
@@ -138,7 +131,6 @@ function SkyCharacter({
     if (!rootRef.current) return;
     const t = clock.elapsedTime;
 
-    // Position — posRef (local) or staticPos (remote)
     if (posRef) {
       const p = posRef.current;
       const y = terrainY(p.x, p.z);
@@ -148,16 +140,13 @@ function SkyCharacter({
       rootRef.current.position.set(staticPos[0], staticPos[1], staticPos[2]);
     }
 
-    // Breathe
     const breathe = 1 + Math.sin(t * 1.5) * 0.01;
     rootRef.current.scale.set(breathe, breathe, breathe);
 
-    // Facing
     const targetAng = posRef ? (facingRef?.current ?? 0) : angRef.current;
     const cur = rootRef.current.rotation.y;
     rootRef.current.rotation.y = cur + (targetAng - cur) * 0.15;
 
-    // Walk cycle
     const isMoving = posRef ? (movingRef?.current ?? false) : movRef.current;
     const swing = isMoving ? Math.sin(t * 9) * 0.55 : 0;
     if (lArmRef.current) lArmRef.current.rotation.x =  swing;
@@ -182,7 +171,6 @@ function SkyCharacter({
         <Cylinder args={[0.095, 0.10, 0.55, 8]} position={[0, -0.28, 0]} castShadow>
           <meshStandardMaterial color={darkOutfit} roughness={0.85} metalness={0} />
         </Cylinder>
-        {/* Shoe */}
         <Sphere args={[0.11, 8, 6]} position={[0, -0.59, 0.04]} castShadow>
           <meshStandardMaterial color="#1e1b18" roughness={0.9} metalness={0} />
         </Sphere>
@@ -200,7 +188,6 @@ function SkyCharacter({
       <Cylinder args={[0.22, 0.26, 0.72, 12]} position={[0, 0.36, 0]} castShadow>
         <meshStandardMaterial color={outfitColor} roughness={0.70} metalness={0.05} envMapIntensity={0.4} />
       </Cylinder>
-      {/* Outfit collar stripe */}
       <Cylinder args={[0.225, 0.225, 0.08, 12]} position={[0, 0.70, 0]} castShadow>
         <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
       </Cylinder>
@@ -210,7 +197,6 @@ function SkyCharacter({
         <Cylinder args={[0.075, 0.085, 0.52, 8]} position={[0, -0.26, 0]} castShadow>
           <meshStandardMaterial color={outfitColor} roughness={0.75} metalness={0} />
         </Cylinder>
-        {/* Hand */}
         <Sphere args={[0.085, 8, 6]} position={[0, -0.55, 0]} castShadow>
           <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
         </Sphere>
@@ -225,11 +211,9 @@ function SkyCharacter({
       </group>
 
       {/* ── HEAD ─────────────────────────────────────────────────── */}
-      {/* Neck */}
       <Cylinder args={[0.11, 0.13, 0.18, 8]} position={[0, 0.84, 0]} castShadow>
         <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
       </Cylinder>
-      {/* Head sphere */}
       <Sphere args={[0.29, 16, 12]} position={[0, 1.15, 0]} castShadow>
         <meshStandardMaterial color={skinTone} roughness={0.75} metalness={0} />
       </Sphere>
@@ -295,7 +279,6 @@ function SkyCharacter({
           <Cylinder args={[0.18, 0.20, 0.38, 14]} position={[0, 0.22, 0]}>
             <meshStandardMaterial color="#1e1b18" roughness={0.85} metalness={0} />
           </Cylinder>
-          {/* Hat band */}
           <Cylinder args={[0.185, 0.185, 0.06, 14]} position={[0, 0.10, 0]}>
             <meshStandardMaterial color="#f59e0b" roughness={0.7} metalness={0.1} />
           </Cylinder>
@@ -336,13 +319,15 @@ function SkyCharacter({
       )}
 
       {/* ── NAME TAG ─────────────────────────────────────────────── */}
-      <Billboard position={[0, 1.85, 0]}>
-        <Text fontSize={0.22} color={isMe ? outfitColor : 'white'}
-          anchorX="center" anchorY="middle"
-          outlineWidth={0.04} outlineColor="black">
-          {name}{isMe ? ' ★' : ''}
-        </Text>
-      </Billboard>
+      {name !== '' && (
+        <Billboard position={[0, 1.85, 0]}>
+          <Text fontSize={0.22} color={isMe ? outfitColor : 'white'}
+            anchorX="center" anchorY="middle"
+            outlineWidth={0.04} outlineColor="black">
+            {name}{isMe ? ' ★' : ''}
+          </Text>
+        </Billboard>
+      )}
     </group>
   );
 }
@@ -355,7 +340,6 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
     pos.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
   });
   if (!player.online) return null;
-  // Remote players use default avatar config with their outfit color
   const cfg: AvatarConfig = { ...DEFAULT_AVATAR, outfitColor: player.spriteColor };
   return (
     <SkyCharacter
@@ -707,11 +691,17 @@ function Lighting() {
 function CameraRig({ target }: { target:React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
+    // ← Lower height + closer distance = immersive 3D, not miniature
     camera.position.lerp(
-      new THREE.Vector3(target.current.x+CAM_DIST*0.55, CAM_HEIGHT, target.current.z+CAM_DIST),
+      new THREE.Vector3(
+        target.current.x + CAM_DIST * 0.3,  // was 0.55 — more directly behind
+        CAM_HEIGHT,                           // was 15 → now 8
+        target.current.z + CAM_DIST,
+      ),
       CAM_LERP,
     );
-    camera.lookAt(target.current.x, target.current.y+1.2, target.current.z);
+    // ← Look at character center, not high above
+    camera.lookAt(target.current.x, target.current.y + 0.8, target.current.z);
   });
   return null;
 }
@@ -823,7 +813,7 @@ function Scene({
           isNearby={nearbyNPCRef.current?.id===npc.id}
           showPrompt={nearbyNPCRef.current?.id===npc.id&&!blockedRef.current} />
       ))}
-      {/* Local player — full SkyCharacter */}
+      {/* Local player */}
       <SkyCharacter
         config={avatarConfig} name={myName} isMe={true}
         posRef={posRef} movingRef={movingRef} facingRef={facingRef}
@@ -1070,7 +1060,6 @@ function AvatarCreator({ onEnter, myColor }: AvatarCreatorProps) {
   const set = <K extends keyof AvatarConfig>(key: K, val: AvatarConfig[K]) =>
     setCfg(prev => ({ ...prev, [key]: val }));
 
-  // Live 3D preview canvas
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
       style={{ background:'linear-gradient(135deg,#0a1628 0%,#0d2218 60%,#0a1628 100%)' }}>
@@ -1081,21 +1070,58 @@ function AvatarCreator({ onEnter, myColor }: AvatarCreatorProps) {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 w-full max-w-2xl px-4">
-        {/* 3D Preview */}
-        <div className="w-full md:w-48 h-48 md:h-auto rounded-2xl overflow-hidden flex-shrink-0"
-          style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}>
-          <Canvas camera={{ position:[0,1.2,3.2], fov:42 }} style={{ width:'100%', height:'100%' }}>
-            <ambientLight intensity={0.7} />
-            <directionalLight position={[3,5,3]} intensity={1.8} />
+
+        {/* ── 3D Preview — larger, with OrbitControls ── */}
+        <div
+          className="w-full md:w-56 flex-shrink-0 rounded-2xl overflow-hidden"
+          style={{
+            height: '280px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <Canvas
+            camera={{ position: [0, 0.9, 2.4], fov: 52 }}
+            style={{ width: '100%', height: '100%' }}
+          >
+            {/* Better dual lighting for preview */}
+            <ambientLight intensity={0.9} />
+            <directionalLight position={[3, 5, 3]} intensity={2.2} />
+            <directionalLight position={[-3, 2, 3]} intensity={0.6} color="#b0c8f8" />
+
             <Suspense fallback={null}>
-              <group position={[0, -0.8, 0]}>
+              {/* Offset down so character is vertically centred in panel */}
+              <group position={[0, -0.85, 0]}>
                 <SkyCharacter
-                  config={cfg} name="" isMe={false}
+                  config={cfg}
+                  name=""
+                  isMe={false}
                   staticPos={[0, 0, 0]}
                 />
               </group>
             </Suspense>
+
+            {/* Mouse drag to rotate, scroll to zoom, auto-rotate when idle */}
+            <OrbitControls
+              enableZoom={true}
+              enablePan={false}
+              minDistance={1.5}
+              maxDistance={4.0}
+              minPolarAngle={Math.PI / 4}
+              maxPolarAngle={Math.PI / 1.8}
+              autoRotate={true}
+              autoRotateSpeed={1.5}
+              target={[0, 0.1, 0]}
+            />
           </Canvas>
+
+          {/* Hint label */}
+          <div
+            className="text-center text-white/25 text-xs py-1"
+            style={{ marginTop: '-1.5rem', position: 'relative', zIndex: 1, pointerEvents: 'none' }}
+          >
+            drag to rotate · scroll to zoom
+          </div>
         </div>
 
         {/* Options panel */}
@@ -1272,7 +1298,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
     };
   },[avatarConfig,closeDialogue,openDialogue,toggleFullscreen]);
 
-  // Show AvatarCreator first
   if (!avatarConfig) {
     return <AvatarCreator myColor={myColor} onEnter={cfg=>setAvatarConfig(cfg)} />;
   }
@@ -1287,7 +1312,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
     >
       <Canvas
         shadows
-        camera={{ position:[11,CAM_HEIGHT,CAM_DIST], fov:45 }}
+        camera={{ position:[11,CAM_HEIGHT,CAM_DIST], fov:62 }}  // ← fov 45→62
         style={{ width:'100%', height:'100%' }}
         gl={{
           antialias: effectiveQuality!=='low',
