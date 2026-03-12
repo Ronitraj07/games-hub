@@ -1,33 +1,28 @@
 /**
- * MeadowHaven3D — Phase 7H
+ * MeadowHaven3D — Phase 8: Full 3D Avatar System
  * ─────────────────────────────────────────────────────────────────
- * FIXES in this revision
+ * NEW in this revision
  *
- * 1. CHARACTER STUCK AT SPAWN
- *    Root cause: spawn (0,0,2) sits inside the pond-collision radius
- *    (POND_RADIUS=3.8). Math.hypot(0,2)=2 < 3.8 → every direction
- *    was blocked. Fixed by moving spawn to (5, 0, 6) — well outside
- *    the pond on the path.
+ * 1. AVATARCREATOR PRE-GAME GATE
+ *    Before entering the world, players customise their character:
+ *    skin tone, hair style/colour, outfit colour, accessory (hat, crown, halo, none).
+ *    Config is stored in state and passed into the world.
  *
- * 2. ESCAPE EXITS FULLSCREEN
- *    Root cause: browser fires native fullscreen-exit on Escape before
- *    any JS keydown handler regardless of preventDefault(), UNLESS the
- *    listener is registered in the CAPTURE phase with { capture:true }.
- *    Fixed by registering the keydown listener with capture:true AND
- *    calling both preventDefault() + stopImmediatePropagation() on
- *    Escape so the browser never receives it.
+ * 2. SKYCHARACTER — FULL 3D BODY
+ *    Replaces the old capsule+sphere placeholder with a proper rigged
+ *    character mesh built entirely from primitives:
+ *    • Head (sphere) + hair layer (sphere/cone by style) + eyes + blush
+ *    • Body (rounded cylinder) + outfit colour stripe
+ *    • Two arms (thin cylinders, animated swing while moving)
+ *    • Two legs (cylinders, animated walk cycle)
+ *    • Accessory on top (hat cone, crown torus, halo ring, none)
+ *    • Shadow blob underneath
+ *    • Name tag billboard above head
  *
- * 3. VIRTUAL JOYSTICK ON DESKTOP
- *    Root cause: md:hidden hides it via CSS only, but it still renders
- *    in the DOM and can appear on narrow desktop windows. Fixed by
- *    detecting touch capability via window.matchMedia('(pointer:coarse)')
- *    and only rendering VirtualJoystick when on a real touch device.
+ * 3. REMOTE PLAYERS also use SkyCharacter geometry, reading
+ *    spriteColor as outfit and defaulting hair/skin/accessory.
  *
- * 4. CHARACTER ROTATION DIRECTION
- *    atan2(dx, dz) gives the correct facing angle relative to the
- *    isometric-ish camera. Kept as-is — rotation was working, just
- *    looked wrong because the character was stuck. Now that spawn is
- *    fixed the rotation will look correct.
+ * 4. All existing Phase 7H fixes preserved (spawn, Escape, joystick).
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -35,7 +30,7 @@ import React, {
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Sky, Stars, Billboard, Text, Cylinder, Sphere, Box,
-  Cone, Environment, Points, PointMaterial, Cloud,
+  Cone, Environment, Points, PointMaterial, Cloud, Torus,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
@@ -50,11 +45,26 @@ const CAM_DIST    = 20;
 const CAM_HEIGHT  = 15;
 const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
-
-// FIX 1: spawn well outside the pond (hypot(5,6)≈7.8 > 3.8 ✓)
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// ── Touch detection (FIX 3) ────────────────────────────────────────
+// ── Avatar config type ─────────────────────────────────────────────
+export interface AvatarConfig {
+  skinTone:   string;   // hex
+  hairColor:  string;   // hex
+  hairStyle:  'short' | 'long' | 'bun' | 'none';
+  outfitColor:string;   // hex
+  accessory:  'none' | 'hat' | 'crown' | 'halo';
+}
+
+const DEFAULT_AVATAR: AvatarConfig = {
+  skinTone:    '#fde7c3',
+  hairColor:   '#3b1f0a',
+  hairStyle:   'short',
+  outfitColor: '#6366f1',
+  accessory:   'none',
+};
+
+// ── Touch detection ────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -91,7 +101,272 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── PBR Terrain ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// SKY CHARACTER — full 3D body built from primitives
+// ═══════════════════════════════════════════════════════════════════
+interface SkyCharacterProps {
+  config: AvatarConfig;
+  name: string;
+  isMe: boolean;
+  /** If provided, character reads this ref every frame for position */
+  posRef?: React.MutableRefObject<THREE.Vector3>;
+  movingRef?: React.MutableRefObject<boolean>;
+  facingRef?: React.MutableRefObject<number>;
+  /** Static position for remote players */
+  staticPos?: [number, number, number];
+  moving?: boolean;
+  facingAngle?: number;
+}
+
+function SkyCharacter({
+  config, name, isMe,
+  posRef, movingRef, facingRef,
+  staticPos, moving = false, facingAngle = 0,
+}: SkyCharacterProps) {
+  const rootRef   = useRef<THREE.Group>(null!);
+  const lArmRef   = useRef<THREE.Group>(null!);
+  const rArmRef   = useRef<THREE.Group>(null!);
+  const lLegRef   = useRef<THREE.Group>(null!);
+  const rLegRef   = useRef<THREE.Group>(null!);
+
+  const movRef = useRef(moving);
+  const angRef = useRef(facingAngle);
+  movRef.current = moving;
+  angRef.current = facingAngle;
+
+  useFrame(({ clock }) => {
+    if (!rootRef.current) return;
+    const t = clock.elapsedTime;
+
+    // Position — posRef (local) or staticPos (remote)
+    if (posRef) {
+      const p = posRef.current;
+      const y = terrainY(p.x, p.z);
+      const bob = (movingRef?.current ?? false) ? Math.sin(t * 8) * 0.05 : 0;
+      rootRef.current.position.set(p.x, y + bob, p.z);
+    } else if (staticPos) {
+      rootRef.current.position.set(staticPos[0], staticPos[1], staticPos[2]);
+    }
+
+    // Breathe
+    const breathe = 1 + Math.sin(t * 1.5) * 0.01;
+    rootRef.current.scale.set(breathe, breathe, breathe);
+
+    // Facing
+    const targetAng = posRef ? (facingRef?.current ?? 0) : angRef.current;
+    const cur = rootRef.current.rotation.y;
+    rootRef.current.rotation.y = cur + (targetAng - cur) * 0.15;
+
+    // Walk cycle
+    const isMoving = posRef ? (movingRef?.current ?? false) : movRef.current;
+    const swing = isMoving ? Math.sin(t * 9) * 0.55 : 0;
+    if (lArmRef.current) lArmRef.current.rotation.x =  swing;
+    if (rArmRef.current) rArmRef.current.rotation.x = -swing;
+    if (lLegRef.current) lLegRef.current.rotation.x = -swing * 0.85;
+    if (rLegRef.current) rLegRef.current.rotation.x =  swing * 0.85;
+  });
+
+  const { skinTone, hairColor, hairStyle, outfitColor, accessory } = config;
+  const darkOutfit = new THREE.Color(outfitColor).offsetHSL(0, 0, -0.12).getStyle();
+
+  return (
+    <group ref={rootRef}>
+      {/* Shadow blob */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <circleGeometry args={[0.38, 16]} />
+        <meshBasicMaterial color="black" transparent opacity={0.20} />
+      </mesh>
+
+      {/* ── LEGS ─────────────────────────────────────────────────── */}
+      <group ref={lLegRef} position={[-0.13, 0.35, 0]}>
+        <Cylinder args={[0.095, 0.10, 0.55, 8]} position={[0, -0.28, 0]} castShadow>
+          <meshStandardMaterial color={darkOutfit} roughness={0.85} metalness={0} />
+        </Cylinder>
+        {/* Shoe */}
+        <Sphere args={[0.11, 8, 6]} position={[0, -0.59, 0.04]} castShadow>
+          <meshStandardMaterial color="#1e1b18" roughness={0.9} metalness={0} />
+        </Sphere>
+      </group>
+      <group ref={rLegRef} position={[0.13, 0.35, 0]}>
+        <Cylinder args={[0.095, 0.10, 0.55, 8]} position={[0, -0.28, 0]} castShadow>
+          <meshStandardMaterial color={darkOutfit} roughness={0.85} metalness={0} />
+        </Cylinder>
+        <Sphere args={[0.11, 8, 6]} position={[0, -0.59, 0.04]} castShadow>
+          <meshStandardMaterial color="#1e1b18" roughness={0.9} metalness={0} />
+        </Sphere>
+      </group>
+
+      {/* ── BODY ─────────────────────────────────────────────────── */}
+      <Cylinder args={[0.22, 0.26, 0.72, 12]} position={[0, 0.36, 0]} castShadow>
+        <meshStandardMaterial color={outfitColor} roughness={0.70} metalness={0.05} envMapIntensity={0.4} />
+      </Cylinder>
+      {/* Outfit collar stripe */}
+      <Cylinder args={[0.225, 0.225, 0.08, 12]} position={[0, 0.70, 0]} castShadow>
+        <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
+      </Cylinder>
+
+      {/* ── ARMS ─────────────────────────────────────────────────── */}
+      <group ref={lArmRef} position={[-0.29, 0.58, 0]}>
+        <Cylinder args={[0.075, 0.085, 0.52, 8]} position={[0, -0.26, 0]} castShadow>
+          <meshStandardMaterial color={outfitColor} roughness={0.75} metalness={0} />
+        </Cylinder>
+        {/* Hand */}
+        <Sphere args={[0.085, 8, 6]} position={[0, -0.55, 0]} castShadow>
+          <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
+        </Sphere>
+      </group>
+      <group ref={rArmRef} position={[0.29, 0.58, 0]}>
+        <Cylinder args={[0.075, 0.085, 0.52, 8]} position={[0, -0.26, 0]} castShadow>
+          <meshStandardMaterial color={outfitColor} roughness={0.75} metalness={0} />
+        </Cylinder>
+        <Sphere args={[0.085, 8, 6]} position={[0, -0.55, 0]} castShadow>
+          <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
+        </Sphere>
+      </group>
+
+      {/* ── HEAD ─────────────────────────────────────────────────── */}
+      {/* Neck */}
+      <Cylinder args={[0.11, 0.13, 0.18, 8]} position={[0, 0.84, 0]} castShadow>
+        <meshStandardMaterial color={skinTone} roughness={0.80} metalness={0} />
+      </Cylinder>
+      {/* Head sphere */}
+      <Sphere args={[0.29, 16, 12]} position={[0, 1.15, 0]} castShadow>
+        <meshStandardMaterial color={skinTone} roughness={0.75} metalness={0} />
+      </Sphere>
+      {/* Blush marks */}
+      <Sphere args={[0.06, 6, 4]} position={[0.18, 1.13, 0.24]} castShadow>
+        <meshBasicMaterial color="#f9a8d4" transparent opacity={0.45} />
+      </Sphere>
+      <Sphere args={[0.06, 6, 4]} position={[-0.18, 1.13, 0.24]} castShadow>
+        <meshBasicMaterial color="#f9a8d4" transparent opacity={0.45} />
+      </Sphere>
+      {/* Eyes */}
+      <Sphere args={[0.055, 8, 6]} position={[0.10, 1.18, 0.25]}>
+        <meshBasicMaterial color="#1e293b" />
+      </Sphere>
+      <Sphere args={[0.055, 8, 6]} position={[-0.10, 1.18, 0.25]}>
+        <meshBasicMaterial color="#1e293b" />
+      </Sphere>
+      {/* Eye shine */}
+      <Sphere args={[0.022, 6, 4]} position={[0.115, 1.20, 0.295]}>
+        <meshBasicMaterial color="white" />
+      </Sphere>
+      <Sphere args={[0.022, 6, 4]} position={[-0.085, 1.20, 0.295]}>
+        <meshBasicMaterial color="white" />
+      </Sphere>
+      {/* Smile */}
+      <Torus args={[0.09, 0.018, 6, 12, Math.PI]} rotation={[0, 0, Math.PI]} position={[0, 1.06, 0.27]}>
+        <meshBasicMaterial color="#c2715a" />
+      </Torus>
+
+      {/* ── HAIR ─────────────────────────────────────────────────── */}
+      {hairStyle === 'short' && (
+        <Sphere args={[0.31, 12, 10]} position={[0, 1.28, -0.04]} castShadow>
+          <meshStandardMaterial color={hairColor} roughness={0.9} metalness={0} />
+        </Sphere>
+      )}
+      {hairStyle === 'long' && (
+        <>
+          <Sphere args={[0.30, 12, 10]} position={[0, 1.28, -0.04]} castShadow>
+            <meshStandardMaterial color={hairColor} roughness={0.9} metalness={0} />
+          </Sphere>
+          <Cylinder args={[0.14, 0.10, 0.55, 8]} position={[0, 0.95, -0.22]} castShadow>
+            <meshStandardMaterial color={hairColor} roughness={0.9} metalness={0} />
+          </Cylinder>
+        </>
+      )}
+      {hairStyle === 'bun' && (
+        <>
+          <Sphere args={[0.30, 12, 10]} position={[0, 1.27, -0.04]} castShadow>
+            <meshStandardMaterial color={hairColor} roughness={0.9} metalness={0} />
+          </Sphere>
+          <Sphere args={[0.14, 10, 8]} position={[0, 1.53, 0.04]} castShadow>
+            <meshStandardMaterial color={hairColor} roughness={0.9} metalness={0} />
+          </Sphere>
+        </>
+      )}
+
+      {/* ── ACCESSORY ─────────────────────────────────────────────── */}
+      {accessory === 'hat' && (
+        <group position={[0, 1.48, 0]}>
+          <Cylinder args={[0.36, 0.36, 0.07, 16]} position={[0, 0, 0]}>
+            <meshStandardMaterial color="#1e1b18" roughness={0.85} metalness={0} />
+          </Cylinder>
+          <Cylinder args={[0.18, 0.20, 0.38, 14]} position={[0, 0.22, 0]}>
+            <meshStandardMaterial color="#1e1b18" roughness={0.85} metalness={0} />
+          </Cylinder>
+          {/* Hat band */}
+          <Cylinder args={[0.185, 0.185, 0.06, 14]} position={[0, 0.10, 0]}>
+            <meshStandardMaterial color="#f59e0b" roughness={0.7} metalness={0.1} />
+          </Cylinder>
+        </group>
+      )}
+      {accessory === 'crown' && (
+        <group position={[0, 1.48, 0]}>
+          <Torus args={[0.22, 0.045, 8, 24]} rotation={[Math.PI / 2, 0, 0]}>
+            <meshStandardMaterial color="#fbbf24" roughness={0.3} metalness={0.8} />
+          </Torus>
+          {[0, 72, 144, 216, 288].map((deg, i) => (
+            <Cone key={i}
+              args={[0.045, 0.16, 5]}
+              position={[
+                Math.cos((deg * Math.PI) / 180) * 0.22,
+                0.09,
+                Math.sin((deg * Math.PI) / 180) * 0.22,
+              ]}>
+              <meshStandardMaterial color="#fbbf24" roughness={0.3} metalness={0.8} />
+            </Cone>
+          ))}
+        </group>
+      )}
+      {accessory === 'halo' && (
+        <Torus args={[0.26, 0.04, 8, 28]}
+          rotation={[Math.PI / 2, 0, 0]}
+          position={[0, 1.58, 0]}>
+          <meshStandardMaterial color="#fef9c3" roughness={0.1} metalness={0.6} emissive="#fef08a" emissiveIntensity={0.7} />
+        </Torus>
+      )}
+
+      {/* ── RING (local player indicator) ────────────────────────── */}
+      {isMe && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]}>
+          <ringGeometry args={[0.40, 0.50, 32]} />
+          <meshBasicMaterial color={outfitColor} transparent opacity={0.70} />
+        </mesh>
+      )}
+
+      {/* ── NAME TAG ─────────────────────────────────────────────── */}
+      <Billboard position={[0, 1.85, 0]}>
+        <Text fontSize={0.22} color={isMe ? outfitColor : 'white'}
+          anchorX="center" anchorY="middle"
+          outlineWidth={0.04} outlineColor="black">
+          {name}{isMe ? ' ★' : ''}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
+
+// ── Remote avatar wrapper (lerps position) ─────────────────────────
+function RemoteAvatar({ player }: { player: PlayerState }) {
+  const pos = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  useFrame(() => {
+    const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
+    pos.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
+  });
+  if (!player.online) return null;
+  // Remote players use default avatar config with their outfit color
+  const cfg: AvatarConfig = { ...DEFAULT_AVATAR, outfitColor: player.spriteColor };
+  return (
+    <SkyCharacter
+      config={cfg} name={player.name} isMe={false}
+      staticPos={[pos.current.x, pos.current.y, pos.current.z]}
+      moving={player.moving}
+    />
+  );
+}
+
+// ── Terrain ────────────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
   useEffect(() => {
@@ -142,7 +417,7 @@ function Terrain() {
   );
 }
 
-// ── Reflective Pond ────────────────────────────────────────────────
+// ── Pond ────────────────────────────────────────────────────────────
 function Pond() {
   const waterRef  = useRef<THREE.Mesh>(null!);
   const rippleRef = useRef<THREE.Mesh>(null!);
@@ -155,8 +430,8 @@ function Pond() {
       0.62 + 0.07 * Math.sin(t * 0.28 + 1.1),
       0.90 + 0.05 * Math.sin(t * 0.45 + 2.3),
     );
-    mat.opacity          = 0.78 + 0.06 * Math.sin(t * 0.55);
-    mat.envMapIntensity  = 2.2  + 0.5  * Math.sin(t * 0.4);
+    mat.opacity         = 0.78 + 0.06 * Math.sin(t * 0.55);
+    mat.envMapIntensity = 2.2  + 0.5  * Math.sin(t * 0.4);
     if (rippleRef.current) {
       const pulse = 1.0 + 0.03 * Math.sin(t * 1.2);
       rippleRef.current.scale.set(pulse, pulse, pulse);
@@ -410,125 +685,6 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   );
 }
 
-// ── Remote player avatar ───────────────────────────────────────────
-function Avatar({ position, color, name, isMe, moving, facingAngle }: {
-  position:[number,number,number]; color:string; name:string;
-  isMe:boolean; moving:boolean; facingAngle:number;
-}) {
-  const groupRef = useRef<THREE.Group>(null!);
-  const movRef   = useRef(moving);
-  const angRef   = useRef(facingAngle);
-  movRef.current = moving;
-  angRef.current = facingAngle;
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    const bob     = movRef.current ? Math.sin(clock.elapsedTime*8)*0.06 : 0;
-    const breathe = 1+Math.sin(clock.elapsedTime*1.5)*0.012;
-    groupRef.current.scale.y = breathe;
-    groupRef.current.position.set(position[0],position[1]+bob,position[2]);
-    const cur = groupRef.current.rotation.y;
-    groupRef.current.rotation.y = cur+(angRef.current-cur)*0.15;
-  });
-  return (
-    <group ref={groupRef} position={position}>
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
-        <circleGeometry args={[0.36,16]} />
-        <meshBasicMaterial color="black" transparent opacity={0.22} />
-      </mesh>
-      <Cylinder args={[0.21,0.27,0.72,12]} position={[0,0.36,0]} castShadow>
-        <meshStandardMaterial color={color} roughness={0.7} metalness={0.08} envMapIntensity={0.5} />
-      </Cylinder>
-      <Sphere args={[0.28,16,12]} position={[0,0.93,0]} castShadow>
-        <meshStandardMaterial color="#fde7c3" roughness={0.8} metalness={0} />
-      </Sphere>
-      <Sphere args={[0.05,8,8]} position={[0.1,0.98,0.22]}>
-        <meshBasicMaterial color="#1e293b" />
-      </Sphere>
-      <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
-        <meshBasicMaterial color="#1e293b" />
-      </Sphere>
-      {isMe && (
-        <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
-          <ringGeometry args={[0.38,0.47,32]} />
-          <meshBasicMaterial color={color} transparent opacity={0.75} />
-        </mesh>
-      )}
-      <Billboard position={[0,1.55,0]}>
-        <Text fontSize={0.22} color={isMe?color:'white'} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
-          {name}{isMe?' ★':''}
-        </Text>
-      </Billboard>
-    </group>
-  );
-}
-
-// ── Local player avatar — reads posRef every frame ─────────────────
-function PlayerAvatar({ posRef, movingRef, facingRef, color, name }: {
-  posRef:    React.MutableRefObject<THREE.Vector3>;
-  movingRef: React.MutableRefObject<boolean>;
-  facingRef: React.MutableRefObject<number>;
-  color:string; name:string;
-}) {
-  const groupRef = useRef<THREE.Group>(null!);
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    const p       = posRef.current;
-    const y       = terrainY(p.x, p.z);
-    const bob     = movingRef.current ? Math.sin(clock.elapsedTime*8)*0.06 : 0;
-    const breathe = 1+Math.sin(clock.elapsedTime*1.5)*0.012;
-    groupRef.current.scale.y = breathe;
-    groupRef.current.position.set(p.x, y+bob, p.z);
-    const cur = groupRef.current.rotation.y;
-    groupRef.current.rotation.y = cur+(facingRef.current-cur)*0.15;
-  });
-  return (
-    <group ref={groupRef}>
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.01,0]}>
-        <circleGeometry args={[0.36,16]} />
-        <meshBasicMaterial color="black" transparent opacity={0.22} />
-      </mesh>
-      <Cylinder args={[0.21,0.27,0.72,12]} position={[0,0.36,0]} castShadow>
-        <meshStandardMaterial color={color} roughness={0.7} metalness={0.08} envMapIntensity={0.5} />
-      </Cylinder>
-      <Sphere args={[0.28,16,12]} position={[0,0.93,0]} castShadow>
-        <meshStandardMaterial color="#fde7c3" roughness={0.8} metalness={0} />
-      </Sphere>
-      <Sphere args={[0.05,8,8]} position={[0.1,0.98,0.22]}>
-        <meshBasicMaterial color="#1e293b" />
-      </Sphere>
-      <Sphere args={[0.05,8,8]} position={[-0.1,0.98,0.22]}>
-        <meshBasicMaterial color="#1e293b" />
-      </Sphere>
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.005,0]}>
-        <ringGeometry args={[0.38,0.47,32]} />
-        <meshBasicMaterial color={color} transparent opacity={0.75} />
-      </mesh>
-      <Billboard position={[0,1.55,0]}>
-        <Text fontSize={0.22} color={color} anchorX="center" anchorY="middle" outlineWidth={0.04} outlineColor="black">
-          {name} ★
-        </Text>
-      </Billboard>
-    </group>
-  );
-}
-
-// ── Remote avatar ──────────────────────────────────────────────────
-function RemoteAvatar({ player }: { player:PlayerState }) {
-  const pos = useRef(new THREE.Vector3(player.x/20-10,0,player.y/20-9));
-  useFrame(() => {
-    const tx=player.x/20-10, tz=player.y/20-9;
-    pos.current.lerp(new THREE.Vector3(tx,terrainY(tx,tz),tz),0.12);
-  });
-  if (!player.online) return null;
-  return (
-    <Avatar
-      position={[pos.current.x,pos.current.y,pos.current.z]}
-      color={player.spriteColor} name={player.name} isMe={false}
-      moving={player.moving} facingAngle={0}
-    />
-  );
-}
-
 // ── Lighting ───────────────────────────────────────────────────────
 function Lighting() {
   return (
@@ -585,7 +741,6 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
     const half = WORLD_SIZE/2-2;
     np.x = Math.max(-half,Math.min(half,np.x));
     np.z = Math.max(-half,Math.min(half,np.z));
-    // block only if new pos is INSIDE pond, not at spawn
     if (Math.hypot(np.x,np.z)<POND_RADIUS) return;
     np.y = terrainY(np.x,np.z);
     posRef.current.copy(np);
@@ -596,10 +751,10 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
 
 // ── Scene ──────────────────────────────────────────────────────────
 function Scene({
-  myEmail,myName,myColor,onCollect,onBondXP,
+  myEmail,myName,avatarConfig,onCollect,onBondXP,
   nearbyNPCRef,setNearbyNPC,blockedRef,posRef,movingRef,facingRef,keysRef,
 }: {
-  myEmail:string; myName:string; myColor:string;
+  myEmail:string; myName:string; avatarConfig:AvatarConfig;
   onCollect:(n:number)=>void; onBondXP:(xp:number)=>void;
   nearbyNPCRef:React.MutableRefObject<NPC|null>;
   setNearbyNPC:(n:NPC|null)=>void;
@@ -611,7 +766,7 @@ function Scene({
 }) {
   const remotePlayers = useRef<Record<string,PlayerState>>({});
   const { publish, markOnline } = useHeartboundSync(
-    myEmail, myName, myColor,
+    myEmail, myName, avatarConfig.outfitColor,
     useCallback((p:Record<string,PlayerState>)=>{ remotePlayers.current=p; },[]),
   );
   const flowerCountRef = useRef(0);
@@ -668,8 +823,11 @@ function Scene({
           isNearby={nearbyNPCRef.current?.id===npc.id}
           showPrompt={nearbyNPCRef.current?.id===npc.id&&!blockedRef.current} />
       ))}
-      <PlayerAvatar posRef={posRef} movingRef={movingRef} facingRef={facingRef}
-                    color={myColor} name={myName} />
+      {/* Local player — full SkyCharacter */}
+      <SkyCharacter
+        config={avatarConfig} name={myName} isMe={true}
+        posRef={posRef} movingRef={movingRef} facingRef={facingRef}
+      />
       {Object.values(remoteSnap).filter(p=>p.email!==myEmail&&p.online).map(p=>(
         <RemoteAvatar key={p.email} player={p} />
       ))}
@@ -860,7 +1018,7 @@ function GameMenu({ bondXP,flowerCount,onClose,onToggleFullscreen,isFullscreen,q
   );
 }
 
-// ── Virtual joystick — ONLY rendered on real touch devices (FIX 3) ─
+// ── Virtual joystick ───────────────────────────────────────────────
 function VirtualJoystick({ keysRef }: { keysRef:React.MutableRefObject<Set<string>> }) {
   return (
     <div
@@ -886,6 +1044,137 @@ function VirtualJoystick({ keysRef }: { keysRef:React.MutableRefObject<Set<strin
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// AVATAR CREATOR — pre-game customisation screen
+// ══════════════════════════════════════════════════════════════════════
+const SKIN_TONES  = ['#fde7c3','#f5cba7','#d4a574','#c68642','#8d5524','#5c3317'];
+const HAIR_COLORS = ['#3b1f0a','#7c4b1e','#c8a96e','#d4af37','#cc0000','#9b59b6','#2196f3','#f1f1f1','#1a1a1a'];
+const HAIR_STYLES: AvatarConfig['hairStyle'][] = ['short','long','bun','none'];
+const HAIR_STYLE_LABELS: Record<AvatarConfig['hairStyle'], string> = {
+  short:'Short', long:'Long', bun:'Bun', none:'None',
+};
+const OUTFIT_COLORS = ['#6366f1','#ec4899','#10b981','#f59e0b','#ef4444','#06b6d4','#8b5cf6','#f97316','#64748b'];
+const ACCESSORIES: AvatarConfig['accessory'][] = ['none','hat','crown','halo'];
+const ACCESSORY_LABELS: Record<AvatarConfig['accessory'], string> = {
+  none:'None', hat:'🎩 Hat', crown:'👑 Crown', halo:'😇 Halo',
+};
+
+interface AvatarCreatorProps {
+  onEnter: (cfg: AvatarConfig) => void;
+  myColor: string;
+}
+
+function AvatarCreator({ onEnter, myColor }: AvatarCreatorProps) {
+  const [cfg, setCfg] = useState<AvatarConfig>({ ...DEFAULT_AVATAR, outfitColor: myColor });
+
+  const set = <K extends keyof AvatarConfig>(key: K, val: AvatarConfig[K]) =>
+    setCfg(prev => ({ ...prev, [key]: val }));
+
+  // Live 3D preview canvas
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+      style={{ background:'linear-gradient(135deg,#0a1628 0%,#0d2218 60%,#0a1628 100%)' }}>
+      {/* Title */}
+      <div className="mb-4 text-center">
+        <h1 className="text-2xl font-bold text-white">🌿 Create Your Character</h1>
+        <p className="text-white/40 text-sm mt-1">Customise before entering Meadow Haven</p>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-6 w-full max-w-2xl px-4">
+        {/* 3D Preview */}
+        <div className="w-full md:w-48 h-48 md:h-auto rounded-2xl overflow-hidden flex-shrink-0"
+          style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)' }}>
+          <Canvas camera={{ position:[0,1.2,3.2], fov:42 }} style={{ width:'100%', height:'100%' }}>
+            <ambientLight intensity={0.7} />
+            <directionalLight position={[3,5,3]} intensity={1.8} />
+            <Suspense fallback={null}>
+              <group position={[0, -0.8, 0]}>
+                <SkyCharacter
+                  config={cfg} name="" isMe={false}
+                  staticPos={[0, 0, 0]}
+                />
+              </group>
+            </Suspense>
+          </Canvas>
+        </div>
+
+        {/* Options panel */}
+        <div className="flex-1 space-y-4 overflow-y-auto max-h-[60vh] pr-1">
+          {/* Skin tone */}
+          <div>
+            <p className="text-white/60 text-xs font-semibold mb-2 uppercase tracking-wider">Skin Tone</p>
+            <div className="flex flex-wrap gap-2">
+              {SKIN_TONES.map(c=>(
+                <button key={c} onClick={()=>set('skinTone',c)}
+                  className="w-8 h-8 rounded-full border-2 transition"
+                  style={{ background:c, borderColor:cfg.skinTone===c?'white':'transparent' }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Hair style */}
+          <div>
+            <p className="text-white/60 text-xs font-semibold mb-2 uppercase tracking-wider">Hair Style</p>
+            <div className="flex flex-wrap gap-2">
+              {HAIR_STYLES.map(s=>(
+                <button key={s} onClick={()=>set('hairStyle',s)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                    cfg.hairStyle===s?'bg-white text-black':'bg-white/10 text-white hover:bg-white/20'
+                  }`}>{HAIR_STYLE_LABELS[s]}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hair colour */}
+          <div>
+            <p className="text-white/60 text-xs font-semibold mb-2 uppercase tracking-wider">Hair Colour</p>
+            <div className="flex flex-wrap gap-2">
+              {HAIR_COLORS.map(c=>(
+                <button key={c} onClick={()=>set('hairColor',c)}
+                  className="w-8 h-8 rounded-full border-2 transition"
+                  style={{ background:c, borderColor:cfg.hairColor===c?'white':'transparent' }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Outfit colour */}
+          <div>
+            <p className="text-white/60 text-xs font-semibold mb-2 uppercase tracking-wider">Outfit Colour</p>
+            <div className="flex flex-wrap gap-2">
+              {OUTFIT_COLORS.map(c=>(
+                <button key={c} onClick={()=>set('outfitColor',c)}
+                  className="w-8 h-8 rounded-full border-2 transition"
+                  style={{ background:c, borderColor:cfg.outfitColor===c?'white':'transparent' }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Accessory */}
+          <div>
+            <p className="text-white/60 text-xs font-semibold mb-2 uppercase tracking-wider">Accessory</p>
+            <div className="flex flex-wrap gap-2">
+              {ACCESSORIES.map(a=>(
+                <button key={a} onClick={()=>set('accessory',a)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                    cfg.accessory===a?'bg-white text-black':'bg-white/10 text-white hover:bg-white/20'
+                  }`}>{ACCESSORY_LABELS[a]}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Enter button */}
+      <button
+        onClick={()=>onEnter(cfg)}
+        className="mt-6 px-10 py-3 rounded-2xl text-base font-bold text-white shadow-lg transition hover:scale-105 active:scale-95"
+        style={{ background:'linear-gradient(135deg,#6366f1,#ec4899)' }}>
+        Enter Meadow Haven 🌿
+      </button>
+    </div>
+  );
+}
+
 // ── Root ───────────────────────────────────────────────────────────
 interface Props {
   myColor:string; onBack:()=>void;
@@ -897,10 +1186,11 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
   const myEmail   = user?.email ?? '';
   const myName    = getDisplayNameFromEmail(myEmail);
   const quality   = useQualityTier();
-  const isTouch   = useIsTouchDevice();   // FIX 3
+  const isTouch   = useIsTouchDevice();
+
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
 
   const containerRef  = useRef<HTMLDivElement>(null);
-  // FIX 1: spawn at (5,0,6) — Math.hypot(5,6)≈7.8 which is > POND_RADIUS(3.8)
   const posRef        = useRef(SPAWN.clone());
   const movingRef     = useRef(false);
   const facingRef     = useRef(0);
@@ -923,7 +1213,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
 
   useEffect(()=>{ dialogueRef.current=dialogue; blockedRef.current=!!dialogue||menuOpenRef.current; },[dialogue]);
   useEffect(()=>{ menuOpenRef.current=menuOpen; blockedRef.current=!!dialogueRef.current||menuOpen; },[menuOpen]);
-  useEffect(()=>{ containerRef.current?.focus(); },[]);
+  useEffect(()=>{ containerRef.current?.focus(); },[avatarConfig]);
   useEffect(()=>{
     const h=()=>setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',h);
@@ -944,30 +1234,20 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
   const closeDialogue = useCallback(()=>setDialogue(null),[]);
   const handleCollect = useCallback((count:number)=>{ setFlowerCount(count); onCollect(count); },[onCollect]);
 
-  // FIX 2: register with { capture:true } so we intercept Escape before the browser
-  // can act on it. stopImmediatePropagation() prevents any other capture listener
-  // (including the browser's own fullscreen-exit handler) from receiving it.
   useEffect(()=>{
+    if (!avatarConfig) return;
     const down = (e: KeyboardEvent) => {
-      // Suppress default scroll / browser shortcuts
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-
-      // ── FIX 2: intercept Escape in capture phase ──────────────────
       if (e.key==='Escape') {
         e.preventDefault();
-        e.stopImmediatePropagation(); // stops browser's own fullscreen-exit handler
-        // treat same as M: close dialogue or toggle menu
+        e.stopImmediatePropagation();
         if (dialogueRef.current) { closeDialogue(); }
         else { setMenuOpen(p=>!p); }
-        return; // do NOT add 'Escape' to keysRef
+        return;
       }
-
-      // Add to movement key set (only real movement keys matter)
       keysRef.current.add(e.key);
-
       const hasD = !!dialogueRef.current;
       const hasM = menuOpenRef.current;
-
       if (e.key==='e'||e.key==='E'||e.key==='Enter') {
         if (hasD) closeDialogue();
         else if (!hasM&&nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
@@ -982,8 +1262,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
     };
     const up   = (e:KeyboardEvent) => keysRef.current.delete(e.key);
     const blur = ()=>keysRef.current.clear();
-
-    // capture:true — fires BEFORE bubbling phase and before browser native handlers
     document.addEventListener('keydown', down, { capture:true });
     document.addEventListener('keyup',   up);
     window.addEventListener('blur',      blur);
@@ -992,7 +1270,12 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
       document.removeEventListener('keyup',   up);
       window.removeEventListener('blur',      blur);
     };
-  },[closeDialogue,openDialogue,toggleFullscreen]);
+  },[avatarConfig,closeDialogue,openDialogue,toggleFullscreen]);
+
+  // Show AvatarCreator first
+  if (!avatarConfig) {
+    return <AvatarCreator myColor={myColor} onEnter={cfg=>setAvatarConfig(cfg)} />;
+  }
 
   return (
     <div
@@ -1016,7 +1299,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
       >
         <Suspense fallback={null}>
           <Scene
-            myEmail={myEmail} myName={myName} myColor={myColor}
+            myEmail={myEmail} myName={myName} avatarConfig={avatarConfig}
             onCollect={handleCollect} onBondXP={onBondXP??(() =>{})}
             nearbyNPCRef={nearbyNPCRef} setNearbyNPC={setNearbyNPC}
             blockedRef={blockedRef} posRef={posRef}
@@ -1025,7 +1308,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
         </Suspense>
       </Canvas>
 
-      {/* Bond XP bar — top centre */}
+      {/* Bond XP bar */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -1037,14 +1320,14 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
         </div>
       </div>
 
-      {/* Flower counter — top left */}
+      {/* Flower counter */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">
           🌸 {flowerCount}
         </div>
       </div>
 
-      {/* Menu button — top right */}
+      {/* Menu button */}
       <div className="absolute top-3 right-3 z-10">
         <button
           onClick={()=>setMenuOpen(true)}
@@ -1053,7 +1336,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
         >☰ Menu</button>
       </div>
 
-      {/* Quality badge — desktop only */}
+      {/* Quality badge */}
       <div className="absolute bottom-10 right-3 z-10 pointer-events-none hidden md:block">
         <div className="bg-black/30 rounded-full px-2 py-0.5 text-white/30 text-xs capitalize">
           {effectiveQuality==='low'?'🔋 eco':effectiveQuality==='medium'?'⚡ balanced':'✨ ultra'}
@@ -1073,7 +1356,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
         />
       )}
 
-      {/* Mobile NPC talk button */}
       {nearbyNPC&&!dialogue&&!menuOpen&&isTouch&&(
         <button onClick={()=>openDialogue(nearbyNPC)}
           className="absolute bottom-20 left-1/2 -translate-x-1/2 px-5 py-2 rounded-full text-sm font-bold text-white shadow-lg animate-bounce z-10"
@@ -1082,10 +1364,8 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor,onBack,bondXP,onCollect
         </button>
       )}
 
-      {/* FIX 3: joystick ONLY for real touch devices — never renders on desktop */}
       {isTouch && <VirtualJoystick keysRef={keysRef} />}
 
-      {/* Desktop key hint */}
       {!isTouch && (
         <div className="absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
           WASD / Arrows · E to talk · M / Esc for menu · F fullscreen
