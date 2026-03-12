@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS achievements (
 CREATE INDEX IF NOT EXISTS idx_achievements_user
   ON achievements (user_id);
 
--- ── RLS policies (enable row-level security) ──────────────────────────────────
+-- ── RLS (enable row-level security) ──────────────────────────────────────────
 ALTER TABLE couple_progress  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE couple_home      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memory_book      ENABLE ROW LEVEL SECURITY;
@@ -106,12 +106,53 @@ ALTER TABLE rpg_inventory    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_challenges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE achievements     ENABLE ROW LEVEL SECURITY;
 
--- Users can only read/write their own inventory
-CREATE POLICY IF NOT EXISTS "inventory_owner" ON rpg_inventory
-  USING (user_id = auth.uid())
+-- ── RLS policies ─────────────────────────────────────────────────────────────
+-- NOTE: CREATE POLICY does not support IF NOT EXISTS in PostgreSQL.
+-- We drop first so this file is safely re-runnable.
+
+DROP POLICY IF EXISTS "inventory_owner"    ON rpg_inventory;
+DROP POLICY IF EXISTS "achievements_owner" ON achievements;
+DROP POLICY IF EXISTS "couple_progress_owner" ON couple_progress;
+DROP POLICY IF EXISTS "couple_home_owner"     ON couple_home;
+DROP POLICY IF EXISTS "memory_book_owner"     ON memory_book;
+DROP POLICY IF EXISTS "daily_challenges_owner" ON daily_challenges;
+
+-- rpg_inventory: users own their rows
+CREATE POLICY "inventory_owner" ON rpg_inventory
+  FOR ALL
+  USING      (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- Users can only read/write their own achievements
-CREATE POLICY IF NOT EXISTS "achievements_owner" ON achievements
-  USING (user_id = auth.uid())
+-- achievements: users own their rows
+CREATE POLICY "achievements_owner" ON achievements
+  FOR ALL
+  USING      (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+
+-- couple_progress: members of the couple can access (couple_id = emailA_emailB)
+CREATE POLICY "couple_progress_owner" ON couple_progress
+  FOR ALL
+  USING (
+    couple_id LIKE '%' || auth.email() || '%'
+  );
+
+-- couple_home: members of the couple can access
+CREATE POLICY "couple_home_owner" ON couple_home
+  FOR ALL
+  USING (
+    couple_id LIKE '%' || auth.email() || '%'
+  );
+
+-- memory_book: members of the couple can access
+CREATE POLICY "memory_book_owner" ON memory_book
+  FOR ALL
+  USING (
+    couple_id LIKE '%' || auth.email() || '%'
+  );
+
+-- daily_challenges: members of the couple can access
+CREATE POLICY "daily_challenges_owner" ON daily_challenges
+  FOR ALL
+  USING (
+    couple_id LIKE '%' || auth.email() || '%'
+  );
