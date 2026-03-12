@@ -1,13 +1,13 @@
 /**
- * MeadowHaven3D  — Phase 1 wired
+ * MeadowHaven3D  — Phase 2 wired
  * ─────────────────────────────────────────────────────────────────
- * Changes from previous revision:
- *   • AvatarCreator  →  CharacterCustomizer  (Phase 1 component)
- *   • SkyCharacter   →  SkyCharacterV2       (cape / hair physics)
- *   • AvatarConfig   →  AvatarConfigV2       (extended fields)
- *   • Avatar loaded from Supabase on mount via loadAvatarConfig()
- *   • RemoteAvatar uses SkyCharacterV2 with safe defaults
- *   • All other game systems (terrain, NPCs, pond, forest…) unchanged
+ * Changes from Phase 1:
+ *   • SkyCharacterV2  →  SkyKidCharacter  (real skykid.glb mesh)
+ *   • AvatarConfigV2  →  SkyKidConfig     (colours-only config)
+ *   • DEFAULT_AVATAR_V2 → DEFAULT_SKYKID_CONFIG
+ *   • RemoteAvatar uses SkyKidCharacter with outfit colour from Firebase
+ *   • CharacterCustomizer updated import references
+ *   • All other systems (terrain, NPCs, pond, forest…) unchanged
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -24,14 +24,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
 
-// Phase 1 character imports
+// Phase 2 character imports
 import {
-  SkyCharacterV2, AvatarConfigV2, DEFAULT_AVATAR_V2,
-} from './character/SkyCharacterV2';
+  SkyKidCharacter, SkyKidConfig, DEFAULT_SKYKID_CONFIG,
+} from './character/SkyKidCharacter';
 import { CharacterCustomizer } from './character/CharacterCustomizer';
 import { loadAvatarConfig } from './character/avatarSync';
 
-// ── Constants ──────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
 const CAM_DIST    = 12;
@@ -40,7 +40,7 @@ const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// ── Touch / quality helpers ────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -65,7 +65,7 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
   }, []);
 }
 
-// ── Terrain height ─────────────────────────────────────────────────
+// ── Terrain ───────────────────────────────────────────────────────────
 function terrainY(x: number, z: number): number {
   return (
     Math.sin(x * 0.28) * 1.2 +
@@ -76,28 +76,38 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── Remote avatar ──────────────────────────────────────────────────
+// ── Remote avatar ────────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const pos = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  const posRef = useRef(new THREE.Vector3(
+    player.x / 20 - 10, 0, player.y / 20 - 9
+  ));
+
   useFrame(() => {
-    const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
-    pos.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
+    const tx = player.x / 20 - 10;
+    const tz = player.y / 20 - 9;
+    posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
   });
+
   if (!player.online) return null;
-  const cfg: AvatarConfigV2 = { ...DEFAULT_AVATAR_V2, outfitColor: player.spriteColor };
+
+  const cfg: SkyKidConfig = {
+    ...DEFAULT_SKYKID_CONFIG,
+    outfitColor: player.spriteColor,
+    capeColor:   player.spriteColor,
+  };
+
   return (
-    <SkyCharacterV2
+    <SkyKidCharacter
       config={cfg}
       name={player.name}
       isMe={false}
-      terrainFn={terrainY}
-      staticPos={[pos.current.x, pos.current.y, pos.current.z]}
+      staticPos={[posRef.current.x, posRef.current.y, posRef.current.z]}
       moving={player.moving}
     />
   );
 }
 
-// ── Terrain ────────────────────────────────────────────────────────
+// ── Terrain mesh ─────────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
   useEffect(() => {
@@ -144,14 +154,15 @@ function Terrain() {
   );
 }
 
-// ── Pond ────────────────────────────────────────────────────────────
+// ── Pond ───────────────────────────────────────────────────────────────
 function Pond() {
   const waterRef = useRef<THREE.Mesh>(null!), rippleRef = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
     if (!waterRef.current) return;
     const mat = waterRef.current.material as THREE.MeshStandardMaterial, t = clock.elapsedTime;
     mat.color.setRGB(0.28 + 0.04 * Math.sin(t * 0.35), 0.62 + 0.07 * Math.sin(t * 0.28 + 1.1), 0.90 + 0.05 * Math.sin(t * 0.45 + 2.3));
-    mat.opacity = 0.78 + 0.06 * Math.sin(t * 0.55); mat.envMapIntensity = 2.2 + 0.5 * Math.sin(t * 0.4);
+    mat.opacity = 0.78 + 0.06 * Math.sin(t * 0.55);
+    mat.envMapIntensity = 2.2 + 0.5 * Math.sin(t * 0.4);
     if (rippleRef.current) { const p = 1.0 + 0.03 * Math.sin(t * 1.2); rippleRef.current.scale.set(p, p, p); }
   });
   const lilyPads = useMemo(() => [
@@ -184,7 +195,7 @@ function Pond() {
   );
 }
 
-// ── Trees ──────────────────────────────────────────────────────────
+// ── Trees ──────────────────────────────────────────────────────────────
 const TREE_POSITIONS: [number, number, number, number][] = [
   [-14,-6,1.0,0],[-12,8,1.3,1],[-16,2,0.9,2],[13,-7,1.1,0],[14,5,1.4,1],[15,10,0.85,2],
   [-6,-14,1.0,0],[5,-15,1.2,1],[-10,-13,1.3,2],[7,14,0.9,0],[-5,15,1.1,1],[10,13,1.0,2],
@@ -213,7 +224,7 @@ function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; v
 }
 function Forest() { return <>{TREE_POSITIONS.map(([x, z, s, v], i) => <Tree key={i} x={x} z={z} scale={s} variant={v} />)}</>; }
 
-// ── Fireflies ──────────────────────────────────────────────────────
+// ── Fireflies ──────────────────────────────────────────────────────────
 function Fireflies() {
   const count = 32;
   const positions = useMemo(() => {
@@ -247,7 +258,7 @@ function Fireflies() {
   );
 }
 
-// ── Decorations ────────────────────────────────────────────────────
+// ── Decorations ─────────────────────────────────────────────────────────
 function Decorations() {
   return (
     <>
@@ -277,7 +288,7 @@ function Decorations() {
   );
 }
 
-// ── Flowers ────────────────────────────────────────────────────────
+// ── Flowers ─────────────────────────────────────────────────────────────
 const FLOWER_POS: [number,number][] = [ [-7,-5],[5,-7],[-4,6],[8,4],[-9,1],[9,-2],[2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],[4,6],[-5,-4],[7,-10],[-8,8] ];
 function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number]; collected:boolean; onCollect:()=>void; playerPos:React.MutableRefObject<THREE.Vector3> }) {
   const ref = useRef<THREE.Group>(null!), colRef = useRef(collected);
@@ -295,7 +306,7 @@ function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number];
   );
 }
 
-// ── Glow ring ──────────────────────────────────────────────────────
+// ── Glow ring ──────────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => { if (ref.current) (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3); });
@@ -306,7 +317,7 @@ function GlowRing({ color }: { color: string }) {
   );
 }
 
-// ── NPC ────────────────────────────────────────────────────────────
+// ── NPC ──────────────────────────────────────────────────────────────────
 function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC; playerPos:React.MutableRefObject<THREE.Vector3>; onNearby:(npc:NPC|null)=>void; isNearby:boolean; showPrompt:boolean }) {
   const groupRef = useRef<THREE.Group>(null!), wasNear = useRef(false);
   const wx = npc.tx - 12, wz = npc.ty - 9;
@@ -326,7 +337,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC
   );
 }
 
-// ── Lighting ───────────────────────────────────────────────────────
+// ── Lighting ────────────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
@@ -342,7 +353,7 @@ function Lighting() {
   );
 }
 
-// ── Camera ─────────────────────────────────────────────────────────
+// ── Camera ─────────────────────────────────────────────────────────────
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
@@ -352,7 +363,7 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement controller ────────────────────────────────────────────
+// ── Movement ────────────────────────────────────────────────────────────
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef: React.MutableRefObject<Set<string>>;
   posRef: React.MutableRefObject<THREE.Vector3>;
@@ -384,9 +395,9 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   return null;
 }
 
-// ── Scene ──────────────────────────────────────────────────────────
+// ── Scene ────────────────────────────────────────────────────────────────
 function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
-  myEmail: string; myName: string; avatarConfig: AvatarConfigV2;
+  myEmail: string; myName: string; avatarConfig: SkyKidConfig;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
   nearbyNPCRef: React.MutableRefObject<NPC|null>; setNearbyNPC: (n: NPC|null) => void;
   blockedRef: React.MutableRefObject<boolean>; posRef: React.MutableRefObject<THREE.Vector3>;
@@ -415,6 +426,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
     if (nearbyNPCRef.current?.id === npc?.id) return;
     nearbyNPCRef.current = npc; setNearbyNPC(npc);
   }, [nearbyNPCRef, setNearbyNPC]);
+
   return (
     <>
       <Lighting />
@@ -426,6 +438,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
       <Cloud position={[20,16,-20]} speed={0.15} opacity={0.45} />
       <Cloud position={[5,18,-30]} speed={0.18} opacity={0.50} />
       <Terrain /><Pond /><Forest /><Decorations /><Fireflies />
+
       {FLOWER_POS.map((pos, i) => (
         <Flower key={i} pos={pos} collected={collectedFlowers.has(i)}
           onCollect={() => handleFlowerCollect(i)} playerPos={posRef} />
@@ -437,8 +450,8 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* ── Player character (Phase 1) ── */}
-      <SkyCharacterV2
+      {/* ── Local player — Phase 2: real Sky kid GLB ── */}
+      <SkyKidCharacter
         config={avatarConfig}
         name={myName}
         isMe={true}
@@ -448,17 +461,22 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
         facingRef={facingRef}
       />
 
-      {Object.values(remoteSnap).filter(p => p.email !== myEmail && p.online).map(p => (
-        <RemoteAvatar key={p.email} player={p} />
-      ))}
+      {/* ── Remote players ── */}
+      {Object.values(remoteSnap)
+        .filter(p => p.email !== myEmail && p.online)
+        .map(p => <RemoteAvatar key={p.email} player={p} />)
+      }
+
       <CameraRig target={posRef} />
-      <MovementController keysRef={keysRef} posRef={posRef} movingRef={movingRef}
-        facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef} />
+      <MovementController
+        keysRef={keysRef} posRef={posRef} movingRef={movingRef}
+        facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
+      />
     </>
   );
 }
 
-// ── Dialogue box ───────────────────────────────────────────────────
+// ── Dialogue ────────────────────────────────────────────────────────────
 function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onClose: () => void }) {
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
@@ -482,7 +500,7 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   );
 }
 
-// ── In-game menu ───────────────────────────────────────────────────
+// ── Game menu ──────────────────────────────────────────────────────────
 function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange, onCustomize }: {
   bondXP: number; flowerCount: number;
   onClose: () => void; onExit: () => void;
@@ -502,8 +520,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full max-w-lg mx-3 rounded-3xl overflow-hidden shadow-2xl"
         style={{ background: 'linear-gradient(160deg,#0f0c1a 0%,#0c1a0f 100%)', border: '1px solid rgba(255,255,255,0.08)' }}>
-
-        {/* Header */}
         <div className="relative px-6 py-5"
           style={{ background: 'linear-gradient(90deg,rgba(236,72,153,0.18) 0%,rgba(99,102,241,0.18) 100%)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <div className="flex items-center gap-3">
@@ -516,23 +532,16 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
           <button onClick={onClose}
             className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition text-lg font-bold">✕</button>
         </div>
-
-        {/* Tabs */}
         <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           {tabs.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition ${
-                tab === t.key
-                  ? 'text-white bg-white/5 border-b-2 border-pink-400'
-                  : 'text-white/35 hover:text-white/60 border-b-2 border-transparent'
+                tab === t.key ? 'text-white bg-white/5 border-b-2 border-pink-400' : 'text-white/35 hover:text-white/60 border-b-2 border-transparent'
               }`}>
-              <span className="text-base">{t.label}</span>
-              <span>{t.full}</span>
+              <span className="text-base">{t.label}</span><span>{t.full}</span>
             </button>
           ))}
         </div>
-
-        {/* Tab content */}
         <div className="p-5 min-h-[220px]">
           {tab === 'inventory' && (
             <div>
@@ -541,7 +550,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                 {[
                   { icon:'🌸', label:'Flowers',   count: flowerCount, glow:'rgba(244,114,182,0.3)' },
                   { icon:'🍄', label:'Mushrooms', count: 0,           glow:'rgba(251,146,60,0.15)' },
-                  { icon:'💎', label:'Crystals',  count: 0,           glow:'rgba(99,102,241,0.15)' },
+                  { icon:'📎', label:'Crystals',  count: 0,           glow:'rgba(99,102,241,0.15)' },
                 ].map(it => (
                   <div key={it.label}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-1.5 border transition ${it.count > 0 ? 'border-white/15' : 'border-white/5 opacity-40'}`}
@@ -555,7 +564,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
               <p className="text-white/20 text-xs mt-3 text-center">More items unlock as you explore 🌿</p>
             </div>
           )}
-
           {tab === 'profile' && (
             <div className="space-y-3">
               <div className="rounded-2xl p-4 border border-white/8"
@@ -582,7 +590,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                   <span className="text-white font-bold text-sm">{s.value}</span>
                 </div>
               ))}
-              {/* Customise button */}
               <button onClick={onCustomize}
                 className="w-full py-2.5 rounded-2xl text-sm font-bold text-white transition hover:scale-[1.02] active:scale-95"
                 style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.3),rgba(236,72,153,0.3))', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -590,7 +597,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
               </button>
             </div>
           )}
-
           {tab === 'controls' && (
             <div className="space-y-1.5">
               {[
@@ -611,7 +617,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
               ))}
             </div>
           )}
-
           {tab === 'settings' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between rounded-xl px-4 py-3 border border-white/5"
@@ -639,8 +644,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
             </div>
           )}
         </div>
-
-        {/* Footer */}
         <div className="px-5 pb-5 flex gap-3"
           style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1rem' }}>
           <button onClick={onExit}
@@ -658,7 +661,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
   );
 }
 
-// ── Virtual joystick ───────────────────────────────────────────────
+// ── Virtual joystick ────────────────────────────────────────────────────
 function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<string>> }) {
   return (
     <div className="absolute bottom-4 right-4 z-10"
@@ -681,7 +684,7 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
   );
 }
 
-// ── Root ───────────────────────────────────────────────────────────
+// ── Root ─────────────────────────────────────────────────────────────────
 interface Props {
   myColor: string; onBack: () => void;
   bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void;
@@ -694,19 +697,27 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const quality   = useQualityTier();
   const isTouch   = useIsTouchDevice();
 
-  // avatarConfig: null = loading, false = show customizer, AvatarConfigV2 = in-game
-  const [avatarConfig, setAvatarConfig] = useState<AvatarConfigV2 | null | false>(null);
+  // null = loading, false = show customiser, SkyKidConfig = in-game
+  const [avatarConfig, setAvatarConfig] = useState<SkyKidConfig | null | false>(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
 
   // Load saved config from Supabase on mount
   useEffect(() => {
     if (!myEmail) { setAvatarConfig(false); return; }
     loadAvatarConfig(myEmail).then(cfg => {
-      // If it's the bare default (no prior save) show customizer; otherwise go straight in
-      const hasCustomised = cfg.capeStyle !== DEFAULT_AVATAR_V2.capeStyle
-        || cfg.hairStyle !== DEFAULT_AVATAR_V2.hairStyle
-        || cfg.skinTone  !== DEFAULT_AVATAR_V2.skinTone;
-      if (hasCustomised) setAvatarConfig(cfg);
+      const hasCustomised = cfg.outfitColor !== DEFAULT_SKYKID_CONFIG.outfitColor
+        || cfg.capeColor   !== DEFAULT_SKYKID_CONFIG.capeColor
+        || cfg.hairColor   !== DEFAULT_SKYKID_CONFIG.hairColor;
+      // Bridge AvatarConfigV2 → SkyKidConfig
+      const skyCfg: SkyKidConfig = {
+        outfitColor: cfg.outfitColor ?? DEFAULT_SKYKID_CONFIG.outfitColor,
+        capeColor:   (cfg as any).capeColor   ?? DEFAULT_SKYKID_CONFIG.capeColor,
+        hairColor:   (cfg as any).hairColor   ?? DEFAULT_SKYKID_CONFIG.hairColor,
+        accentColor: (cfg as any).accentColor ?? DEFAULT_SKYKID_CONFIG.accentColor,
+        skinTone:    (cfg as any).skinTone    ?? DEFAULT_SKYKID_CONFIG.skinTone,
+        height:      (cfg as any).height      ?? DEFAULT_SKYKID_CONFIG.height,
+      };
+      if (hasCustomised) setAvatarConfig(skyCfg);
       else setAvatarConfig(false);
     });
   }, [myEmail]);
@@ -737,10 +748,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen; }, [menuOpen]);
   useEffect(() => { if (avatarConfig) containerRef.current?.focus(); }, [avatarConfig]);
 
-  const requestFS = useCallback(() => {
-    containerRef.current?.requestFullscreen().catch(() => {});
-  }, []);
-
+  const requestFS = useCallback(() => { containerRef.current?.requestFullscreen().catch(() => {}); }, []);
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) requestFS();
     else document.exitFullscreen().catch(() => {});
@@ -748,12 +756,9 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
   useEffect(() => {
     const onFSChange = () => {
-      const isNowFullscreen = !!document.fullscreenElement;
-      setIsFullscreen(isNowFullscreen);
-      if (!isNowFullscreen && escPressedRef.current) {
-        escPressedRef.current = false;
-        requestFS();
-      }
+      const isNowFS = !!document.fullscreenElement;
+      setIsFullscreen(isNowFS);
+      if (!isNowFS && escPressedRef.current) { escPressedRef.current = false; requestFS(); }
     };
     document.addEventListener('fullscreenchange', onFSChange);
     return () => document.removeEventListener('fullscreenchange', onFSChange);
@@ -772,8 +777,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     const down = (e: KeyboardEvent) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
       if (e.key === 'Escape') {
-        e.preventDefault();
-        escPressedRef.current = true;
+        e.preventDefault(); escPressedRef.current = true;
         if (dialogueRef.current) { escPressedRef.current = false; closeDialogue(); }
         else setMenuOpen(p => !p);
         return;
@@ -800,14 +804,13 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     };
   }, [avatarConfig, closeDialogue, openDialogue, toggleFullscreen]);
 
-  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
-
-  const handleExit = useCallback(() => {
+  const handleCollect  = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
+  const handleExit     = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     onBack();
   }, [onBack]);
 
-  // ── Loading state ──────────────────────────────────────────────
+  // ── Loading ─────────────────────────────────────────────────────────
   if (avatarConfig === null) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -817,7 +820,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     );
   }
 
-  // ── Character customiser (first time or re-customise) ──────────
+  // ── Customiser ────────────────────────────────────────────────────────
   if (avatarConfig === false || showCustomizer) {
     return (
       <CharacterCustomizer
@@ -829,7 +832,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     );
   }
 
-  // ── In-game ────────────────────────────────────────────────────
+  // ── In-game ──────────────────────────────────────────────────────────
   return (
     <div
       ref={containerRef}
