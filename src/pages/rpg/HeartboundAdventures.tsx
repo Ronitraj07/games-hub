@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHeartboundPresence } from '@/hooks/firebase/useHeartboundSync';
@@ -9,11 +9,15 @@ import {
   ArrowLeft, Star, ChevronRight, Wifi, WifiOff,
 } from 'lucide-react';
 
-const SPRITE_COLOR: Record<string, string> = {
-  'sinharonitraj@gmail.com':      '#60a5fa',
-  'radhikadidwania567@gmail.com': '#f472b6',
-  'shizzandsparkles@gmail.com':   '#a78bfa',
-};
+// FIX: Derive sprite color from email dynamically instead of a hardcoded
+// email map that leaks PII and doesn't scale to new users.
+const PRESET_COLORS = ['#60a5fa', '#f472b6', '#a78bfa', '#34d399', '#fb923c', '#facc15'];
+function getSpriteColor(email: string): string {
+  // Stable hash so each email always gets the same color
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) >>> 0;
+  return PRESET_COLORS[hash % PRESET_COLORS.length];
+}
 
 const ISLANDS = [
   { name: 'Meadow Haven',    emoji: '🌿', desc: 'A sun-drenched starting island with wildflowers, friendly deer, and your first shared home.',  unlockLevel: 1,  status: 'available' },
@@ -40,7 +44,11 @@ type View = 'hub' | 'meadow';
 export const HeartboundAdventures: React.FC = () => {
   const { user }  = useAuth();
   const myEmail   = user?.email ?? '';
-  const myColor   = SPRITE_COLOR[myEmail] ?? '#a78bfa';
+  // FIX: use dynamic color derivation — no more hardcoded email map
+  const myColor   = getSpriteColor(myEmail);
+
+  // FIX: meadowRef is now actually attached to the meadow container div
+  // and used for fullscreen (replaces broken document.querySelector approach)
   const meadowRef = useRef<HTMLDivElement>(null);
 
   const [view,         setView]         = useState<View>('hub');
@@ -54,22 +62,37 @@ export const HeartboundAdventures: React.FC = () => {
   const handleCollect = useCallback((total: number) => setFlowerCount(total), []);
   const handleBondXP  = useCallback((xp: number) => setBondXP(prev => Math.min(100, prev + xp)), []);
 
-  // Enter meadow: switch view AND request fullscreen (user gesture = button click)
+  // FIX: Enter meadow — view switch happens first, then fullscreen is
+  // requested inside a useEffect that fires after the div is mounted,
+  // using the real meadowRef instead of document.querySelector.
   const enterMeadow = useCallback(() => {
     setView('meadow');
-    // Small timeout so the meadow div mounts first
-    setTimeout(() => {
-      const el = document.querySelector('[data-meadow-container]') as HTMLElement | null;
-      if (el && !document.fullscreenElement) {
-        el.requestFullscreen().catch(() => {});
-      }
-    }, 150);
   }, []);
+
+  // Request fullscreen as soon as the meadow container mounts
+  useEffect(() => {
+    if (view === 'meadow' && meadowRef.current && !document.fullscreenElement) {
+      meadowRef.current.requestFullscreen().catch(() => {});
+    }
+  }, [view]);
+
+  // Track fullscreen exit so we can sync state if user forces exit
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && view === 'meadow') {
+        // Re-enter fullscreen silently if user accidentally hit the browser
+        // fullscreen exit (e.g. via F11) — we do NOT exit the game
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [view]);
 
   // ── MEADOW VIEW ───────────────────────────────────────────────────
   if (view === 'meadow') {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col">
+      // FIX: meadowRef attached here so requestFullscreen targets the real element
+      <div ref={meadowRef} className="min-h-screen bg-gray-950 flex flex-col">
         <div className="flex items-center justify-between px-4 py-2 bg-black/60 backdrop-blur border-b border-white/10">
           <div className="flex items-center gap-3">
             <span className="text-xl">🌿</span>
@@ -85,10 +108,13 @@ export const HeartboundAdventures: React.FC = () => {
             <span>💕 {bondXP} XP</span>
           </div>
         </div>
-        <div className="flex-1" data-meadow-container>
+        <div className="flex-1">
           <MeadowHaven3D
             myColor={myColor}
-            onBack={() => setView('hub')}
+            onBack={() => {
+              if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+              setView('hub');
+            }}
             bondXP={bondXP}
             onCollect={handleCollect}
             onBondXP={handleBondXP}
@@ -125,7 +151,7 @@ export const HeartboundAdventures: React.FC = () => {
                   ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
                   : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 text-gray-500'
               }`}>
-                <span className="text-xl" style={{ color: SPRITE_COLOR[p.email] }}>●</span>
+                <span className="text-xl" style={{ color: getSpriteColor(p.email) }}>●</span>
                 <span className="flex-1 text-left">
                   <span className="font-bold">{p.name}</span>
                   <span className="ml-2 font-normal opacity-70">

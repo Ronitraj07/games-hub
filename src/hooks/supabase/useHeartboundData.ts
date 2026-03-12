@@ -22,23 +22,34 @@ function toIslandId(val: unknown): IslandId | null {
 export function useHeartboundData(myEmail: string, partnerEmail: string) {
   const coupleKey = makeCoupleKey(myEmail, partnerEmail);
 
-  // ── Avatar ────────────────────────────────────────────────────────
+  // ── Avatar (uses player_profiles table) ───────────────────────────
   const saveAvatarUrl = useCallback(async (url: string) => {
     const { error } = await supabase
-      .from('profiles')
-      .upsert({ email: myEmail, avatar_url: url, avatar_updated_at: new Date().toISOString() });
+      .from('player_profiles')
+      .upsert({
+        email:             myEmail,
+        avatar_url:        url,
+        avatar_updated_at: new Date().toISOString(),
+      });
     if (error) console.error('saveAvatarUrl:', error);
     return !error;
   }, [myEmail]);
 
   const getAvatarUrl = useCallback(async (email: string): Promise<string | null> => {
     const { data } = await supabase
-      .from('profiles')
+      .from('player_profiles')
       .select('avatar_url')
       .eq('email', email)
       .single();
     return (data as any)?.avatar_url ?? null;
   }, []);
+
+  const saveDisplayName = useCallback(async (name: string) => {
+    const { error } = await supabase
+      .from('player_profiles')
+      .upsert({ email: myEmail, display_name: name });
+    if (error) console.error('saveDisplayName:', error);
+  }, [myEmail]);
 
   // ── Couple progress ───────────────────────────────────────────────
   const getCoupleProgress = useCallback(async (): Promise<CoupleProgress | null> => {
@@ -61,7 +72,7 @@ export function useHeartboundData(myEmail: string, partnerEmail: string) {
   const updateBondXp = useCallback(async (deltaXp: number) => {
     const { error } = await supabase.rpc('increment_bond_xp', {
       p_couple_key: coupleKey,
-      p_delta: deltaXp,
+      p_delta:      deltaXp,
     });
     if (error) console.error('updateBondXp:', error);
   }, [coupleKey]);
@@ -87,7 +98,6 @@ export function useHeartboundData(myEmail: string, partnerEmail: string) {
       .from('rpg_inventory')
       .select('*')
       .eq('user_email', myEmail);
-
     return (data ?? []).map((r: any): InventoryItem => ({
       id:          r.item_id,
       name:        r.item_name,
@@ -97,7 +107,6 @@ export function useHeartboundData(myEmail: string, partnerEmail: string) {
       icon:        '',
       stackable:   true,
       maxStack:    99,
-      // Use toIslandId so only valid 1–12 values pass through
       islandSrc:   toIslandId(r.island_src),
       quantity:    r.quantity,
       obtainedAt:  r.obtained_at,
@@ -183,7 +192,7 @@ export function useHeartboundData(myEmail: string, partnerEmail: string) {
   }, [coupleKey]);
 
   return {
-    saveAvatarUrl, getAvatarUrl,
+    saveAvatarUrl, getAvatarUrl, saveDisplayName,
     getCoupleProgress, updateBondXp,
     addItem, getInventory,
     getHomeFurniture, placeFurniture, removeFurniture,
