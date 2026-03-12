@@ -972,18 +972,11 @@ export const MeadowHaven3D: React.FC<Props> = ({myColor,onBack,bondXP,onCollect,
   },[requestFS]);
 
   // ── FIX: Escape key handling ────────────────────────────────────
-  // The browser ALWAYS exits fullscreen when Escape is pressed — JS
-  // cannot block it. Strategy:
-  //   1. On keydown(Escape), set escPressedRef = true and open menu.
-  //   2. On fullscreenchange, if escPressedRef is true we know the
-  //      browser exited FS because of Escape — immediately re-enter
-  //      fullscreen so the game stays immersive.
   useEffect(()=>{
     const onFSChange = () => {
       const isNowFullscreen = !!document.fullscreenElement;
       setIsFullscreen(isNowFullscreen);
       if (!isNowFullscreen && escPressedRef.current) {
-        // Re-enter fullscreen after the browser forcefully exited it
         escPressedRef.current = false;
         requestFS();
       }
@@ -991,6 +984,16 @@ export const MeadowHaven3D: React.FC<Props> = ({myColor,onBack,bondXP,onCollect,
     document.addEventListener('fullscreenchange', onFSChange);
     return () => document.removeEventListener('fullscreenchange', onFSChange);
   },[requestFS]);
+
+  // ── MOVED UP: openDialogue / closeDialogue must be declared BEFORE
+  //    the keyboard useEffect that references them ──────────────────
+  const openDialogue = useCallback((npc:NPC)=>{
+    const idx=npcLineIdx.current[npc.id]??0;
+    npcLineIdx.current[npc.id]=(idx+1)%npc.lines.length;
+    setDialogue({npc,lineIdx:idx});
+    if(!talkedToRef.current.has(npc.id)){talkedToRef.current.add(npc.id);onBondXP?.(npc.xpReward);}
+  },[onBondXP]);
+  const closeDialogue = useCallback(()=>setDialogue(null),[]);
 
   // ── Keyboard handler ───────────────────────────────────────────
   useEffect(()=>{
@@ -1000,10 +1003,9 @@ export const MeadowHaven3D: React.FC<Props> = ({myColor,onBack,bondXP,onCollect,
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        // Flag that Escape was pressed so fullscreenchange knows to re-enter FS
         escPressedRef.current = true;
         if (dialogueRef.current) {
-          escPressedRef.current = false; // dialogue close doesn't need FS re-enter
+          escPressedRef.current = false;
           closeDialogue();
         } else {
           setMenuOpen(p => !p);
@@ -1026,7 +1028,6 @@ export const MeadowHaven3D: React.FC<Props> = ({myColor,onBack,bondXP,onCollect,
     };
     const up   = (e:KeyboardEvent) => keysRef.current.delete(e.key);
     const blur = () => keysRef.current.clear();
-    // capture:true so we get the event before React's synthetic system
     document.addEventListener('keydown', down, true);
     document.addEventListener('keyup',   up);
     window.addEventListener  ('blur',    blur);
@@ -1037,13 +1038,6 @@ export const MeadowHaven3D: React.FC<Props> = ({myColor,onBack,bondXP,onCollect,
     };
   },[avatarConfig,closeDialogue,openDialogue,toggleFullscreen]);
 
-  const openDialogue = useCallback((npc:NPC)=>{
-    const idx=npcLineIdx.current[npc.id]??0;
-    npcLineIdx.current[npc.id]=(idx+1)%npc.lines.length;
-    setDialogue({npc,lineIdx:idx});
-    if(!talkedToRef.current.has(npc.id)){talkedToRef.current.add(npc.id);onBondXP?.(npc.xpReward);}
-  },[onBondXP]);
-  const closeDialogue = useCallback(()=>setDialogue(null),[]);
   const handleCollect = useCallback((count:number)=>{setFlowerCount(count);onCollect(count);},[onCollect]);
 
   // ── Exit game: close FS + call onBack ─────────────────────────
