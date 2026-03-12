@@ -6,10 +6,13 @@
  *   heartbound/meadow-haven/players/<base64email>
  *
  * Also subscribes to all other players in the world and exposes
- * an `onlinePlayers` list so the hub page can show who’s currently in.
+ * an `onlinePlayers` list so the hub page can show who's currently in.
+ *
+ * FIX: onPlayersUpdate is now stored in a ref so the subscription never
+ * captures a stale closure, without needing to re-subscribe on every render.
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { ref, set, onValue, off, remove, serverTimestamp } from 'firebase/database';
+import { ref, set, onValue, off } from 'firebase/database';
 import { database } from '@/lib/firebase';
 
 export interface PlayerState {
@@ -44,6 +47,10 @@ export const useHeartboundSync = (
   const publishThrottle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const myPath = myEmail ? `${WORLD_PATH}/${encodeEmail(myEmail)}` : null;
 
+  // Keep callback in a ref so the Firebase subscription never goes stale
+  const onPlayersUpdateRef = useRef(onPlayersUpdate);
+  useEffect(() => { onPlayersUpdateRef.current = onPlayersUpdate; });
+
   // Push my position (throttled ~20fps)
   const publish = useCallback((
     state: Omit<PlayerState, 'email' | 'name' | 'spriteColor' | 'online' | 'updatedAt'>
@@ -72,7 +79,7 @@ export const useHeartboundSync = (
     } satisfies PlayerState);
   }, [myPath, myEmail, myName, spriteColor]);
 
-  // Mark self as offline (stays in DB so hub can show “offline”)
+  // Mark self as offline (stays in DB so hub can show "offline")
   const markOffline = useCallback(() => {
     if (!myPath || !isFirebaseOk()) return;
     set(ref(database, myPath), {
@@ -82,15 +89,15 @@ export const useHeartboundSync = (
     } satisfies PlayerState);
   }, [myPath, myEmail, myName, spriteColor]);
 
-  // Subscribe to all players in the world
+  // Subscribe to all players — callback read from ref to avoid stale closures
   useEffect(() => {
     if (!isFirebaseOk() || !myEmail) return;
     const worldRef = ref(database, WORLD_PATH);
     onValue(worldRef, snap => {
-      onPlayersUpdate((snap.val() ?? {}) as Record<string, PlayerState>);
+      onPlayersUpdateRef.current((snap.val() ?? {}) as Record<string, PlayerState>);
     });
     return () => { off(worldRef); };
-  }, [myEmail]);
+  }, [myEmail]); // intentionally only myEmail — callback is always fresh via ref
 
   // Mark offline on unmount (exit game)
   useEffect(() => {
@@ -102,7 +109,7 @@ export const useHeartboundSync = (
 
 // ──────────────────────────────────────────────────────────────────
 // Lightweight presence-only hook used by the hub page to show
-// who’s currently online before entering
+// who's currently online before entering
 // ──────────────────────────────────────────────────────────────────
 export const useHeartboundPresence = () => {
   const [players, setPlayers] = useState<PlayerState[]>([]);
