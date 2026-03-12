@@ -1,26 +1,32 @@
 /**
- * SkyKidCharacter
+ * SkyKidCharacter — Procedural Sky-style character
  * ─────────────────────────────────────────────────────────────────
- * Loads /public/models/skykid.glb and renders it in-scene.
+ * Fully procedural — no GLB required.
+ * Built from Three.js primitives with MeshToonMaterial for the
+ * soft cel-shaded look of Sky: Children of the Light.
  *
- * Fix 2 (2026-03-12):
- *   The old useEffect([cloned, config]) fired before the GLB was
- *   actually rendered into the scene (Suspense boundary), so the
- *   first tint was lost.  On subsequent config changes React's
- *   object-reference comparison for `config` was unreliable.
+ * Shape breakdown:
+ *   • Head       — SphereGeometry, slightly oval
+ *   • Hood/hat   — ConeGeometry with soft tip, drapes over head
+ *   • Mask       — thin EllipsoidCurve flattened onto face
+ *   • Hair wisps — small swept CylinderGeometry strands
+ *   • Body/robe  — CylinderGeometry tapered wide at hem
+ *   • Cape       — separate group, LatheGeometry-like fan shape,
+ *                   sways with sine wave
+ *   • Arms       — CapsuleGeometry, thin, slightly angled
+ *   • Hands      — small SphereGeometry
+ *   • Legs       — thin CapsuleGeometry, hidden under robe
  *
- *   New approach: track a `tintDirty` ref.  Set it true whenever
- *   any colour field changes (compared by value, not reference).
- *   In useFrame, if dirty, traverse the cloned scene and apply
- *   colours, then clear the flag.  This guarantees tinting happens
- *   after the mesh is on-screen and re-applies on every real change.
+ * Animations:
+ *   • Idle  — gentle body sway, cape flutter, head tilt
+ *   • Walk  — arm swing, leg swing, body bob, cape billow
  */
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF, Billboard, Text } from '@react-three/drei';
+import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
-// ── Config type ───────────────────────────────────────────────────
+// ── Config ───────────────────────────────────────────────────────────
 export interface SkyKidConfig {
   outfitColor:  string;
   capeColor:    string;
@@ -54,28 +60,60 @@ interface SkyKidCharacterProps {
   facingAngle?: number;
 }
 
-// Keyword lists for mesh-name matching
-const OUTFIT_KW = ['body','robe','cloth','torso','shirt','dress','outfit','coat','jacket'];
-const CAPE_KW   = ['cape','cloak','back','mantle','scarf'];
-const HAIR_KW   = ['hair','braid','ponytail','strand'];
-const SKIN_KW   = ['skin','face','head','hand','arm','leg','neck'];
-const ACCENT_KW = ['belt','trim','clasp','badge','buckle','collar','accent'];
+// ── Toon gradient texture (3-step) ─────────────────────────────────────
+function makeToonGradient(): THREE.DataTexture {
+  const data = new Uint8Array([40, 40, 40, 255, 160, 160, 160, 255, 255, 255, 255, 255]);
+  const tex  = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  return tex;
+}
+const TOON_GRADIENT = makeToonGradient();
 
-function matchesKw(name: string, kws: string[]): boolean {
-  const n = name.toLowerCase();
-  return kws.some(k => n.includes(k));
+// ── Material factory ───────────────────────────────────────────────────
+function toon(color: string, opts?: { transparent?: boolean; opacity?: number; side?: THREE.Side }): THREE.MeshToonMaterial {
+  return new THREE.MeshToonMaterial({
+    color:       new THREE.Color(color),
+    gradientMap: TOON_GRADIENT,
+    transparent: opts?.transparent ?? false,
+    opacity:     opts?.opacity     ?? 1.0,
+    side:        opts?.side        ?? THREE.FrontSide,
+  });
 }
 
-function applyColorToMat(mat: THREE.Material, color: string) {
-  const m = mat as THREE.MeshStandardMaterial;
-  if (m.color) { m.color.set(color); m.needsUpdate = true; }
+// ── Cape geometry (fan of quads, flows behind) ────────────────────────
+function makeCapeGeometry(): THREE.BufferGeometry {
+  // A simple quad that's wide at the bottom and narrow at the top,
+  // giving a flowing cape silhouette.
+  const w = 0.72, h = 0.80;
+  const verts = new Float32Array([
+    // top (attached at neck, narrow)
+    -0.18, 0,  0.01,
+     0.18, 0,  0.01,
+    // bottom (wide hem, slight billow)
+    -w * 0.5,  -h,  -0.10,
+    -w * 0.15, -h,  -0.18,
+     0,        -h,  -0.20,
+     w * 0.15, -h,  -0.18,
+     w * 0.5,  -h,  -0.10,
+  ]);
+  // Build triangles (fan)
+  const idx = new Uint16Array([
+    0,2,3,  0,3,1,
+    0,3,4,  0,4,1,
+    0,4,5,  0,5,1,
+    0,5,6,  0,6,1,
+  ]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  geo.computeVertexNormals();
+  return geo;
 }
 
-function tintMesh(mesh: THREE.Mesh, color: string) {
-  if (Array.isArray(mesh.material)) mesh.material.forEach(m => applyColorToMat(m, color));
-  else applyColorToMat(mesh.material as THREE.Material, color);
-}
+// ── Hood geometry (soft cone draped over head) ──────────────────────
+const CAPE_GEO = makeCapeGeometry();
 
+// ── Main component ───────────────────────────────────────────────────
 export function SkyKidCharacter({
   config,
   name,
@@ -85,107 +123,43 @@ export function SkyKidCharacter({
   movingRef,
   facingRef,
   staticPos,
-  moving = false,
+  moving    = false,
   facingAngle = 0,
 }: SkyKidCharacterProps) {
-  const rootRef = useRef<THREE.Group>(null!);
-  const movRef  = useRef(moving);
-  const angRef  = useRef(facingAngle);
+  // ── Refs ──────────────────────────────────────────────────────
+  const rootRef  = useRef<THREE.Group>(null!);
+  const bodyRef  = useRef<THREE.Group>(null!);
+  const capeRef  = useRef<THREE.Mesh>(null!);
+  const headRef  = useRef<THREE.Group>(null!);
+  const lArmRef  = useRef<THREE.Group>(null!);
+  const rArmRef  = useRef<THREE.Group>(null!);
+  const lLegRef  = useRef<THREE.Group>(null!);
+  const rLegRef  = useRef<THREE.Group>(null!);
+
+  const movRef = useRef(moving);
+  const angRef = useRef(facingAngle);
   movRef.current = moving;
   angRef.current = facingAngle;
 
-  // ── Load GLB ─────────────────────────────────────────────────────
-  const { scene } = useGLTF('/models/skykid.glb');
+  // ── Materials (re-created when config changes) ──────────────────────
+  const mats = useMemo(() => ({
+    skin:   toon(config.skinTone),
+    outfit: toon(config.outfitColor),
+    cape:   toon(config.capeColor, { side: THREE.DoubleSide }),
+    hair:   toon(config.hairColor),
+    accent: toon(config.accentColor),
+    mask:   toon('#e8d5c4', { transparent: true, opacity: 0.92 }),
+    white:  toon('#f5f0ea'),
+    dark:   toon('#1a0a00'),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [config.skinTone, config.outfitColor, config.capeColor, config.hairColor, config.accentColor]);
 
-  // ── Clone (deep-clone materials for per-instance tinting) ────────
-  const cloned = useMemo(() => {
-    const c = scene.clone(true);
-    c.traverse(obj => {
-      if ((obj as THREE.Mesh).isMesh) {
-        const mesh = obj as THREE.Mesh;
-        if (Array.isArray(mesh.material)) {
-          mesh.material = mesh.material.map(m => m.clone());
-        } else if (mesh.material) {
-          mesh.material = (mesh.material as THREE.Material).clone();
-        }
-        mesh.castShadow    = true;
-        mesh.receiveShadow = true;
-      }
-    });
-    return c;
-  }, [scene]);
-
-  // ── Dirty-flag tinting ───────────────────────────────────────────
-  // Start dirty so the first frame always applies colours.
-  const tintDirty  = useRef(true);
-  const prevConfig = useRef<SkyKidConfig>({ ...DEFAULT_SKYKID_CONFIG });
-
-  // Watch each colour value individually — object reference changes
-  // every render but we only want to re-tint when a value actually
-  // changes.
-  useEffect(() => {
-    const p = prevConfig.current;
-    if (
-      p.outfitColor !== config.outfitColor ||
-      p.capeColor   !== config.capeColor   ||
-      p.hairColor   !== config.hairColor   ||
-      p.accentColor !== config.accentColor ||
-      p.skinTone    !== config.skinTone
-    ) {
-      tintDirty.current  = true;
-      prevConfig.current = { ...config };
-    }
-  });
-
-  // Also mark dirty whenever the cloned scene is replaced (GLB reload)
-  useEffect(() => { tintDirty.current = true; }, [cloned]);
-
-  // ── Bone refs ────────────────────────────────────────────────────
-  const bones = useRef<{
-    root?:  THREE.Bone; spine?: THREE.Bone;
-    lArm?:  THREE.Bone; rArm?:  THREE.Bone;
-    lLeg?:  THREE.Bone; rLeg?:  THREE.Bone;
-    head?:  THREE.Bone; lFoot?: THREE.Bone; rFoot?: THREE.Bone;
-  }>({});
-
-  useEffect(() => {
-    const b = bones.current;
-    cloned.traverse(obj => {
-      if (!(obj instanceof THREE.Bone)) return;
-      const n = obj.name.toLowerCase();
-      if      (n.includes('hips') || n.includes('root') || n.includes('pelvis'))                                                           b.root  = obj;
-      else if (n.includes('spine') || n.includes('chest'))                                                                                 b.spine = obj;
-      else if ((n.includes('left')  || n.includes('_l')) && n.includes('arm') && !n.includes('fore') && !n.includes('lower'))             b.lArm  = obj;
-      else if ((n.includes('right') || n.includes('_r')) && n.includes('arm') && !n.includes('fore') && !n.includes('lower'))             b.rArm  = obj;
-      else if ((n.includes('left')  || n.includes('_l')) && (n.includes('leg') || n.includes('thigh') || n.includes('upleg')))            b.lLeg  = obj;
-      else if ((n.includes('right') || n.includes('_r')) && (n.includes('leg') || n.includes('thigh') || n.includes('upleg')))            b.rLeg  = obj;
-      else if (n.includes('head'))                                                                                                         b.head  = obj;
-      else if ((n.includes('left')  || n.includes('_l')) && n.includes('foot'))                                                           b.lFoot = obj;
-      else if ((n.includes('right') || n.includes('_r')) && n.includes('foot'))                                                           b.rFoot = obj;
-    });
-  }, [cloned]);
-
-  // ── Per-frame: tint + position + animation ───────────────────────
+  // ── Animation ─────────────────────────────────────────────────────
   useFrame(({ clock }) => {
     if (!rootRef.current) return;
     const t = clock.elapsedTime;
 
-    // ── Apply tints if dirty (after GLB loaded / config changed) ──
-    if (tintDirty.current) {
-      cloned.traverse(obj => {
-        if (!(obj as THREE.Mesh).isMesh) return;
-        const mesh = obj as THREE.Mesh;
-        const n    = mesh.name;
-        if      (matchesKw(n, CAPE_KW))   tintMesh(mesh, config.capeColor);
-        else if (matchesKw(n, HAIR_KW))   tintMesh(mesh, config.hairColor);
-        else if (matchesKw(n, ACCENT_KW)) tintMesh(mesh, config.accentColor);
-        else if (matchesKw(n, SKIN_KW))   tintMesh(mesh, config.skinTone);
-        else if (matchesKw(n, OUTFIT_KW)) tintMesh(mesh, config.outfitColor);
-      });
-      tintDirty.current = false;
-    }
-
-    // ── Position ──────────────────────────────────────────────────
+    // Position
     if (posRef && terrainFn) {
       const p = posRef.current;
       rootRef.current.position.set(p.x, terrainFn(p.x, p.z), p.z);
@@ -193,61 +167,185 @@ export function SkyKidCharacter({
       rootRef.current.position.set(staticPos[0], staticPos[1], staticPos[2]);
     }
 
-    // ── Scale ─────────────────────────────────────────────────────
+    // Scale
     rootRef.current.scale.setScalar(config.height ?? 1.0);
 
-    // ── Facing ────────────────────────────────────────────────────
+    // Facing
     const targetAng = posRef ? (facingRef?.current ?? 0) : angRef.current;
-    const cur = rootRef.current.rotation.y;
-    rootRef.current.rotation.y = cur + (targetAng - cur) * 0.15;
+    rootRef.current.rotation.y += (targetAng - rootRef.current.rotation.y) * 0.15;
 
-    // ── Procedural animation ──────────────────────────────────────
     const isMoving = movingRef ? movingRef.current : movRef.current;
-    const b = bones.current;
 
     if (isMoving) {
-      const freq  = 2.8;
-      const swing = 0.38;
-      const legSw = 0.50;
-      if (b.root)  b.root.position.y  = Math.abs(Math.sin(t * freq)) * 0.04;
-      if (b.spine) b.spine.rotation.z = Math.sin(t * freq) * 0.06;
-      if (b.lArm)  b.lArm.rotation.x  =  Math.sin(t * freq) * swing;
-      if (b.rArm)  b.rArm.rotation.x  = -Math.sin(t * freq) * swing;
-      if (b.lLeg)  b.lLeg.rotation.x  = -Math.sin(t * freq) * legSw;
-      if (b.rLeg)  b.rLeg.rotation.x  =  Math.sin(t * freq) * legSw;
-      if (b.lFoot) b.lFoot.rotation.x =  Math.sin(t * freq + 0.4) * 0.2;
-      if (b.rFoot) b.rFoot.rotation.x = -Math.sin(t * freq + 0.4) * 0.2;
-      if (b.head)  b.head.rotation.x  = -0.04;
+      // Walk cycle
+      const freq = 2.6;
+      if (bodyRef.current)  bodyRef.current.position.y  = Math.abs(Math.sin(t * freq)) * 0.03;
+      if (bodyRef.current)  bodyRef.current.rotation.z  = Math.sin(t * freq) * 0.04;
+      if (headRef.current)  headRef.current.rotation.x  = Math.sin(t * freq * 0.5) * 0.04;
+      if (lArmRef.current)  lArmRef.current.rotation.x  =  Math.sin(t * freq) * 0.5;
+      if (rArmRef.current)  rArmRef.current.rotation.x  = -Math.sin(t * freq) * 0.5;
+      if (lLegRef.current)  lLegRef.current.rotation.x  = -Math.sin(t * freq) * 0.55;
+      if (rLegRef.current)  rLegRef.current.rotation.x  =  Math.sin(t * freq) * 0.55;
+      // Cape billows out when walking
+      if (capeRef.current)  capeRef.current.rotation.x  = 0.25 + Math.sin(t * freq * 0.5) * 0.12;
     } else {
-      const s = 0.06;
-      if (b.spine) b.spine.rotation.x =  Math.sin(t * 0.8) * s;
-      if (b.spine) b.spine.rotation.z =  Math.sin(t * 0.55) * 0.022;
-      if (b.lArm)  b.lArm.rotation.z  = -0.12 + Math.sin(t * 0.9 + 0.5) * 0.04;
-      if (b.rArm)  b.rArm.rotation.z  =  0.12 - Math.sin(t * 0.9 + 0.5) * 0.04;
-      if (b.head)  b.head.rotation.y  =  Math.sin(t * 0.45) * 0.06;
-      if (b.head)  b.head.rotation.x  =  Math.sin(t * 0.6)  * 0.03;
-      if (b.lLeg)  b.lLeg.rotation.x  += (0 - b.lLeg.rotation.x)  * 0.12;
-      if (b.rLeg)  b.rLeg.rotation.x  += (0 - b.rLeg.rotation.x)  * 0.12;
-      if (b.lFoot) b.lFoot.rotation.x += (0 - b.lFoot.rotation.x) * 0.12;
-      if (b.rFoot) b.rFoot.rotation.x += (0 - b.rFoot.rotation.x) * 0.12;
-      if (b.root)  b.root.position.y  += (0 - b.root.position.y)  * 0.10;
+      // Idle sway
+      if (bodyRef.current)  bodyRef.current.rotation.z  = Math.sin(t * 0.6) * 0.025;
+      if (bodyRef.current)  bodyRef.current.position.y  = Math.sin(t * 0.9) * 0.012;
+      if (headRef.current)  headRef.current.rotation.y  = Math.sin(t * 0.45) * 0.07;
+      if (headRef.current)  headRef.current.rotation.x  = Math.sin(t * 0.6)  * 0.03;
+      if (lArmRef.current)  lArmRef.current.rotation.z  = -0.15 + Math.sin(t * 0.8 + 0.5) * 0.05;
+      if (rArmRef.current)  rArmRef.current.rotation.z  =  0.15 - Math.sin(t * 0.8 + 0.5) * 0.05;
+      // Return legs to rest
+      if (lLegRef.current)  lLegRef.current.rotation.x  += (0 - lLegRef.current.rotation.x) * 0.12;
+      if (rLegRef.current)  rLegRef.current.rotation.x  += (0 - rLegRef.current.rotation.x) * 0.12;
+      // Cape gentle flutter
+      if (capeRef.current)  capeRef.current.rotation.x  = 0.08 + Math.sin(t * 1.1) * 0.06;
     }
   });
 
+  // ── Render ─────────────────────────────────────────────────────────
   return (
     <group ref={rootRef}>
+
       {/* Ground shadow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-        <circleGeometry args={[0.36, 20]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.18} depthWrite={false} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <circleGeometry args={[0.32, 24]} />
+        <meshBasicMaterial color="#000" transparent opacity={0.18} depthWrite={false} />
       </mesh>
 
-      {/* Sky kid mesh */}
-      <primitive object={cloned} />
+      {/* Body group — everything except cape attached here */}
+      <group ref={bodyRef} position={[0, 0, 0]}>
+
+        {/* ── Legs (mostly hidden under robe) ── */}
+        <group ref={lLegRef} position={[-0.10, 0.22, 0]}>
+          <mesh material={mats.skin}>
+            <capsuleGeometry args={[0.055, 0.28, 4, 8]} />
+          </mesh>
+        </group>
+        <group ref={rLegRef} position={[0.10, 0.22, 0]}>
+          <mesh material={mats.skin}>
+            <capsuleGeometry args={[0.055, 0.28, 4, 8]} />
+          </mesh>
+        </group>
+
+        {/* ── Robe / body ── */}
+        {/* Lower skirt — wide cone */}
+        <mesh position={[0, 0.36, 0]} material={mats.outfit}>
+          <cylinderGeometry args={[0.22, 0.44, 0.52, 14, 1]} />
+        </mesh>
+        {/* Upper torso */}
+        <mesh position={[0, 0.72, 0]} material={mats.outfit}>
+          <cylinderGeometry args={[0.17, 0.22, 0.36, 12, 1]} />
+        </mesh>
+        {/* Belt / accent trim */}
+        <mesh position={[0, 0.58, 0]} material={mats.accent}>
+          <cylinderGeometry args={[0.225, 0.225, 0.045, 12]} />
+        </mesh>
+        {/* Small collar */}
+        <mesh position={[0, 0.88, 0]} material={mats.white}>
+          <cylinderGeometry args={[0.13, 0.17, 0.07, 10]} />
+        </mesh>
+
+        {/* ── Cape (attached at neck, billows behind) ── */}
+        <mesh
+          ref={capeRef}
+          geometry={CAPE_GEO}
+          material={mats.cape}
+          position={[0, 0.88, 0.06]}
+          rotation={[0.08, 0, 0]}
+        />
+
+        {/* ── Arms ── */}
+        <group ref={lArmRef} position={[-0.22, 0.76, 0]}>
+          {/* Upper arm */}
+          <mesh material={mats.outfit} rotation={[0, 0, 0.25]}>
+            <capsuleGeometry args={[0.055, 0.22, 4, 8]} />
+          </mesh>
+          {/* Forearm */}
+          <mesh position={[-0.05, -0.22, 0]} material={mats.skin}>
+            <capsuleGeometry args={[0.045, 0.16, 4, 8]} />
+          </mesh>
+          {/* Hand */}
+          <mesh position={[-0.07, -0.35, 0]} material={mats.skin}>
+            <sphereGeometry args={[0.055, 8, 6]} />
+          </mesh>
+        </group>
+
+        <group ref={rArmRef} position={[0.22, 0.76, 0]}>
+          <mesh material={mats.outfit} rotation={[0, 0, -0.25]}>
+            <capsuleGeometry args={[0.055, 0.22, 4, 8]} />
+          </mesh>
+          <mesh position={[0.05, -0.22, 0]} material={mats.skin}>
+            <capsuleGeometry args={[0.045, 0.16, 4, 8]} />
+          </mesh>
+          <mesh position={[0.07, -0.35, 0]} material={mats.skin}>
+            <sphereGeometry args={[0.055, 8, 6]} />
+          </mesh>
+        </group>
+
+        {/* ── Head group ── */}
+        <group ref={headRef} position={[0, 1.08, 0]}>
+
+          {/* Head (slightly oval) */}
+          <mesh material={mats.skin} scale={[1, 1.08, 0.95]}>
+            <sphereGeometry args={[0.175, 16, 14]} />
+          </mesh>
+
+          {/* Sky mask — the signature oval face mask */}
+          <mesh position={[0, 0.02, 0.14]} material={mats.mask} scale={[1, 0.7, 0.18]}>
+            <sphereGeometry args={[0.17, 12, 8]} />
+          </mesh>
+
+          {/* Eye glints on mask */}
+          <mesh position={[-0.055, 0.03, 0.175]} material={mats.dark}>
+            <sphereGeometry args={[0.022, 6, 5]} />
+          </mesh>
+          <mesh position={[0.055, 0.03, 0.175]} material={mats.dark}>
+            <sphereGeometry args={[0.022, 6, 5]} />
+          </mesh>
+          {/* Eye shine */}
+          <mesh position={[-0.048, 0.038, 0.182]} material={mats.white}>
+            <sphereGeometry args={[0.009, 4, 4]} />
+          </mesh>
+          <mesh position={[0.062, 0.038, 0.182]} material={mats.white}>
+            <sphereGeometry args={[0.009, 4, 4]} />
+          </mesh>
+
+          {/* Hair wisps — a few swept strands */}
+          <mesh position={[-0.10, 0.12, -0.08]} rotation={[0.3, 0.4, -0.5]} material={mats.hair}>
+            <capsuleGeometry args={[0.022, 0.14, 3, 6]} />
+          </mesh>
+          <mesh position={[0.10, 0.10, -0.09]} rotation={[0.2, -0.3, 0.5]} material={mats.hair}>
+            <capsuleGeometry args={[0.020, 0.12, 3, 6]} />
+          </mesh>
+          <mesh position={[0.02, 0.16, -0.10]} rotation={[0.4, 0.1, 0.1]} material={mats.hair}>
+            <capsuleGeometry args={[0.018, 0.10, 3, 6]} />
+          </mesh>
+
+          {/* Hood — soft pointed cone draped over head */}
+          {/* Hood base (draped over) */}
+          <mesh position={[0, 0.09, -0.04]} material={mats.outfit} scale={[1, 1, 0.82]}>
+            <sphereGeometry args={[0.195, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+          </mesh>
+          {/* Hood tip / point */}
+          <mesh position={[0, 0.32, -0.05]} rotation={[0.22, 0, 0]} material={mats.outfit}>
+            <coneGeometry args={[0.115, 0.38, 10]} />
+          </mesh>
+          {/* Hood accent ring */}
+          <mesh position={[0, 0.09, -0.01]} material={mats.accent} scale={[1, 0.25, 0.85]}>
+            <torusGeometry args={[0.185, 0.018, 6, 16]} />
+          </mesh>
+
+        </group>
+        {/* end headRef */}
+
+      </group>
+      {/* end bodyRef */}
 
       {/* Name label */}
       {name !== '' && (
-        <Billboard position={[0, 2.2, 0]}>
+        <Billboard position={[0, 2.0, 0]}>
           <Text
             fontSize={0.22}
             color={isMe ? config.outfitColor : 'white'}
@@ -264,12 +362,11 @@ export function SkyKidCharacter({
       {/* Selection ring */}
       {isMe && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.009, 0]}>
-          <ringGeometry args={[0.40, 0.52, 32]} />
+          <ringGeometry args={[0.36, 0.48, 32]} />
           <meshBasicMaterial color={config.outfitColor} transparent opacity={0.65} />
         </mesh>
       )}
+
     </group>
   );
 }
-
-useGLTF.preload('/models/skykid.glb');
