@@ -8,6 +8,14 @@
  *   • RemoteAvatar uses SkyKidCharacter with outfit colour from Firebase
  *   • CharacterCustomizer updated import references
  *   • All other systems (terrain, NPCs, pond, forest…) unchanged
+ *
+ * Fix 1 (2026-03-12):
+ *   • loadAvatarConfig returns AvatarConfigV2 — the capeColor / hairColor
+ *     fields it doesn't know about were always undefined, making
+ *     hasCustomised always false → game never started.
+ *   • Solution: always enter game with the bridged config; only show
+ *     the customiser on first-ever visit (no Supabase row) OR when
+ *     the user explicitly opens it from the menu.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -15,7 +23,7 @@ import React, {
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Sky, Stars, Billboard, Text, Cylinder, Sphere, Box,
-  Cone, Environment, Points, PointMaterial, Cloud, Torus,
+  Cone, Environment, Points, PointMaterial, Cloud,
   OrbitControls,
 } from '@react-three/drei';
 import * as THREE from 'three';
@@ -31,7 +39,7 @@ import {
 import { CharacterCustomizer } from './character/CharacterCustomizer';
 import { loadAvatarConfig } from './character/avatarSync';
 
-// ── Constants ────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
 const CAM_DIST    = 12;
@@ -40,7 +48,7 @@ const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// ── Helpers ───────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -65,7 +73,7 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
   }, []);
 }
 
-// ── Terrain ───────────────────────────────────────────────────────────
+// ── Terrain ────────────────────────────────────────────────────────
 function terrainY(x: number, z: number): number {
   return (
     Math.sin(x * 0.28) * 1.2 +
@@ -76,26 +84,21 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── Remote avatar ────────────────────────────────────────────────────
+// ── Remote avatar ──────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
   const posRef = useRef(new THREE.Vector3(
-    player.x / 20 - 10, 0, player.y / 20 - 9
+    player.x / 20 - 10, 0, player.y / 20 - 9,
   ));
-
   useFrame(() => {
-    const tx = player.x / 20 - 10;
-    const tz = player.y / 20 - 9;
+    const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
     posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
   });
-
   if (!player.online) return null;
-
   const cfg: SkyKidConfig = {
     ...DEFAULT_SKYKID_CONFIG,
     outfitColor: player.spriteColor,
     capeColor:   player.spriteColor,
   };
-
   return (
     <SkyKidCharacter
       config={cfg}
@@ -107,7 +110,7 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
   );
 }
 
-// ── Terrain mesh ─────────────────────────────────────────────────────
+// ── Terrain mesh ───────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
   useEffect(() => {
@@ -154,7 +157,7 @@ function Terrain() {
   );
 }
 
-// ── Pond ───────────────────────────────────────────────────────────────
+// ── Pond ───────────────────────────────────────────────────────────
 function Pond() {
   const waterRef = useRef<THREE.Mesh>(null!), rippleRef = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
@@ -195,7 +198,7 @@ function Pond() {
   );
 }
 
-// ── Trees ──────────────────────────────────────────────────────────────
+// ── Trees ──────────────────────────────────────────────────────────
 const TREE_POSITIONS: [number, number, number, number][] = [
   [-14,-6,1.0,0],[-12,8,1.3,1],[-16,2,0.9,2],[13,-7,1.1,0],[14,5,1.4,1],[15,10,0.85,2],
   [-6,-14,1.0,0],[5,-15,1.2,1],[-10,-13,1.3,2],[7,14,0.9,0],[-5,15,1.1,1],[10,13,1.0,2],
@@ -224,7 +227,7 @@ function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; v
 }
 function Forest() { return <>{TREE_POSITIONS.map(([x, z, s, v], i) => <Tree key={i} x={x} z={z} scale={s} variant={v} />)}</>; }
 
-// ── Fireflies ──────────────────────────────────────────────────────────
+// ── Fireflies ──────────────────────────────────────────────────────
 function Fireflies() {
   const count = 32;
   const positions = useMemo(() => {
@@ -258,7 +261,7 @@ function Fireflies() {
   );
 }
 
-// ── Decorations ─────────────────────────────────────────────────────────
+// ── Decorations ────────────────────────────────────────────────────
 function Decorations() {
   return (
     <>
@@ -288,7 +291,7 @@ function Decorations() {
   );
 }
 
-// ── Flowers ─────────────────────────────────────────────────────────────
+// ── Flowers ────────────────────────────────────────────────────────
 const FLOWER_POS: [number,number][] = [ [-7,-5],[5,-7],[-4,6],[8,4],[-9,1],[9,-2],[2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],[4,6],[-5,-4],[7,-10],[-8,8] ];
 function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number]; collected:boolean; onCollect:()=>void; playerPos:React.MutableRefObject<THREE.Vector3> }) {
   const ref = useRef<THREE.Group>(null!), colRef = useRef(collected);
@@ -306,7 +309,7 @@ function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number];
   );
 }
 
-// ── Glow ring ──────────────────────────────────────────────────────────
+// ── Glow ring ──────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => { if (ref.current) (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3); });
@@ -317,7 +320,7 @@ function GlowRing({ color }: { color: string }) {
   );
 }
 
-// ── NPC ──────────────────────────────────────────────────────────────────
+// ── NPC ────────────────────────────────────────────────────────────
 function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC; playerPos:React.MutableRefObject<THREE.Vector3>; onNearby:(npc:NPC|null)=>void; isNearby:boolean; showPrompt:boolean }) {
   const groupRef = useRef<THREE.Group>(null!), wasNear = useRef(false);
   const wx = npc.tx - 12, wz = npc.ty - 9;
@@ -337,7 +340,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC
   );
 }
 
-// ── Lighting ────────────────────────────────────────────────────────────
+// ── Lighting ───────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
@@ -353,7 +356,7 @@ function Lighting() {
   );
 }
 
-// ── Camera ─────────────────────────────────────────────────────────────
+// ── Camera ─────────────────────────────────────────────────────────
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
@@ -363,7 +366,7 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement ────────────────────────────────────────────────────────────
+// ── Movement ───────────────────────────────────────────────────────
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef: React.MutableRefObject<Set<string>>;
   posRef: React.MutableRefObject<THREE.Vector3>;
@@ -395,7 +398,7 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   return null;
 }
 
-// ── Scene ────────────────────────────────────────────────────────────────
+// ── Scene ──────────────────────────────────────────────────────────
 function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
   myEmail: string; myName: string; avatarConfig: SkyKidConfig;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
@@ -450,7 +453,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* ── Local player — Phase 2: real Sky kid GLB ── */}
+      {/* ── Local player ── */}
       <SkyKidCharacter
         config={avatarConfig}
         name={myName}
@@ -476,7 +479,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
   );
 }
 
-// ── Dialogue ────────────────────────────────────────────────────────────
+// ── Dialogue ───────────────────────────────────────────────────────
 function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onClose: () => void }) {
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
@@ -500,7 +503,7 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   );
 }
 
-// ── Game menu ──────────────────────────────────────────────────────────
+// ── Game menu ──────────────────────────────────────────────────────
 function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange, onCustomize }: {
   bondXP: number; flowerCount: number;
   onClose: () => void; onExit: () => void;
@@ -550,7 +553,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                 {[
                   { icon:'🌸', label:'Flowers',   count: flowerCount, glow:'rgba(244,114,182,0.3)' },
                   { icon:'🍄', label:'Mushrooms', count: 0,           glow:'rgba(251,146,60,0.15)' },
-                  { icon:'📎', label:'Crystals',  count: 0,           glow:'rgba(99,102,241,0.15)' },
+                  { icon:'💎', label:'Crystals',  count: 0,           glow:'rgba(99,102,241,0.15)' },
                 ].map(it => (
                   <div key={it.label}
                     className={`rounded-2xl p-4 flex flex-col items-center gap-1.5 border transition ${it.count > 0 ? 'border-white/15' : 'border-white/5 opacity-40'}`}
@@ -661,7 +664,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
   );
 }
 
-// ── Virtual joystick ────────────────────────────────────────────────────
+// ── Virtual joystick ───────────────────────────────────────────────
 function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<string>> }) {
   return (
     <div className="absolute bottom-4 right-4 z-10"
@@ -684,7 +687,7 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
   );
 }
 
-// ── Root ─────────────────────────────────────────────────────────────────
+// ── Root ───────────────────────────────────────────────────────────
 interface Props {
   myColor: string; onBack: () => void;
   bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void;
@@ -697,30 +700,46 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const quality   = useQualityTier();
   const isTouch   = useIsTouchDevice();
 
-  // null = loading, false = show customiser, SkyKidConfig = in-game
-  const [avatarConfig, setAvatarConfig] = useState<SkyKidConfig | null | false>(null);
+  // null = loading  |  SkyKidConfig = ready to play
+  const [avatarConfig, setAvatarConfig]   = useState<SkyKidConfig | null>(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
 
-  // Load saved config from Supabase on mount
+  // ── Load saved config on mount ──────────────────────────────────
+  // Always bridge to SkyKidConfig and enter the game.
+  // The customiser is shown ONLY on first-ever visit (no Supabase row
+  // exists) OR when the user opens it from the in-game menu.
   useEffect(() => {
-    if (!myEmail) { setAvatarConfig(false); return; }
-    loadAvatarConfig(myEmail).then(cfg => {
-      const hasCustomised = cfg.outfitColor !== DEFAULT_SKYKID_CONFIG.outfitColor
-        || cfg.capeColor   !== DEFAULT_SKYKID_CONFIG.capeColor
-        || cfg.hairColor   !== DEFAULT_SKYKID_CONFIG.hairColor;
-      // Bridge AvatarConfigV2 → SkyKidConfig
-      const skyCfg: SkyKidConfig = {
-        outfitColor: cfg.outfitColor ?? DEFAULT_SKYKID_CONFIG.outfitColor,
-        capeColor:   (cfg as any).capeColor   ?? DEFAULT_SKYKID_CONFIG.capeColor,
-        hairColor:   (cfg as any).hairColor   ?? DEFAULT_SKYKID_CONFIG.hairColor,
-        accentColor: (cfg as any).accentColor ?? DEFAULT_SKYKID_CONFIG.accentColor,
-        skinTone:    (cfg as any).skinTone    ?? DEFAULT_SKYKID_CONFIG.skinTone,
-        height:      (cfg as any).height      ?? DEFAULT_SKYKID_CONFIG.height,
+    const fallback: SkyKidConfig = {
+      ...DEFAULT_SKYKID_CONFIG,
+      outfitColor: myColor ?? DEFAULT_SKYKID_CONFIG.outfitColor,
+    };
+    if (!myEmail) { setAvatarConfig(fallback); return; }
+
+    loadAvatarConfig(myEmail).then(raw => {
+      // raw is AvatarConfigV2 — bridge every field with safe fallbacks
+      const cfg: SkyKidConfig = {
+        outfitColor: (raw as any).outfitColor  ?? fallback.outfitColor,
+        capeColor:   (raw as any).capeColor    ?? fallback.capeColor,
+        hairColor:   (raw as any).hairColor    ?? fallback.hairColor,
+        accentColor: (raw as any).accentColor  ?? fallback.accentColor,
+        skinTone:    (raw as any).skinTone     ?? fallback.skinTone,
+        height:      (raw as any).height       ?? fallback.height,
       };
-      if (hasCustomised) setAvatarConfig(skyCfg);
-      else setAvatarConfig(false);
-    });
-  }, [myEmail]);
+
+      // First-ever visit: raw equals the bare default → show customiser once
+      const isFirstVisit = !raw || (
+        raw.outfitColor === DEFAULT_SKYKID_CONFIG.outfitColor &&
+        !(raw as any).capeColor &&
+        !(raw as any).hairColor
+      );
+      if (isFirstVisit) {
+        setShowCustomizer(true);
+        setAvatarConfig(cfg); // still set so we have a config ready
+      } else {
+        setAvatarConfig(cfg);
+      }
+    }).catch(() => setAvatarConfig(fallback));
+  }, [myEmail, myColor]);
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const posRef        = useRef(SPAWN.clone());
@@ -746,7 +765,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
   useEffect(() => { dialogueRef.current = dialogue; blockedRef.current = !!dialogue || menuOpenRef.current; }, [dialogue]);
   useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen; }, [menuOpen]);
-  useEffect(() => { if (avatarConfig) containerRef.current?.focus(); }, [avatarConfig]);
+  useEffect(() => { if (avatarConfig && !showCustomizer) containerRef.current?.focus(); }, [avatarConfig, showCustomizer]);
 
   const requestFS = useCallback(() => { containerRef.current?.requestFullscreen().catch(() => {}); }, []);
   const toggleFullscreen = useCallback(() => {
@@ -773,7 +792,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const closeDialogue = useCallback(() => setDialogue(null), []);
 
   useEffect(() => {
-    if (!avatarConfig) return;
+    if (!avatarConfig || showCustomizer) return;
     const down = (e: KeyboardEvent) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
       if (e.key === 'Escape') {
@@ -802,15 +821,15 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       document.removeEventListener('keyup',   up);
       window.removeEventListener('blur',      blur);
     };
-  }, [avatarConfig, closeDialogue, openDialogue, toggleFullscreen]);
+  }, [avatarConfig, showCustomizer, closeDialogue, openDialogue, toggleFullscreen]);
 
-  const handleCollect  = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
-  const handleExit     = useCallback(() => {
+  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
+  const handleExit    = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     onBack();
   }, [onBack]);
 
-  // ── Loading ─────────────────────────────────────────────────────────
+  // ── Loading ────────────────────────────────────────────────────
   if (avatarConfig === null) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -820,19 +839,19 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     );
   }
 
-  // ── Customiser ────────────────────────────────────────────────────────
-  if (avatarConfig === false || showCustomizer) {
+  // ── Customiser ─────────────────────────────────────────────────
+  if (showCustomizer) {
     return (
       <CharacterCustomizer
-        initial={typeof avatarConfig === 'object' ? avatarConfig : { outfitColor: myColor }}
+        initial={avatarConfig}
         userEmail={myEmail}
         onConfirm={cfg => { setAvatarConfig(cfg); setShowCustomizer(false); }}
-        onCancel={typeof avatarConfig === 'object' ? () => setShowCustomizer(false) : undefined}
+        onCancel={() => setShowCustomizer(false)}
       />
     );
   }
 
-  // ── In-game ──────────────────────────────────────────────────────────
+  // ── In-game ────────────────────────────────────────────────────
   return (
     <div
       ref={containerRef}
