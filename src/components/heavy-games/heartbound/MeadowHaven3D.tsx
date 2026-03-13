@@ -1,7 +1,7 @@
 /**
  * MeadowHaven3D — Phase 3 (VRM)
- * Local + remote players → VRMCharacter
- * Animations: procedural walk/idle via applyWalkPose inside VRMCharacter
+ * Camera: proper 3rd-person RPG — low angle, close, behind player
+ * Animation: arms fixed (normalized z-axis hang), natural walk cycle
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -20,11 +20,14 @@ import { VRMCharacter } from './character/VRMCharacter';
 
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
-const CAM_DIST    = 12;
-const CAM_HEIGHT  = 8;
-const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
+
+// ── Camera constants ── LOW & CLOSE = proper 3rd-person RPG feel
+const CAM_DIST   = 5.5;   // how far behind the player
+const CAM_HEIGHT = 2.8;   // how high above the player
+const CAM_LERP   = 0.08;  // smoothing
+const CAM_LOOK_Y = 1.0;   // look at player chest height
 
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
@@ -59,26 +62,20 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── Remote avatar now uses VRMCharacter too ───────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
   const posRef    = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
   const movingRef = useRef(player.moving);
-
   useFrame(() => {
     const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
     const prev = posRef.current.clone();
     posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
     movingRef.current = posRef.current.distanceTo(prev) > 0.001;
   });
-
   if (!player.online) return null;
-
   return (
     <VRMCharacter
-      email={player.email}
-      uid={player.email}
-      posRef={posRef}
-      movingRef={movingRef}
+      email={player.email} uid={player.email}
+      posRef={posRef} movingRef={movingRef}
       isLocalPlayer={false}
     />
   );
@@ -307,7 +304,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
 function Lighting() {
   return (
     <>
-      <ambientLight intensity={0.50} color="#fff0cc" />
+      <ambientLight intensity={0.55} color="#fff0cc" />
       <directionalLight position={[22,30,10]} intensity={2.2} color="#ffe488" castShadow
         shadow-mapSize={[2048,2048]} shadow-camera-far={110}
         shadow-camera-left={-35} shadow-camera-right={35}
@@ -319,11 +316,27 @@ function Lighting() {
   );
 }
 
-function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
+// ── 3rd-person RPG camera — low, close, behind player ──────────────────────────
+function CameraRig({ target, facingRef }: {
+  target: React.MutableRefObject<THREE.Vector3>;
+  facingRef: React.MutableRefObject<number>;
+}) {
   const { camera } = useThree();
+  const camPosRef  = useRef(new THREE.Vector3());
+
   useFrame(() => {
-    camera.position.lerp(new THREE.Vector3(target.current.x + CAM_DIST * 0.3, CAM_HEIGHT, target.current.z + CAM_DIST), CAM_LERP);
-    camera.lookAt(target.current.x, target.current.y + 0.8, target.current.z);
+    const p  = target.current;
+    const ty = p.y + CAM_LOOK_Y;
+
+    // Camera sits behind player based on their facing direction
+    const angle  = facingRef.current + Math.PI;  // behind = opposite of facing
+    const camX   = p.x + Math.sin(angle) * CAM_DIST;
+    const camZ   = p.z + Math.cos(angle) * CAM_DIST;
+    const camY   = p.y + CAM_HEIGHT;
+
+    camPosRef.current.set(camX, camY, camZ);
+    camera.position.lerp(camPosRef.current, CAM_LERP);
+    camera.lookAt(p.x, ty, p.z);
   });
   return null;
 }
@@ -397,7 +410,7 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
     <>
       <Lighting />
       <Environment preset="sunset" />
-      <fog attach="fog" args={['#b8d4c0', 48, 105]} />
+      <fog attach="fog" args={['#b8d4c0', 30, 80]} />
       <Sky sunPosition={[80,20,-40]} turbidity={4.2} rayleigh={1.1} mieCoefficient={0.006} mieDirectionalG={0.87} inclination={0.52} azimuth={0.18} />
       <Stars radius={85} depth={40} count={1000} factor={3} fade speed={0.3} />
       <Cloud position={[-18,14,-15]} speed={0.2} opacity={0.55} />
@@ -416,23 +429,18 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* ── LOCAL PLAYER ── */}
       <VRMCharacter
-        email={myEmail}
-        uid={myUid}
-        posRef={posRef}
-        movingRef={movingRef}
-        facingRef={facingRef}
+        email={myEmail} uid={myUid}
+        posRef={posRef} movingRef={movingRef} facingRef={facingRef}
         isLocalPlayer={true}
       />
 
-      {/* ── REMOTE PLAYERS — also VRM now ── */}
       {Object.values(remoteSnap)
         .filter(p => p.email !== myEmail && p.online)
         .map(p => <RemoteAvatar key={p.email} player={p} />)
       }
 
-      <CameraRig target={posRef} />
+      <CameraRig target={posRef} facingRef={facingRef} />
       <MovementController
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
         facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
@@ -731,7 +739,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     >
       <Canvas
         shadows
-        camera={{ position: [11, CAM_HEIGHT, CAM_DIST], fov: 62 }}
+        camera={{ position: [SPAWN.x, SPAWN.y + CAM_HEIGHT, SPAWN.z + CAM_DIST], fov: 72 }}
         style={{ width: '100%', height: '100%' }}
         gl={{
           antialias: effectiveQuality !== 'low',
