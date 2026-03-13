@@ -3,8 +3,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { getPlayerRole, getPlayerEmoji, getPartnerEmail, getPartnerName, getPartnerEmoji } from '@/lib/auth-config';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2 } from 'lucide-react';
+import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2, Palette } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AvatarSetup } from '../components/avatar/AvatarSetup';
+import { useAvatarProfile } from '../hooks/useAvatarProfile';
+import { useAvatarStore } from '../stores/avatarStore';
 
 type GameType = string;
 
@@ -34,6 +37,10 @@ export const Profile: React.FC = () => {
   const [signingOut, setSigningOut]          = useState(false);
   const [byGame, setByGame]                  = useState<ByGame[]>([]);
   const [byGameLoading, setByGameLoading]    = useState(true);
+  const [changingAvatar, setChangingAvatar]  = useState(false);
+
+  const { avatarProfile } = useAvatarStore();
+  const { saveDefaultAvatar, saveVRoidAvatar } = useAvatarProfile(user?.uid ?? null);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -70,6 +77,19 @@ export const Profile: React.FC = () => {
 
   if (!user) return null;
 
+  // Show full-screen avatar setup when changing avatar
+  if (changingAvatar) {
+    return (
+      <AvatarSetup
+        firebaseUid={user.uid}
+        onComplete={() => {
+          setChangingAvatar(false);
+          window.location.reload();
+        }}
+      />
+    );
+  }
+
   const role         = getPlayerRole(user.email || '');
   const emoji        = getPlayerEmoji(user.email || '');
   const partnerEmail = getPartnerEmail(user.email || '');
@@ -82,6 +102,12 @@ export const Profile: React.FC = () => {
 
   const getGameByGame = (id: string) => byGame.find(b => b.game_type === id);
   const maxWins = Math.max(1, ...byGame.map(b => b.wins + b.losses + b.draws));
+
+  const avatarTypeLabel = avatarProfile?.avatarType === 'vroid'
+    ? '🎭 Anime (VRoid)'
+    : avatarProfile?.avatarType === 'default'
+    ? '👤 Default Character'
+    : '—';
 
   return (
     <div className="min-h-screen py-10 px-4">
@@ -114,7 +140,6 @@ export const Profile: React.FC = () => {
             <span>{user.email}</span>
           </div>
 
-          {/* Partner info — dynamic */}
           {partnerName && partnerEmoji && (
             <div className="inline-flex items-center gap-2 mt-3 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 px-4 py-2 rounded-full">
               <span className="text-lg">{partnerEmoji}</span>
@@ -150,6 +175,32 @@ export const Profile: React.FC = () => {
             ))}
           </div>
         )}
+
+        {/* ── Avatar Section ── */}
+        <div className="glass-card p-6">
+          <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Palette size={18} className="text-purple-500" /> My Avatar
+          </h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Current type</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-white mt-0.5">{avatarTypeLabel}</p>
+              {avatarProfile?.avatarType === 'default' && avatarProfile.defaultData && (
+                <div className="flex gap-2 mt-2">
+                  <div className="w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: avatarProfile.defaultData.skinTone }} title="Skin" />
+                  <div className="w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: avatarProfile.defaultData.hairColor }} title="Hair" />
+                  <div className="w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: avatarProfile.defaultData.outfitColor }} title="Outfit" />
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setChangingAvatar(true)}
+              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm transition-all"
+            >
+              Change Avatar
+            </button>
+          </div>
+        </div>
 
         {/* Per-game breakdown */}
         {!byGameLoading && (
