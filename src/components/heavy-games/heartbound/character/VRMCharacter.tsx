@@ -9,6 +9,7 @@
  *  3. Blend speed increased to 8x/s for snappier idle↔walk transition.
  *  4. Separate idleTime / walkTime clocks so each animation loops independently
  *     and the blend crossfade doesn't cause a time-jump glitch.
+ *  5. Walk URL updated to happywalk.fbx (in-place Mixamo Happy Walk Forward).
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -24,7 +25,7 @@ import { AccessoryId } from '../../../../types/accessories'
 
 const BASE_ANIM  = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/public/models/animations'
 const IDLE_URL   = `${BASE_ANIM}/idle.fbx`
-const WALK_URL   = `${BASE_ANIM}/walk.fbx`
+const WALK_URL   = `${BASE_ANIM}/happywalk.fbx`
 
 // Walk playback speed multiplier — lower = slower cycle, less sliding feel
 const WALK_RATE  = 0.75
@@ -62,7 +63,7 @@ function normaliseMixamoName(raw: string): string {
   return raw
 }
 
-// ── Sampler types ────────────────────────────────────────────────────────────
+// ── Sampler types ───────────────────────────────────────────────────────────
 
 interface BoneChannel {
   node:      THREE.Object3D
@@ -201,9 +202,9 @@ export const VRMCharacter = ({
   const vrmRef      = useRef<any>(null)
   const idleRef     = useRef<AnimData | null>(null)
   const walkRef     = useRef<AnimData | null>(null)
-  const idleTimeRef = useRef(0)   // idle clock runs continuously
-  const walkTimeRef = useRef(0)   // walk clock only advances when blending in
-  const blendRef    = useRef(0)   // 0 = full idle, 1 = full walk
+  const idleTimeRef = useRef(0)
+  const walkTimeRef = useRef(0)
+  const blendRef    = useRef(0)
 
   const {
     equippedAccessories, bondLevel,
@@ -265,9 +266,9 @@ export const VRMCharacter = ({
       // 4. Safe to combine now
       VRMUtils.combineSkeletons(gltf.scene)
 
-      idleRef.current   = idle
-      walkRef.current   = walk
-      blendRef.current  = 0
+      idleRef.current     = idle
+      walkRef.current     = walk
+      blendRef.current    = 0
       idleTimeRef.current = 0
       walkTimeRef.current = 0
 
@@ -293,9 +294,9 @@ export const VRMCharacter = ({
     blendRef.current += (target - blendRef.current) * Math.min(delta * BLEND_RATE, 1)
     const blend = blendRef.current
 
-    // Advance each clock independently at its own rate
-    idleTimeRef.current += delta                    // idle always ticks at 1x
-    walkTimeRef.current += delta * WALK_RATE        // walk ticks at 0.75x
+    // Advance each clock independently
+    idleTimeRef.current += delta
+    walkTimeRef.current += delta * WALK_RATE
 
     // Apply — idle fades out as walk fades in
     if (idleRef.current) applyAnim(idleRef.current, idleTimeRef.current, 1 - blend)
