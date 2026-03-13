@@ -1,8 +1,12 @@
 /**
  * VRMCharacter — Mixamo GLB animation retargeting
  *
- * Robust bone matching: strips any known Mixamo prefix variant before lookup.
- * Handles: "mixamorigHips", "mixamorig:Hips", "Hips", "Armature|mixamorigHips" etc.
+ * Handles all known Mixamo prefix variants:
+ *   mixamorigHips        (camelCase, no separator)
+ *   mixamorig:Hips       (colon separator)
+ *   mixamorig_Hips       (underscore separator) ← what Aspose produces
+ *   Hips                 (no prefix)
+ *   Armature|Hips        (object path prefix)
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -19,9 +23,6 @@ const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/pu
 const IDLE_URL  = `${BASE_ANIM}/idle.glb`
 const WALK_URL  = `${BASE_ANIM}/walk.glb`
 
-// ─── Core Mixamo bone name → VRM humanoid bone ──────────────────────────────────
-// Key = Mixamo bone name WITHOUT any prefix (prefix is stripped at runtime).
-// Covers both FBX-for-Unity naming and standard Mixamo naming.
 const CORE_TO_VRM: Record<string, VRMHumanBoneName> = {
   Hips:           VRMHumanBoneName.Hips,
   Spine:          VRMHumanBoneName.Spine,
@@ -48,21 +49,20 @@ const CORE_TO_VRM: Record<string, VRMHumanBoneName> = {
 }
 
 /**
- * Strip any Mixamo prefix variant to get the core bone name.
- * Handles:
- *   "mixamorigHips"      → "Hips"
- *   "mixamorig:Hips"     → "Hips"
- *   "Armature|Hips"      → "Hips"
- *   "Hips"               → "Hips"   (already clean)
+ * Strip any Mixamo prefix variant to get the bare bone name.
+ * Handles: "mixamorig_Hips", "mixamorig:Hips", "mixamorigHips",
+ *          "Armature|mixamorig_Hips", "Hips"
  */
 function coreBoneName(raw: string): string {
-  // Strip object path prefix like "Armature|"
-  const pipeParts = raw.split('|')
-  let name = pipeParts[pipeParts.length - 1]
-  // Strip "mixamorig:" prefix
-  if (name.startsWith('mixamorig:')) name = name.slice('mixamorig:'.length)
-  // Strip "mixamorig" prefix (no colon)
-  else if (name.startsWith('mixamorig')) name = name.slice('mixamorig'.length)
+  // Strip object-path prefix e.g. "Armature|"
+  const pipeIdx = raw.lastIndexOf('|')
+  let name = pipeIdx !== -1 ? raw.slice(pipeIdx + 1) : raw
+
+  // Strip "mixamorig" + optional separator (_ or :)
+  if (name.startsWith('mixamorig_'))      name = name.slice('mixamorig_'.length)
+  else if (name.startsWith('mixamorig:')) name = name.slice('mixamorig:'.length)
+  else if (name.startsWith('mixamorig'))  name = name.slice('mixamorig'.length)
+
   return name
 }
 
@@ -71,9 +71,9 @@ function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE
   const unmatched = new Set<string>()
 
   for (const track of clip.tracks) {
-    const dotIdx = track.name.indexOf('.')
+    const dotIdx  = track.name.indexOf('.')
     if (dotIdx === -1) continue
-    const rawBone = track.name.substring(0, dotIdx)
+    const rawBone  = track.name.substring(0, dotIdx)
     const property = track.name.substring(dotIdx)
 
     const isQuat    = property.startsWith('.quaternion')
@@ -93,18 +93,9 @@ function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE
   }
 
   if (unmatched.size > 0) {
-    console.warn(`[VRMCharacter] ${label}: unmatched bones (safe to ignore finger/eye bones):`, [...unmatched])
+    console.info(`[VRMCharacter] ${label}: ignored ${unmatched.size} non-body bones (fingers/eyes/toes)`)
   }
-  if (newTracks.length === 0) {
-    console.error(
-      `[VRMCharacter] ${label}: 0 tracks retargeted!`,
-      'Raw track names:', clip.tracks.slice(0, 6).map(t => t.name),
-      '\nIf all bones show above, the FBX→GLB converter may have dropped animations.',
-      '\nTry re-converting with https://imagetostl.com/convert/file/fbx/to/glb instead.'
-    )
-  } else {
-    console.info(`[VRMCharacter] ${label}: retargeted ${newTracks.length} tracks OK`)
-  }
+  console.info(`[VRMCharacter] ${label}: retargeted ${newTracks.length} tracks`)
 
   return new THREE.AnimationClip(clip.name, clip.duration, newTracks)
 }
@@ -153,7 +144,7 @@ export const VRMCharacter = ({
         }
       } catch (_) {}
 
-      // ── 2. Bond level (maybeSingle — no 404 when row absent)
+      // ── 2. Bond level
       if (isLocalPlayer) {
         try {
           const { data: bond } = await supabase
@@ -191,12 +182,6 @@ export const VRMCharacter = ({
       ])
       if (cancelled) return
 
-      // Log what we got so we can debug bone names if needed
-      console.info('[VRMCharacter] idle clips:', idleGltf?.animations?.length,
-        idleGltf?.animations?.[0]?.tracks?.slice(0,4).map((t: any) => t.name))
-      console.info('[VRMCharacter] walk clips:', walkGltf?.animations?.length,
-        walkGltf?.animations?.[0]?.tracks?.slice(0,4).map((t: any) => t.name))
-
       // ── 5. Retarget + AnimationMixer
       const mixer = new THREE.AnimationMixer(vrm.scene)
       mixerRef.current = mixer
@@ -206,8 +191,6 @@ export const VRMCharacter = ({
         action.setLoop(THREE.LoopRepeat, Infinity)
         action.play()
         idleActRef.current = action
-      } else {
-        console.error('[VRMCharacter] idle.glb has NO animation clips — re-convert the FBX')
       }
 
       if (walkGltf?.animations?.length) {
@@ -216,8 +199,6 @@ export const VRMCharacter = ({
         action.setEffectiveWeight(0)
         action.play()
         walkActRef.current = action
-      } else {
-        console.error('[VRMCharacter] walk.glb has NO animation clips — re-convert the FBX')
       }
     }
 
