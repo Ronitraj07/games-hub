@@ -1,5 +1,5 @@
-export { SkyCharacterV2, DEFAULT_AVATAR_V2 } from './SkyCharacterV2';
-export type { AvatarConfigV2 } from './SkyCharacterV2';
-export { CharacterCustomizer } from './CharacterCustomizer';
-export { loadAvatarConfig, saveAvatarConfig } from './avatarSync';
-export type { AnimState } from './useProceduralAnim';
+export { VRMCharacter } from './VRMCharacter'
+export { SkyCharacterV2 } from './SkyCharacterV2'   // kept for reference
+export { SkyKidCharacter } from './SkyKidCharacter' // kept for reference
+export * from './types'
+export * from './constants'
