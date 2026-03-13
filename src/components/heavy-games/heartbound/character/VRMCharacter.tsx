@@ -28,7 +28,6 @@ const IDLE_URL  = `${BASE_ANIM}/idle.fbx`
 const WALK_URL  = `${BASE_ANIM}/walk.fbx`
 
 // Mixamo bone name (prefixed) → VRM humanoid bone key (lowercase)
-// Source: https://pixiv.github.io/three-vrm/packages/three-vrm/examples/humanoidAnimation/mixamoVRMRigMap.js
 const mixamoVRMRigMap: Record<string, string> = {
   mixamorigHips:           'hips',
   mixamorigSpine:          'spine',
@@ -54,20 +53,12 @@ const mixamoVRMRigMap: Record<string, string> = {
   mixamorigRightToeBase:   'rightToes',
 }
 
-/**
- * Normalise a raw FBX bone name to the "mixamorigXxx" format.
- * Handles: mixamorig_Hips → mixamorigHips, mixamorig:Hips → mixamorigHips
- */
 function normaliseMixamoName(raw: string): string {
   if (raw.startsWith('mixamorig_'))  return 'mixamorig' + raw.slice('mixamorig_'.length)
   if (raw.startsWith('mixamorig:'))  return 'mixamorig' + raw.slice('mixamorig:'.length)
   return raw
 }
 
-/**
- * Load a Mixamo FBX file and convert its animation to drive a VRM model.
- * Implements the rest-pose correction from the official pixiv example.
- */
 async function loadMixamoAnimation(
   url: string,
   vrm: any,
@@ -88,7 +79,6 @@ async function loadMixamoAnimation(
   const parentRestWorldRotation = new THREE.Quaternion()
   const _quatA = new THREE.Quaternion()
 
-  // Scale factor: Mixamo FBX is in centimetres, VRM is in metres
   const motionHipsHeight = asset.getObjectByName('mixamorigHips')?.position.y
     ?? asset.getObjectByName('mixamorig_Hips')?.position.y
     ?? 1
@@ -104,17 +94,14 @@ async function loadMixamoAnimation(
     const vrmBoneKey = mixamoVRMRigMap[mixamoName]
     if (!vrmBoneKey) return
 
-    // Use RAW bone node name as track target (not normalized)
     const vrmRawNode = vrm.humanoid?.getRawBoneNode(vrmBoneKey)
     if (!vrmRawNode) return
 
-    // Mixamo source bone (for rest-pose correction)
     const mixamoNode = asset.getObjectByName(rawBoneName)
       ?? asset.getObjectByName(mixamoName)
     if (!mixamoNode) return
 
     if (track instanceof THREE.QuaternionKeyframeTrack) {
-      // Compute rest-pose correction quaternions
       mixamoNode.getWorldQuaternion(restRotationInverse).invert()
       mixamoNode.parent?.getWorldQuaternion(parentRestWorldRotation)
         ?? parentRestWorldRotation.identity()
@@ -127,14 +114,11 @@ async function loadMixamoAnimation(
         _quatA.toArray(newValues, i)
       }
 
-      // FIX #1: VRM0 axis correction — negate x and z per quaternion (indices % 4 === 0 and % 4 === 2).
-      // Must produce a Float32Array — Array.prototype.map() returns a plain Array which
-      // causes silent NaN / identity quaternions inside Three.js QuaternionKeyframeTrack.
+      // Fix #1: keep Float32Array — .map() would return a plain Array causing NaN in Three.js
       let finalValues: Float32Array
       if (isVRM0) {
         finalValues = new Float32Array(newValues.length)
         for (let i = 0; i < newValues.length; i++) {
-          // xyzw layout: x=i%4===0, y=i%4===1, z=i%4===2, w=i%4===3
           finalValues[i] = (i % 4 === 0 || i % 4 === 2) ? -newValues[i] : newValues[i]
         }
       } else {
@@ -148,8 +132,6 @@ async function loadMixamoAnimation(
       ))
 
     } else if (track instanceof THREE.VectorKeyframeTrack && vrmBoneKey === 'hips') {
-      // Only keep hips position, scaled to VRM units, with VRM0 axis flip
-      // FIX #1 (same): produce Float32Array instead of plain Array from .map()
       const hipValues = track.values
       const scaledValues = new Float32Array(hipValues.length)
       for (let i = 0; i < hipValues.length; i++) {
@@ -261,9 +243,10 @@ export const VRMCharacter = ({
       if (walkClip) {
         const action = mixer.clipAction(walkClip)
         action.setLoop(THREE.LoopRepeat, Infinity)
+        // Start at weight 0 — do NOT call play() yet so it doesn’t
+        // consume delta time while invisible; we enable it on first walk.
         action.setEffectiveWeight(0)
         action.setEffectiveTimeScale(1)
-        action.play()
         walkActRef.current = action
       }
     }
@@ -285,11 +268,27 @@ export const VRMCharacter = ({
     if (moving !== wasMoving.current) {
       wasMoving.current = moving
       if (moving) {
-        idleActRef.current?.fadeOut(0.3)
-        walkActRef.current?.reset().fadeIn(0.3)
+        // FIX #2a: fade idle out, then reset+play walk from the top.
+        // reset() is correct here because walk was never playing — it rewinds
+        // its internal time to 0 before fading in so the stride starts cleanly.
+        idleActRef.current?.fadeOut(0.2)
+        if (walkActRef.current) {
+          walkActRef.current.reset()
+          walkActRef.current.play()
+          walkActRef.current.fadeIn(0.2)
+        }
       } else {
-        walkActRef.current?.fadeOut(0.3)
-        idleActRef.current?.reset().fadeIn(0.3)
+        // FIX #2b: fade walk out, then fade idle back in WITHOUT reset().
+        // Calling reset() on the idle action drops its effectiveWeight to 0
+        // instantly before the tween starts, causing a single-frame T-pose
+        // snap on every stop.
+        walkActRef.current?.fadeOut(0.2)
+        if (idleActRef.current) {
+          // If idle was faded out (weight near 0) we need to re-enable its
+          // play state and let fadeIn raise the weight smoothly.
+          if (!idleActRef.current.isRunning()) idleActRef.current.play()
+          idleActRef.current.fadeIn(0.2)
+        }
       }
     }
 
