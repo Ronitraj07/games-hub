@@ -1,21 +1,9 @@
 /**
- * MeadowHaven3D  — Phase 2 wired
- * ─────────────────────────────────────────────────────────────────
- * Changes from Phase 1:
- *   • SkyCharacterV2  →  SkyKidCharacter  (real skykid.glb mesh)
- *   • AvatarConfigV2  →  SkyKidConfig     (colours-only config)
- *   • DEFAULT_AVATAR_V2 → DEFAULT_SKYKID_CONFIG
- *   • RemoteAvatar uses SkyKidCharacter with outfit colour from Firebase
- *   • CharacterCustomizer updated import references
- *   • All other systems (terrain, NPCs, pond, forest…) unchanged
- *
- * Fix 1 (2026-03-12):
- *   • loadAvatarConfig returns AvatarConfigV2 — the capeColor / hairColor
- *     fields it doesn't know about were always undefined, making
- *     hasCustomised always false → game never started.
- *   • Solution: always enter game with the bridged config; only show
- *     the customiser on first-ever visit (no Supabase row) OR when
- *     the user explicitly opens it from the menu.
+ * MeadowHaven3D — Phase 3 (VRM)
+ * Local player → VRMCharacter (sparkles.vrm / shizzy.vrm)
+ * Remote players → SkyKidCharacter (unchanged — they don’t have VRMs yet)
+ * CharacterCustomizer removed from main flow (VRM = no customizer needed)
+ * All terrain, NPCs, pond, forest, fireflies, bond XP — unchanged.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -24,22 +12,16 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Sky, Stars, Billboard, Text, Cylinder, Sphere, Box,
   Cone, Environment, Points, PointMaterial, Cloud,
-  OrbitControls,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
+import { SkyKidCharacter, SkyKidConfig, DEFAULT_SKYKID_CONFIG } from './character/SkyKidCharacter';
+import { VRMCharacter } from './character/VRMCharacter';
 
-// Phase 2 character imports
-import {
-  SkyKidCharacter, SkyKidConfig, DEFAULT_SKYKID_CONFIG,
-} from './character/SkyKidCharacter';
-import { CharacterCustomizer } from './character/CharacterCustomizer';
-import { loadAvatarConfig } from './character/avatarSync';
-
-// ── Constants ──────────────────────────────────────────────────────
+// ── Constants ───────────────────────────────────────────────────────────────
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
 const CAM_DIST    = 12;
@@ -48,7 +30,6 @@ const CAM_LERP    = 0.06;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// ── Helpers ────────────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -64,8 +45,7 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
       if (!gl) return 'low';
       const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info');
       if (!ext) return 'medium';
-      const renderer = (gl as WebGLRenderingContext)
-        .getParameter(ext.UNMASKED_RENDERER_WEBGL) as string;
+      const renderer = (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) as string;
       if (/Intel|Mali|Adreno 3|Adreno 4|PowerVR/i.test(renderer)) return 'low';
       if (/Adreno 5|GTX 7|GTX 8|GTX 9[0-4]|RX 4|RX 5[0-4]/i.test(renderer)) return 'medium';
       return 'high';
@@ -73,7 +53,7 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
   }, []);
 }
 
-// ── Terrain ────────────────────────────────────────────────────────
+// ── Terrain ────────────────────────────────────────────────────────────────
 function terrainY(x: number, z: number): number {
   return (
     Math.sin(x * 0.28) * 1.2 +
@@ -84,33 +64,25 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── Remote avatar ──────────────────────────────────────────────────
+// ── Remote avatar (still SkyKid — partner doesn’t have VRM yet) ─────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const posRef = useRef(new THREE.Vector3(
-    player.x / 20 - 10, 0, player.y / 20 - 9,
-  ));
+  const posRef = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
   useFrame(() => {
     const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
     posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
   });
   if (!player.online) return null;
-  const cfg: SkyKidConfig = {
-    ...DEFAULT_SKYKID_CONFIG,
-    outfitColor: player.spriteColor,
-    capeColor:   player.spriteColor,
-  };
+  const cfg: SkyKidConfig = { ...DEFAULT_SKYKID_CONFIG, outfitColor: player.spriteColor, capeColor: player.spriteColor };
   return (
     <SkyKidCharacter
-      config={cfg}
-      name={player.name}
-      isMe={false}
+      config={cfg} name={player.name} isMe={false}
       staticPos={[posRef.current.x, posRef.current.y, posRef.current.z]}
       moving={player.moving}
     />
   );
 }
 
-// ── Terrain mesh ───────────────────────────────────────────────────
+// ── Terrain mesh ─────────────────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
   useEffect(() => {
@@ -157,7 +129,7 @@ function Terrain() {
   );
 }
 
-// ── Pond ───────────────────────────────────────────────────────────
+// ── Pond ───────────────────────────────────────────────────────────────────
 function Pond() {
   const waterRef = useRef<THREE.Mesh>(null!), rippleRef = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
@@ -198,7 +170,7 @@ function Pond() {
   );
 }
 
-// ── Trees ──────────────────────────────────────────────────────────
+// ── Trees ───────────────────────────────────────────────────────────────────
 const TREE_POSITIONS: [number, number, number, number][] = [
   [-14,-6,1.0,0],[-12,8,1.3,1],[-16,2,0.9,2],[13,-7,1.1,0],[14,5,1.4,1],[15,10,0.85,2],
   [-6,-14,1.0,0],[5,-15,1.2,1],[-10,-13,1.3,2],[7,14,0.9,0],[-5,15,1.1,1],[10,13,1.0,2],
@@ -227,7 +199,7 @@ function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; v
 }
 function Forest() { return <>{TREE_POSITIONS.map(([x, z, s, v], i) => <Tree key={i} x={x} z={z} scale={s} variant={v} />)}</>; }
 
-// ── Fireflies ──────────────────────────────────────────────────────
+// ── Fireflies ───────────────────────────────────────────────────────────────
 function Fireflies() {
   const count = 32;
   const positions = useMemo(() => {
@@ -261,7 +233,7 @@ function Fireflies() {
   );
 }
 
-// ── Decorations ────────────────────────────────────────────────────
+// ── Decorations ──────────────────────────────────────────────────────────────
 function Decorations() {
   return (
     <>
@@ -282,16 +254,11 @@ function Decorations() {
         <Box args={[0.65,0.38,0.07]} position={[0,0.77,0]} castShadow><meshStandardMaterial color="#b45309" roughness={0.9} metalness={0}/></Box>
         <Billboard position={[0,0.77,0.06]}><Text fontSize={0.1} color="#fef9c3" anchorX="center" anchorY="middle">Meadow Haven 🌿</Text></Billboard>
       </group>
-      {[-8,-4,0,4,8].map((x,i) => (
-        <group key={i} position={[x,terrainY(x,1.9),1.9]}>
-          <Box args={[0.1,0.55,0.1]} position={[0,0.28,0]} castShadow><meshStandardMaterial color="#a16207" roughness={0.95} metalness={0}/></Box>
-        </group>
-      ))}
     </>
   );
 }
 
-// ── Flowers ────────────────────────────────────────────────────────
+// ── Flowers ───────────────────────────────────────────────────────────────────
 const FLOWER_POS: [number,number][] = [ [-7,-5],[5,-7],[-4,6],[8,4],[-9,1],[9,-2],[2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],[4,6],[-5,-4],[7,-10],[-8,8] ];
 function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number]; collected:boolean; onCollect:()=>void; playerPos:React.MutableRefObject<THREE.Vector3> }) {
   const ref = useRef<THREE.Group>(null!), colRef = useRef(collected);
@@ -309,7 +276,7 @@ function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number];
   );
 }
 
-// ── Glow ring ──────────────────────────────────────────────────────
+// ── Glow ring ────────────────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => { if (ref.current) (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3); });
@@ -320,8 +287,11 @@ function GlowRing({ color }: { color: string }) {
   );
 }
 
-// ── NPC ────────────────────────────────────────────────────────────
-function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC; playerPos:React.MutableRefObject<THREE.Vector3>; onNearby:(npc:NPC|null)=>void; isNearby:boolean; showPrompt:boolean }) {
+// ── NPC sprite ────────────────────────────────────────────────────────────────
+function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
+  npc: NPC; playerPos: React.MutableRefObject<THREE.Vector3>;
+  onNearby: (npc: NPC|null) => void; isNearby: boolean; showPrompt: boolean;
+}) {
   const groupRef = useRef<THREE.Group>(null!), wasNear = useRef(false);
   const wx = npc.tx - 12, wz = npc.ty - 9;
   useFrame(({ clock }) => {
@@ -340,7 +310,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: { npc:NPC
   );
 }
 
-// ── Lighting ───────────────────────────────────────────────────────
+// ── Lighting ─────────────────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
@@ -356,7 +326,7 @@ function Lighting() {
   );
 }
 
-// ── Camera ─────────────────────────────────────────────────────────
+// ── Camera ──────────────────────────────────────────────────────────────────
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
@@ -366,7 +336,7 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement ───────────────────────────────────────────────────────
+// ── Movement ────────────────────────────────────────────────────────────────
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef: React.MutableRefObject<Set<string>>;
   posRef: React.MutableRefObject<THREE.Vector3>;
@@ -398,9 +368,9 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   return null;
 }
 
-// ── Scene ──────────────────────────────────────────────────────────
-function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
-  myEmail: string; myName: string; avatarConfig: SkyKidConfig;
+// ── Scene ────────────────────────────────────────────────────────────────────
+function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
+  myEmail: string; myName: string; myUid: string; myColor: string;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
   nearbyNPCRef: React.MutableRefObject<NPC|null>; setNearbyNPC: (n: NPC|null) => void;
   blockedRef: React.MutableRefObject<boolean>; posRef: React.MutableRefObject<THREE.Vector3>;
@@ -409,7 +379,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
 }) {
   const remotePlayers = useRef<Record<string, PlayerState>>({});
   const { publish, markOnline } = useHeartboundSync(
-    myEmail, myName, avatarConfig.outfitColor,
+    myEmail, myName, myColor,
     useCallback((p: Record<string, PlayerState>) => { remotePlayers.current = p; }, []),
   );
   const flowerCountRef = useRef(0);
@@ -417,14 +387,17 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
   const [remoteSnap, setRemoteSnap] = useState<Record<string, PlayerState>>({});
   useEffect(() => { markOnline(); }, [markOnline]);
   useEffect(() => { const id = setInterval(() => setRemoteSnap({ ...remotePlayers.current }), 100); return () => clearInterval(id); }, []);
+
   const handleFlowerCollect = useCallback((i: number) => {
     if (collectedFlowers.has(i)) return;
     setCollectedFlowers(prev => new Set([...prev, i]));
     flowerCountRef.current++; onCollect(flowerCountRef.current); onBondXP(5);
   }, [collectedFlowers, onCollect, onBondXP]);
+
   const onPublish = useCallback((x: number, z: number, moving: boolean) => {
     publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving });
   }, [publish]);
+
   const handleNPCNearby = useCallback((npc: NPC|null) => {
     if (nearbyNPCRef.current?.id === npc?.id) return;
     nearbyNPCRef.current = npc; setNearbyNPC(npc);
@@ -453,18 +426,15 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* ── Local player ── */}
-      <SkyKidCharacter
-        config={avatarConfig}
-        name={myName}
-        isMe={true}
-        terrainFn={terrainY}
-        posRef={posRef}
-        movingRef={movingRef}
-        facingRef={facingRef}
+      {/* ── LOCAL PLAYER — VRM ── */}
+      <VRMCharacter
+        email={myEmail}
+        uid={myUid}
+        position={posRef.current}
+        isLocalPlayer={true}
       />
 
-      {/* ── Remote players ── */}
+      {/* ── REMOTE PLAYERS — SkyKid (until they also get VRMs) ── */}
       {Object.values(remoteSnap)
         .filter(p => p.email !== myEmail && p.online)
         .map(p => <RemoteAvatar key={p.email} player={p} />)
@@ -479,7 +449,7 @@ function Scene({ myEmail, myName, avatarConfig, onCollect, onBondXP, nearbyNPCRe
   );
 }
 
-// ── Dialogue ───────────────────────────────────────────────────────
+// ── Dialogue ───────────────────────────────────────────────────────────────
 function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onClose: () => void }) {
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
@@ -503,20 +473,19 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   );
 }
 
-// ── Game menu ──────────────────────────────────────────────────────
-function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange, onCustomize }: {
+// ── Game menu ─────────────────────────────────────────────────────────────
+function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange }: {
   bondXP: number; flowerCount: number;
   onClose: () => void; onExit: () => void;
   onToggleFullscreen: () => void; isFullscreen: boolean;
   quality: 'high'|'medium'|'low'; onQualityChange: (q:'high'|'medium'|'low') => void;
-  onCustomize: () => void;
 }) {
   const [tab, setTab] = useState<'inventory'|'profile'|'controls'|'settings'>('inventory');
   const tabs = [
     { key: 'inventory' as const, label: '🎒', full: 'Inventory' },
     { key: 'profile'   as const, label: '👤', full: 'Profile' },
     { key: 'controls'  as const, label: '🎮', full: 'Controls' },
-    { key: 'settings'  as const, label: '⚙️', full: 'Settings' },
+    { key: 'settings'  as const, label: '⚙️',  full: 'Settings' },
   ];
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
@@ -564,7 +533,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                   </div>
                 ))}
               </div>
-              <p className="text-white/20 text-xs mt-3 text-center">More items unlock as you explore 🌿</p>
             </div>
           )}
           {tab === 'profile' && (
@@ -579,39 +547,21 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                   <div className="h-full rounded-full transition-all duration-700"
                     style={{ width: `${Math.min(bondXP,100)}%`, background: 'linear-gradient(90deg,#f472b6,#818cf8)' }} />
                 </div>
-                <p className="text-white/25 text-xs mt-2">
-                  {bondXP<10?'Wanderers 🌱':bondXP<25?'Companions 🏡':bondXP<50?'Partners 🎁':bondXP<75?'Soulmates 🦋':'Heartbound ⭐'}
-                </p>
               </div>
-              {[
-                { label: 'Flowers collected', value: flowerCount, icon: '🌸' },
-                { label: 'NPCs talked to',    value: 0,           icon: '💬' },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between rounded-xl px-4 py-2.5 border border-white/5"
-                  style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <span className="text-white/55 text-sm">{s.icon} {s.label}</span>
-                  <span className="text-white font-bold text-sm">{s.value}</span>
-                </div>
-              ))}
-              <button onClick={onCustomize}
-                className="w-full py-2.5 rounded-2xl text-sm font-bold text-white transition hover:scale-[1.02] active:scale-95"
-                style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.3),rgba(236,72,153,0.3))', border: '1px solid rgba(255,255,255,0.1)' }}>
-                🎨 Customise Character
-              </button>
             </div>
           )}
           {tab === 'controls' && (
             <div className="space-y-1.5">
               {[
                 { keys: 'W A S D / Arrows', action: 'Move' },
-                { keys: 'E / Enter',         action: 'Talk to NPC · advance dialogue' },
-                { keys: 'Esc / M',           action: 'Open / close this menu' },
-                { keys: 'F',                 action: 'Toggle fullscreen' },
+                { keys: 'E / Enter',         action: 'Talk to NPC' },
+                { keys: 'Esc / M',           action: 'Menu' },
+                { keys: 'F',                 action: 'Fullscreen' },
               ].map(c => (
                 <div key={c.action} className="flex items-center justify-between rounded-xl px-4 py-2.5 border border-white/5"
                   style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <span className="text-white/55 text-sm">{c.action}</span>
-                  <div className="flex gap-1 flex-wrap justify-end">
+                  <div className="flex gap-1">
                     {c.keys.split(' / ').map(k => (
                       <kbd key={k} className="bg-white/10 text-white/80 text-xs px-2 py-0.5 rounded-md font-mono">{k}</kbd>
                     ))}
@@ -632,7 +582,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
               </div>
               <div className="rounded-xl px-4 py-3 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
                 <div className="flex justify-between mb-2">
-                  <span className="text-white/80 text-sm">🎮 Graphics Quality</span>
+                  <span className="text-white/80 text-sm">🎮 Graphics</span>
                   <span className="text-white/35 text-xs capitalize">{quality}</span>
                 </div>
                 <div className="flex gap-2">
@@ -647,16 +597,15 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
             </div>
           )}
         </div>
-        <div className="px-5 pb-5 flex gap-3"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1rem' }}>
+        <div className="px-5 pb-5 flex gap-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1rem' }}>
           <button onClick={onExit}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold transition hover:scale-[1.02] active:scale-95"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold transition hover:scale-[1.02]"
             style={{ background: 'linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.08))', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5' }}>
-            <span className="text-base">🚪</span> Exit to Hub
+            <span>🚪</span> Exit
           </button>
           <div className="flex-1" />
           <button onClick={onClose}
-            className="px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition hover:scale-[1.02] active:scale-95"
+            className="px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition hover:scale-[1.02]"
             style={{ background: 'linear-gradient(135deg,#ec4899,#6366f1)', boxShadow: '0 4px 20px rgba(236,72,153,0.35)' }}>▶ Resume</button>
         </div>
       </div>
@@ -664,11 +613,11 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
   );
 }
 
-// ── Virtual joystick ───────────────────────────────────────────────
+// ── Virtual joystick ──────────────────────────────────────────────────────────
 function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<string>> }) {
   return (
     <div className="absolute bottom-4 right-4 z-10"
-      style={{ display: 'grid', gridTemplateColumns: 'repeat(3,3rem)', gridTemplateRows: 'repeat(2,3rem)', gap: '0.25rem' }}>
+      style={{ display:'grid', gridTemplateColumns:'repeat(3,3rem)', gridTemplateRows:'repeat(2,3rem)', gap:'0.25rem' }}>
       {([
         { label:'↑', key:'ArrowUp',    col:2, row:1 },
         { label:'←', key:'ArrowLeft',  col:1, row:2 },
@@ -687,59 +636,19 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
   );
 }
 
-// ── Root ───────────────────────────────────────────────────────────
+// ── Root ─────────────────────────────────────────────────────────────────────
 interface Props {
   myColor: string; onBack: () => void;
   bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void;
 }
 
 export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onCollect, onBondXP }) => {
-  const { user }  = useAuth();
-  const myEmail   = user?.email ?? '';
-  const myName    = getDisplayNameFromEmail(myEmail);
-  const quality   = useQualityTier();
-  const isTouch   = useIsTouchDevice();
-
-  // null = loading  |  SkyKidConfig = ready to play
-  const [avatarConfig, setAvatarConfig]   = useState<SkyKidConfig | null>(null);
-  const [showCustomizer, setShowCustomizer] = useState(false);
-
-  // ── Load saved config on mount ──────────────────────────────────
-  // Always bridge to SkyKidConfig and enter the game.
-  // The customiser is shown ONLY on first-ever visit (no Supabase row
-  // exists) OR when the user opens it from the in-game menu.
-  useEffect(() => {
-    const fallback: SkyKidConfig = {
-      ...DEFAULT_SKYKID_CONFIG,
-      outfitColor: myColor ?? DEFAULT_SKYKID_CONFIG.outfitColor,
-    };
-    if (!myEmail) { setAvatarConfig(fallback); return; }
-
-    loadAvatarConfig(myEmail).then(raw => {
-      // raw is AvatarConfigV2 — bridge every field with safe fallbacks
-      const cfg: SkyKidConfig = {
-        outfitColor: (raw as any).outfitColor  ?? fallback.outfitColor,
-        capeColor:   (raw as any).capeColor    ?? fallback.capeColor,
-        hairColor:   (raw as any).hairColor    ?? fallback.hairColor,
-        accentColor: (raw as any).accentColor  ?? fallback.accentColor,
-        skinTone:    (raw as any).skinTone     ?? fallback.skinTone,
-        height:      (raw as any).height       ?? fallback.height,
-      };
-
-      // First-ever visit: raw equals the bare default → show customiser once
-      const isFirstVisit = !raw || (
-        raw.outfitColor === DEFAULT_SKYKID_CONFIG.outfitColor &&
-        !(raw as any).capeColor &&
-        !(raw as any).hairColor
-      );
-      if (isFirstVisit) {
-        setShowCustomizer(true);
-        setAvatarConfig(cfg); // still set so we have a config ready
-      } else {
-        setAvatarConfig(cfg);
-      }
-    }).catch(() => setAvatarConfig(fallback));
-  }, [myEmail, myColor]);
+  const { user }    = useAuth();
+  const myEmail     = user?.email ?? '';
+  const myUid       = user?.uid   ?? '';
+  const myName      = getDisplayNameFromEmail(myEmail);
+  const quality     = useQualityTier();
+  const isTouch     = useIsTouchDevice();
 
   const containerRef  = useRef<HTMLDivElement>(null);
   const posRef        = useRef(SPAWN.clone());
@@ -754,23 +663,20 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const blockedRef    = useRef(false);
   const escPressedRef = useRef(false);
 
-  const [nearbyNPC,       setNearbyNPC]       = useState<NPC|null>(null);
-  const [dialogue,        setDialogue]         = useState<{ npc: NPC; lineIdx: number }|null>(null);
-  const [menuOpen,        setMenuOpen]         = useState(false);
-  const [isFullscreen,    setIsFullscreen]     = useState(false);
-  const [flowerCount,     setFlowerCount]      = useState(0);
-  const [qualityOverride, setQualityOverride]  = useState<'high'|'medium'|'low'|null>(null);
-
+  const [nearbyNPC,       setNearbyNPC]      = useState<NPC|null>(null);
+  const [dialogue,        setDialogue]       = useState<{ npc: NPC; lineIdx: number }|null>(null);
+  const [menuOpen,        setMenuOpen]       = useState(false);
+  const [isFullscreen,    setIsFullscreen]   = useState(false);
+  const [flowerCount,     setFlowerCount]    = useState(0);
+  const [qualityOverride, setQualityOverride]= useState<'high'|'medium'|'low'|null>(null);
   const effectiveQuality = qualityOverride ?? quality;
 
   useEffect(() => { dialogueRef.current = dialogue; blockedRef.current = !!dialogue || menuOpenRef.current; }, [dialogue]);
   useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen; }, [menuOpen]);
-  useEffect(() => { if (avatarConfig && !showCustomizer) containerRef.current?.focus(); }, [avatarConfig, showCustomizer]);
 
-  const requestFS = useCallback(() => { containerRef.current?.requestFullscreen().catch(() => {}); }, []);
+  const requestFS = useCallback(() => containerRef.current?.requestFullscreen().catch(() => {}), []);
   const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) requestFS();
-    else document.exitFullscreen().catch(() => {});
+    if (!document.fullscreenElement) requestFS(); else document.exitFullscreen().catch(() => {});
   }, [requestFS]);
 
   useEffect(() => {
@@ -792,7 +698,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const closeDialogue = useCallback(() => setDialogue(null), []);
 
   useEffect(() => {
-    if (!avatarConfig || showCustomizer) return;
     const down = (e: KeyboardEvent) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
       if (e.key === 'Escape') {
@@ -802,13 +707,12 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         return;
       }
       keysRef.current.add(e.key);
-      const hasD = !!dialogueRef.current, hasM = menuOpenRef.current;
       if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
-        if (hasD) closeDialogue();
-        else if (!hasM && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
+        if (dialogueRef.current) closeDialogue();
+        else if (!menuOpenRef.current && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
         return;
       }
-      if (e.key === 'm' || e.key === 'M') { if (hasD) closeDialogue(); else setMenuOpen(p => !p); return; }
+      if (e.key === 'm' || e.key === 'M') { if (dialogueRef.current) closeDialogue(); else setMenuOpen(p => !p); return; }
       if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); return; }
     };
     const up   = (e: KeyboardEvent) => keysRef.current.delete(e.key);
@@ -821,37 +725,14 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       document.removeEventListener('keyup',   up);
       window.removeEventListener('blur',      blur);
     };
-  }, [avatarConfig, showCustomizer, closeDialogue, openDialogue, toggleFullscreen]);
+  }, [closeDialogue, openDialogue, toggleFullscreen]);
 
   const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
-  const handleExit    = useCallback(() => {
+  const handleExit = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     onBack();
   }, [onBack]);
 
-  // ── Loading ────────────────────────────────────────────────────
-  if (avatarConfig === null) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ background: 'linear-gradient(135deg,#0a1628 0%,#0d2218 100%)' }}>
-        <p className="text-white/50 text-sm animate-pulse">🌿 Loading your character…</p>
-      </div>
-    );
-  }
-
-  // ── Customiser ─────────────────────────────────────────────────
-  if (showCustomizer) {
-    return (
-      <CharacterCustomizer
-        initial={avatarConfig}
-        userEmail={myEmail}
-        onConfirm={cfg => { setAvatarConfig(cfg); setShowCustomizer(false); }}
-        onCancel={() => setShowCustomizer(false)}
-      />
-    );
-  }
-
-  // ── In-game ────────────────────────────────────────────────────
   return (
     <div
       ref={containerRef}
@@ -874,7 +755,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       >
         <Suspense fallback={null}>
           <Scene
-            myEmail={myEmail} myName={myName} avatarConfig={avatarConfig}
+            myEmail={myEmail} myName={myName} myUid={myUid} myColor={myColor}
             onCollect={handleCollect} onBondXP={onBondXP ?? (() => {})}
             nearbyNPCRef={nearbyNPCRef} setNearbyNPC={setNearbyNPC}
             blockedRef={blockedRef} posRef={posRef}
@@ -883,7 +764,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </Suspense>
       </Canvas>
 
-      {/* Bond XP */}
+      {/* Bond XP bar */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -900,18 +781,10 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">🌸 {flowerCount}</div>
       </div>
 
-      {/* Menu button */}
+      {/* Menu */}
       <div className="absolute top-3 right-3 z-10">
         <button onClick={() => setMenuOpen(true)}
-          className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition"
-          title="Menu (M / Esc)">☰ Menu</button>
-      </div>
-
-      {/* Quality badge */}
-      <div className="absolute bottom-10 right-3 z-10 pointer-events-none hidden md:block">
-        <div className="bg-black/30 rounded-full px-2 py-0.5 text-white/30 text-xs capitalize">
-          {effectiveQuality === 'low' ? '🔋 eco' : effectiveQuality === 'medium' ? '⚡ balanced' : '✨ ultra'}
-        </div>
+          className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition">☰ Menu</button>
       </div>
 
       {dialogue && <DialogueBox npc={dialogue.npc} lineIdx={dialogue.lineIdx} onClose={closeDialogue} />}
@@ -925,7 +798,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
           isFullscreen={isFullscreen}
           quality={effectiveQuality}
           onQualityChange={setQualityOverride}
-          onCustomize={() => { setMenuOpen(false); setShowCustomizer(true); }}
         />
       )}
 
