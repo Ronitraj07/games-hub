@@ -1,7 +1,7 @@
 /**
  * MeadowHaven3D — Phase 3 (VRM)
- * Camera: proper 3rd-person RPG — low angle, close, behind player
- * Animation: arms fixed (normalized z-axis hang), natural walk cycle
+ * Camera: fixed isometric-style 3rd person — does NOT rotate with player facing.
+ * Movement: camera-relative WASD (imported MovementController)
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -17,17 +17,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
 import { VRMCharacter } from './character/VRMCharacter';
+import { MovementController } from './gameplay/MovementController';
 
 const WORLD_SIZE  = 48;
-const MOVE_SPEED  = 0.09;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// ── Camera constants ── LOW & CLOSE = proper 3rd-person RPG feel
-const CAM_DIST   = 5.5;   // how far behind the player
-const CAM_HEIGHT = 2.8;   // how high above the player
-const CAM_LERP   = 0.08;  // smoothing
-const CAM_LOOK_Y = 1.0;   // look at player chest height
+// Camera: fixed offset behind-and-above, does NOT rotate with player
+// This feels like Stardew Valley / classic RPG — stable, not disorienting
+const CAM_OFFSET = new THREE.Vector3(0, 5.5, 7.0); // behind (z+) and above (y+)
+const CAM_LERP   = 0.07;
+const CAM_LOOK_Y = 1.2; // look at chest height
 
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
@@ -316,58 +316,26 @@ function Lighting() {
   );
 }
 
-// ── 3rd-person RPG camera — low, close, behind player ──────────────────────────
-function CameraRig({ target, facingRef }: {
-  target: React.MutableRefObject<THREE.Vector3>;
-  facingRef: React.MutableRefObject<number>;
-}) {
+/**
+ * CameraRig — fixed offset camera (does NOT rotate with player facing).
+ * Camera always sits at player + CAM_OFFSET (behind and above).
+ * This means W always moves INTO the screen and the view is stable.
+ * MovementController uses camera direction for relative WASD.
+ */
+function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
-  const camPosRef  = useRef(new THREE.Vector3());
+  const camTarget  = useRef(new THREE.Vector3());
 
   useFrame(() => {
-    const p  = target.current;
-    const ty = p.y + CAM_LOOK_Y;
-
-    // Camera sits behind player based on their facing direction
-    const angle  = facingRef.current + Math.PI;  // behind = opposite of facing
-    const camX   = p.x + Math.sin(angle) * CAM_DIST;
-    const camZ   = p.z + Math.cos(angle) * CAM_DIST;
-    const camY   = p.y + CAM_HEIGHT;
-
-    camPosRef.current.set(camX, camY, camZ);
-    camera.position.lerp(camPosRef.current, CAM_LERP);
-    camera.lookAt(p.x, ty, p.z);
-  });
-  return null;
-}
-
-function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
-  keysRef: React.MutableRefObject<Set<string>>;
-  posRef: React.MutableRefObject<THREE.Vector3>;
-  movingRef: React.MutableRefObject<boolean>;
-  facingRef: React.MutableRefObject<number>;
-  onPublish: (x: number, z: number, moving: boolean) => void;
-  blockedRef: React.MutableRefObject<boolean>;
-}) {
-  useFrame(() => {
-    if (blockedRef.current) { movingRef.current = false; return; }
-    const k = keysRef.current; let dx = 0, dz = 0;
-    if (k.has('ArrowLeft')  || k.has('a') || k.has('A')) dx -= MOVE_SPEED;
-    if (k.has('ArrowRight') || k.has('d') || k.has('D')) dx += MOVE_SPEED;
-    if (k.has('ArrowUp')    || k.has('w') || k.has('W')) dz -= MOVE_SPEED;
-    if (k.has('ArrowDown')  || k.has('s') || k.has('S')) dz += MOVE_SPEED;
-    if (dx !== 0 && dz !== 0) { dx *= 0.707; dz *= 0.707; }
-    movingRef.current = dx !== 0 || dz !== 0;
-    if (!movingRef.current) return;
-    facingRef.current = Math.atan2(dx, dz);
-    const np = posRef.current.clone().add(new THREE.Vector3(dx, 0, dz));
-    const half = WORLD_SIZE / 2 - 2;
-    np.x = Math.max(-half, Math.min(half, np.x));
-    np.z = Math.max(-half, Math.min(half, np.z));
-    if (Math.hypot(np.x, np.z) < POND_RADIUS) return;
-    np.y = terrainY(np.x, np.z);
-    posRef.current.copy(np);
-    onPublish(np.x, np.z, true);
+    const p = target.current;
+    // Fixed world-space offset: behind (+z) and above (+y)
+    camTarget.current.set(
+      p.x + CAM_OFFSET.x,
+      p.y + CAM_OFFSET.y,
+      p.z + CAM_OFFSET.z,
+    );
+    camera.position.lerp(camTarget.current, CAM_LERP);
+    camera.lookAt(p.x, p.y + CAM_LOOK_Y, p.z);
   });
   return null;
 }
@@ -440,7 +408,7 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
         .map(p => <RemoteAvatar key={p.email} player={p} />)
       }
 
-      <CameraRig target={posRef} facingRef={facingRef} />
+      <CameraRig target={posRef} />
       <MovementController
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
         facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
@@ -739,7 +707,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
     >
       <Canvas
         shadows
-        camera={{ position: [SPAWN.x, SPAWN.y + CAM_HEIGHT, SPAWN.z + CAM_DIST], fov: 72 }}
+        camera={{ position: [SPAWN.x + CAM_OFFSET.x, SPAWN.y + CAM_OFFSET.y, SPAWN.z + CAM_OFFSET.z], fov: 65 }}
         style={{ width: '100%', height: '100%' }}
         gl={{
           antialias: effectiveQuality !== 'low',
