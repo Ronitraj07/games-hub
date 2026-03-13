@@ -1,17 +1,15 @@
 /**
- * VRMCharacter — Mixamo FBX → VRM animation via SkeletonUtils.retargetClip
+ * VRMCharacter — Mixamo FBX → VRM animation
  *
- * Why FBX instead of GLB:
- *   - GLB converters (Aspose etc) mangle bone names and drop animation data
- *   - FBXLoader preserves Mixamo's original bone hierarchy exactly
- *   - SkeletonUtils.retargetClip properly maps between two different skeletons
- *     using bone name matching, handling T-pose offset differences correctly
+ * Uses the exact pattern from the official pixiv/three-vrm humanoidAnimation example:
+ * https://pixiv.github.io/three-vrm/packages/three-vrm/examples/humanoidAnimation/
  *
- * Pipeline:
- *   1. Load VRM → extract its skeleton as the TARGET
- *   2. Load idle.fbx + walk.fbx → extract skeleton as SOURCE + animation clips
- *   3. SkeletonUtils.retargetClip(targetSkeleton, sourceSkeleton, clip, options)
- *   4. AnimationMixer on vrm.scene plays retargeted clips
+ * Key operations per quaternion track:
+ * 1. restRotationInverse  = inverse of mixamo bone's world rotation at rest
+ * 2. parentRestWorldRot   = parent bone's world rotation at rest
+ * 3. corrected = parentRestWorldRot * trackQuat * restRotationInverse
+ * 4. VRM0 axis flip: negate x,z components (every even index in xyzw array)
+ * 5. Target track name = vrmRawBoneNode.name (NOT normalized)
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -19,7 +17,6 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import * as THREE from 'three'
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { AccessorySystem } from '../../../avatar/AccessorySystem'
 import { useAvatarStore } from '../../../../stores/avatarStore'
 import { PLAYER_VRMS } from '../../../../lib/modelUrls'
@@ -30,64 +27,129 @@ const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/pu
 const IDLE_URL  = `${BASE_ANIM}/idle.fbx`
 const WALK_URL  = `${BASE_ANIM}/walk.fbx`
 
-/**
- * Extract the first SkinnedMesh skeleton from a loaded FBX/GLTF scene.
- */
-function extractSkeleton(obj: THREE.Object3D): THREE.Skeleton | null {
-  let skeleton: THREE.Skeleton | null = null
-  obj.traverse((child) => {
-    if (!skeleton && (child as THREE.SkinnedMesh).isSkinnedMesh) {
-      skeleton = (child as THREE.SkinnedMesh).skeleton
-    }
-  })
-  return skeleton
+// Mixamo bone name (prefixed) → VRM humanoid bone key (lowercase)
+// Source: https://pixiv.github.io/three-vrm/packages/three-vrm/examples/humanoidAnimation/mixamoVRMRigMap.js
+const mixamoVRMRigMap: Record<string, string> = {
+  mixamorigHips:           'hips',
+  mixamorigSpine:          'spine',
+  mixamorigSpine1:         'chest',
+  mixamorigSpine2:         'upperChest',
+  mixamorigNeck:           'neck',
+  mixamorigHead:           'head',
+  mixamorigLeftShoulder:   'leftShoulder',
+  mixamorigLeftArm:        'leftUpperArm',
+  mixamorigLeftForeArm:    'leftLowerArm',
+  mixamorigLeftHand:       'leftHand',
+  mixamorigRightShoulder:  'rightShoulder',
+  mixamorigRightArm:       'rightUpperArm',
+  mixamorigRightForeArm:   'rightLowerArm',
+  mixamorigRightHand:      'rightHand',
+  mixamorigLeftUpLeg:      'leftUpperLeg',
+  mixamorigLeftLeg:        'leftLowerLeg',
+  mixamorigLeftFoot:       'leftFoot',
+  mixamorigLeftToeBase:    'leftToes',
+  mixamorigRightUpLeg:     'rightUpperLeg',
+  mixamorigRightLeg:       'rightLowerLeg',
+  mixamorigRightFoot:      'rightFoot',
+  mixamorigRightToeBase:   'rightToes',
 }
 
 /**
- * Load a Mixamo FBX animation file and retarget its clip onto the VRM skeleton.
- * Uses SkeletonUtils.retargetClip which handles bone-name matching + T-pose offsets.
+ * Normalise a raw FBX bone name to the "mixamorigXxx" format.
+ * Handles: mixamorig_Hips → mixamorigHips, mixamorig:Hips → mixamorigHips
  */
-async function loadFBXAnimation(
+function normaliseMixamoName(raw: string): string {
+  if (raw.startsWith('mixamorig_'))  return 'mixamorig' + raw.slice('mixamorig_'.length)
+  if (raw.startsWith('mixamorig:'))  return 'mixamorig' + raw.slice('mixamorig:'.length)
+  return raw
+}
+
+/**
+ * Load a Mixamo FBX file and convert its animation to drive a VRM model.
+ * Implements the rest-pose correction from the official pixiv example.
+ */
+async function loadMixamoAnimation(
   url: string,
-  vrmSkeleton: THREE.Skeleton,
+  vrm: any,
   label: string,
 ): Promise<THREE.AnimationClip | null> {
-  const fbx = await new Promise<THREE.Group>((res, rej) =>
+  const asset = await new Promise<THREE.Group>((res, rej) =>
     new FBXLoader().load(url, res, undefined, rej)
-  ).catch(e => { console.error(`[VRMCharacter] ${label} FBX load error:`, e); return null })
+  ).catch(e => { console.error(`[VRMCharacter] ${label} load error:`, e); return null })
+  if (!asset) return null
 
-  if (!fbx) return null
+  const clip = asset.animations?.[0]
+  if (!clip) { console.error(`[VRMCharacter] ${label}: no clip`); return null }
 
-  // FBX is huge (centimeters) — scale down so skeleton proportions match VRM (meters)
-  fbx.scale.setScalar(0.01)
-  fbx.updateMatrixWorld(true)
+  const isVRM0   = vrm.meta?.metaVersion === '0'
+  const tracks: THREE.KeyframeTrack[] = []
 
-  const clip = fbx.animations?.[0]
-  if (!clip) {
-    console.error(`[VRMCharacter] ${label}: no animation clip in FBX`)
-    return null
-  }
+  const restRotationInverse    = new THREE.Quaternion()
+  const parentRestWorldRotation = new THREE.Quaternion()
+  const _quatA = new THREE.Quaternion()
 
-  const srcSkeleton = extractSkeleton(fbx)
-  if (!srcSkeleton) {
-    console.error(`[VRMCharacter] ${label}: no skeleton found in FBX`)
-    return null
-  }
+  // Scale factor: Mixamo FBX is in centimetres, VRM is in metres
+  const motionHipsHeight = asset.getObjectByName('mixamorigHips')?.position.y
+    ?? asset.getObjectByName('mixamorig_Hips')?.position.y
+    ?? 1
+  const _vec3 = new THREE.Vector3()
+  const vrmHipsY   = vrm.humanoid?.getNormalizedBoneNode('hips')?.getWorldPosition(_vec3).y ?? 1
+  const vrmRootY   = vrm.scene.getWorldPosition(_vec3).y
+  const vrmHipsHeight      = Math.abs(vrmHipsY - vrmRootY)
+  const hipsPositionScale  = vrmHipsHeight / motionHipsHeight
 
-  console.info(`[VRMCharacter] ${label}: FBX bones:`, srcSkeleton.bones.map(b => b.name))
-  console.info(`[VRMCharacter] ${label}: VRM bones:`, vrmSkeleton.bones.map(b => b.name))
+  clip.tracks.forEach((track: THREE.KeyframeTrack) => {
+    const [rawBoneName, property] = track.name.split('.')
+    const mixamoName  = normaliseMixamoName(rawBoneName)
+    const vrmBoneKey  = mixamoVRMRigMap[mixamoName]
+    if (!vrmBoneKey) return
 
-  // retargetClip maps source → target by bone name
-  // hipPosition = false: don't copy root translation (avoids sliding)
-  const retargeted = SkeletonUtils.retargetClip(
-    vrmSkeleton,
-    srcSkeleton,
-    clip,
-    { hipPosition: false }
-  ) as THREE.AnimationClip
+    // Use RAW bone node name as track target (not normalized)
+    const vrmRawNode  = vrm.humanoid?.getRawBoneNode(vrmBoneKey)
+    if (!vrmRawNode) return
 
-  console.info(`[VRMCharacter] ${label}: retargeted ${retargeted.tracks.length} tracks`)
-  return retargeted
+    // Mixamo source bone (for rest-pose correction)
+    const mixamoNode  = asset.getObjectByName(rawBoneName)
+      ?? asset.getObjectByName(mixamoName)
+    if (!mixamoNode) return
+
+    if (track instanceof THREE.QuaternionKeyframeTrack) {
+      // Compute rest-pose correction quaternions
+      mixamoNode.getWorldQuaternion(restRotationInverse).invert()
+      mixamoNode.parent?.getWorldQuaternion(parentRestWorldRotation)
+        ?? parentRestWorldRotation.identity()
+
+      const newValues = new Float32Array(track.values.length)
+      for (let i = 0; i < track.values.length; i += 4) {
+        _quatA.fromArray(track.values, i)
+          .premultiply(parentRestWorldRotation)
+          .multiply(restRotationInverse)
+        _quatA.toArray(newValues, i)
+      }
+
+      // VRM0 axis correction: negate x and z (indices 0,2 of each xyzw group)
+      tracks.push(new THREE.QuaternionKeyframeTrack(
+        `${vrmRawNode.name}.${property}`,
+        track.times,
+        isVRM0
+          ? newValues.map((v, i) => (i % 4 !== 1 && i % 4 !== 3) ? -v : v)
+          : newValues,
+      ))
+
+    } else if (track instanceof THREE.VectorKeyframeTrack && vrmBoneKey === 'hips') {
+      // Only keep hips position, scaled to VRM units, with VRM0 axis flip
+      tracks.push(new THREE.VectorKeyframeTrack(
+        `${vrmRawNode.name}.${property}`,
+        track.times,
+        track.values.map((v, i) =>
+          (isVRM0 && i % 3 !== 1 ? -v : v) * hipsPositionScale
+        ),
+      ))
+    }
+  })
+
+  console.info(`[VRMCharacter] ${label}: ${tracks.length} tracks (VRM${isVRM0 ? '0' : '1'})`)
+  return new THREE.AnimationClip(label, clip.duration, tracks)
 }
 
 interface Props {
@@ -161,21 +223,14 @@ export const VRMCharacter = ({
       vrmRef.current = vrm
       onVRMLoaded?.(vrm)
 
-      // ── 3. Extract VRM skeleton (target for retargeting)
-      const vrmSkeleton = extractSkeleton(vrm.scene)
-      if (!vrmSkeleton) {
-        console.error('[VRMCharacter] could not find skeleton in VRM scene')
-        return
-      }
-
-      // ── 4. Load FBX animations + retarget
+      // ── 3. Load + convert FBX animations
       const [idleClip, walkClip] = await Promise.all([
-        loadFBXAnimation(IDLE_URL, vrmSkeleton, 'idle'),
-        loadFBXAnimation(WALK_URL, vrmSkeleton, 'walk'),
+        loadMixamoAnimation(IDLE_URL, vrm, 'idle'),
+        loadMixamoAnimation(WALK_URL, vrm, 'walk'),
       ])
       if (cancelled) return
 
-      // ── 5. AnimationMixer
+      // ── 4. AnimationMixer on vrm.scene
       const mixer = new THREE.AnimationMixer(vrm.scene)
       mixerRef.current = mixer
 
