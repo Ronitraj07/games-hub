@@ -84,7 +84,7 @@ async function loadMixamoAnimation(
   const isVRM0   = vrm.meta?.metaVersion === '0'
   const tracks: THREE.KeyframeTrack[] = []
 
-  const restRotationInverse    = new THREE.Quaternion()
+  const restRotationInverse     = new THREE.Quaternion()
   const parentRestWorldRotation = new THREE.Quaternion()
   const _quatA = new THREE.Quaternion()
 
@@ -93,23 +93,23 @@ async function loadMixamoAnimation(
     ?? asset.getObjectByName('mixamorig_Hips')?.position.y
     ?? 1
   const _vec3 = new THREE.Vector3()
-  const vrmHipsY   = vrm.humanoid?.getNormalizedBoneNode('hips')?.getWorldPosition(_vec3).y ?? 1
-  const vrmRootY   = vrm.scene.getWorldPosition(_vec3).y
-  const vrmHipsHeight      = Math.abs(vrmHipsY - vrmRootY)
-  const hipsPositionScale  = vrmHipsHeight / motionHipsHeight
+  const vrmHipsY      = vrm.humanoid?.getNormalizedBoneNode('hips')?.getWorldPosition(_vec3).y ?? 1
+  const vrmRootY      = vrm.scene.getWorldPosition(_vec3).y
+  const vrmHipsHeight = Math.abs(vrmHipsY - vrmRootY)
+  const hipsPositionScale = vrmHipsHeight / motionHipsHeight
 
   clip.tracks.forEach((track: THREE.KeyframeTrack) => {
     const [rawBoneName, property] = track.name.split('.')
-    const mixamoName  = normaliseMixamoName(rawBoneName)
-    const vrmBoneKey  = mixamoVRMRigMap[mixamoName]
+    const mixamoName = normaliseMixamoName(rawBoneName)
+    const vrmBoneKey = mixamoVRMRigMap[mixamoName]
     if (!vrmBoneKey) return
 
     // Use RAW bone node name as track target (not normalized)
-    const vrmRawNode  = vrm.humanoid?.getRawBoneNode(vrmBoneKey)
+    const vrmRawNode = vrm.humanoid?.getRawBoneNode(vrmBoneKey)
     if (!vrmRawNode) return
 
     // Mixamo source bone (for rest-pose correction)
-    const mixamoNode  = asset.getObjectByName(rawBoneName)
+    const mixamoNode = asset.getObjectByName(rawBoneName)
       ?? asset.getObjectByName(mixamoName)
     if (!mixamoNode) return
 
@@ -127,23 +127,38 @@ async function loadMixamoAnimation(
         _quatA.toArray(newValues, i)
       }
 
-      // VRM0 axis correction: negate x and z (indices 0,2 of each xyzw group)
+      // FIX #1: VRM0 axis correction — negate x and z per quaternion (indices % 4 === 0 and % 4 === 2).
+      // Must produce a Float32Array — Array.prototype.map() returns a plain Array which
+      // causes silent NaN / identity quaternions inside Three.js QuaternionKeyframeTrack.
+      let finalValues: Float32Array
+      if (isVRM0) {
+        finalValues = new Float32Array(newValues.length)
+        for (let i = 0; i < newValues.length; i++) {
+          // xyzw layout: x=i%4===0, y=i%4===1, z=i%4===2, w=i%4===3
+          finalValues[i] = (i % 4 === 0 || i % 4 === 2) ? -newValues[i] : newValues[i]
+        }
+      } else {
+        finalValues = newValues
+      }
+
       tracks.push(new THREE.QuaternionKeyframeTrack(
         `${vrmRawNode.name}.${property}`,
         track.times,
-        isVRM0
-          ? newValues.map((v, i) => (i % 4 !== 1 && i % 4 !== 3) ? -v : v)
-          : newValues,
+        finalValues,
       ))
 
     } else if (track instanceof THREE.VectorKeyframeTrack && vrmBoneKey === 'hips') {
       // Only keep hips position, scaled to VRM units, with VRM0 axis flip
+      // FIX #1 (same): produce Float32Array instead of plain Array from .map()
+      const hipValues = track.values
+      const scaledValues = new Float32Array(hipValues.length)
+      for (let i = 0; i < hipValues.length; i++) {
+        scaledValues[i] = (isVRM0 && i % 3 !== 1 ? -hipValues[i] : hipValues[i]) * hipsPositionScale
+      }
       tracks.push(new THREE.VectorKeyframeTrack(
         `${vrmRawNode.name}.${property}`,
         track.times,
-        track.values.map((v, i) =>
-          (isVRM0 && i % 3 !== 1 ? -v : v) * hipsPositionScale
-        ),
+        scaledValues,
       ))
     }
   })
