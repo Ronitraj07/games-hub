@@ -19,67 +19,81 @@ interface Props {
   onVRMLoaded?:  (vrm: any) => void
 }
 
+// VRM NORMALIZED BONE SPACE — confirmed from @pixiv/three-vrm docs + examples:
+// • All rotations are RELATIVE to rest T-pose (rest = 0,0,0)
+// • Arms are horizontal at rest → rotation.z = ∓1.2 hangs them DOWN at sides
+// • Walk arm swing = rotation.x (forward/back) — NOT z
+// • rotation.z on upper arm = how much it stays out from body (outward hang angle)
+// Reference: https://www.minakami.land/post/r3f-vrm/
+//   leftUpperArm.rotation.set(-1, 1, -1) → arms bent down+forward
 function getBone(vrm: any, name: VRMHumanBoneName): THREE.Object3D | null {
   return vrm?.humanoid?.getNormalizedBoneNode(name) ?? null
 }
 
-/**
- * VRM NORMALIZED SPACE NOTES:
- *  • Arms at rest are horizontal (T-pose) → rotation.z = −1.2 makes them hang down
- *  • Walk arm swing is rotation.z (forward/back in normalized space)
- *  • Leg swing is rotation.x (forward/back)
- *  • Left side: positive z swings forward; Right side: negative z swings forward
- */
-function applyPose(vrm: any, t: number, moving: boolean) {
+// Smooth lerp helper to avoid snapping
+function lerpRot(bone: THREE.Object3D | null, axis: 'x'|'y'|'z', target: number, alpha: number) {
+  if (!bone) return
+  bone.rotation[axis] = THREE.MathUtils.lerp(bone.rotation[axis], target, alpha)
+}
+
+export function applyVRMPose(vrm: any, t: number, moving: boolean) {
   if (!vrm?.humanoid) return
 
-  const freq  = 4.2                          // walk cycle speed
-  const swing = Math.sin(t * freq)           // -1 → +1 oscillation
-  const amp   = moving ? 1.0 : 0.0
+  const alpha = 0.18  // smoothing — prevents snapping between idle/walk
+  const freq  = 4.0
+  const swing = Math.sin(t * freq)          // −1 → +1
+  const phase = Math.abs(Math.sin(t * freq)) // 0 → 1 (always positive, for bob)
 
-  // ── Hips bob & sway ─────────────────────────────────────────────────
+  // ── HIPS ────────────────────────────────────────────────────────────────────
   const hips = getBone(vrm, VRMHumanBoneName.Hips)
   if (hips) {
-    hips.position.y = moving ? Math.abs(Math.sin(t * freq * 2)) * 0.03 : 0
-    hips.rotation.z = moving ? swing * 0.06 : 0
+    // Only hips POSITION sync is supported in normalized space per @pixiv/three-vrm issue #1585
+    hips.position.y = moving ? phase * 0.025 : 0
+    lerpRot(hips, 'z', moving ? swing * 0.05 : 0, alpha)
+    lerpRot(hips, 'y', moving ? swing * 0.04 : 0, alpha)
   }
 
-  // ── Spine lean & sway ──────────────────────────────────────────────
+  // ── SPINE / CHEST ───────────────────────────────────────────────────────────
   const spine = getBone(vrm, VRMHumanBoneName.Spine)
   const chest = getBone(vrm, VRMHumanBoneName.Chest)
-  const head  = getBone(vrm, VRMHumanBoneName.Head)
-  if (spine) {
-    spine.rotation.x = moving ? 0.05 : 0            // slight forward lean when walking
-    spine.rotation.z = moving ? swing * 0.04 : Math.sin(t * 1.0) * 0.008
-  }
-  if (chest) chest.rotation.z = moving ? -swing * 0.03 : 0
-  if (head)  head.rotation.y  = moving ? swing * 0.04  : Math.sin(t * 0.6) * 0.025
+  lerpRot(spine, 'x', moving ?  0.06 : 0, alpha)    // slight forward lean when walking
+  lerpRot(spine, 'z', moving ? -swing * 0.03 : Math.sin(t * 0.9) * 0.007, alpha)
+  lerpRot(chest, 'z', moving ?  swing * 0.025 : 0, alpha) // counter-rotate to spine
 
-  // ── Arms ───────────────────────────────────────────────────────────
-  // In VRM normalized space arms are horizontal at rest (T-pose).
-  // We need rotation.z ≈ -1.2 to bring them DOWN to sides (hanging).
-  // Walk swing is then ADDED on top as a delta on z.
+  // ── HEAD ────────────────────────────────────────────────────────────────────
+  const head = getBone(vrm, VRMHumanBoneName.Head)
+  lerpRot(head, 'y', moving ? swing * 0.035 : Math.sin(t * 0.55) * 0.02, alpha)
+  lerpRot(head, 'x', 0, alpha) // always neutral vertical
+
+  // ── ARMS ────────────────────────────────────────────────────────────────────
+  // KEY INSIGHT: In VRM normalized T-pose, arms are HORIZONTAL.
+  // To make them hang at sides:
+  //   Left  upperArm: rotation.z = -1.2  (rotate inward = down for left)
+  //   Right upperArm: rotation.z = +1.2  (rotate inward = down for right)
+  // Walk swing is rotation.X (forward/back), added on top of hang.
+  // Small outward angle kept on Z so arms don't clip into body.
+
   const lUA = getBone(vrm, VRMHumanBoneName.LeftUpperArm)
   const rUA = getBone(vrm, VRMHumanBoneName.RightUpperArm)
   const lLA = getBone(vrm, VRMHumanBoneName.LeftLowerArm)
   const rLA = getBone(vrm, VRMHumanBoneName.RightLowerArm)
 
-  const armSwingL = moving ?  swing * 0.4 : Math.sin(t * 1.0) * 0.015
-  const armSwingR = moving ? -swing * 0.4 : Math.sin(t * 1.0) * 0.015
+  // Arm walk swing amplitude
+  const armSwing = moving ? swing * 0.38 : 0
+  const idleSway = Math.sin(t * 1.0) * 0.012
 
-  if (lUA) {
-    lUA.rotation.z = -1.1 + armSwingL   // -1.1 = natural hang; +swing = forward swing
-    lUA.rotation.x =  0.05              // slight forward angle
-  }
-  if (rUA) {
-    rUA.rotation.z =  1.1 + armSwingR   // mirror: positive z for right arm hang
-    rUA.rotation.x =  0.05
-  }
-  // Elbow bends slightly when arm is swinging forward
-  if (lLA) lLA.rotation.x = moving ? Math.max(0,  swing) * 0.25 : 0.04
-  if (rLA) rLA.rotation.x = moving ? Math.max(0, -swing) * 0.25 : 0.04
+  lerpRot(lUA, 'z', -1.15,  0.25) // hang down, stay constant (no lerp needed for rest pose)
+  lerpRot(rUA, 'z',  1.15,  0.25)
+  lerpRot(lUA, 'x', moving ?  armSwing : idleSway, alpha) // forward/back swing
+  lerpRot(rUA, 'x', moving ? -armSwing : idleSway, alpha)
 
-  // ── Legs ───────────────────────────────────────────────────────────
+  // Elbow: bends slightly when that arm swings forward
+  const lElbowBend = moving ? Math.max(0,  swing) * 0.22 : 0.04
+  const rElbowBend = moving ? Math.max(0, -swing) * 0.22 : 0.04
+  lerpRot(lLA, 'x', lElbowBend, alpha)
+  lerpRot(rLA, 'x', rElbowBend, alpha)
+
+  // ── LEGS ────────────────────────────────────────────────────────────────────
   const lUL = getBone(vrm, VRMHumanBoneName.LeftUpperLeg)
   const rUL = getBone(vrm, VRMHumanBoneName.RightUpperLeg)
   const lLL = getBone(vrm, VRMHumanBoneName.LeftLowerLeg)
@@ -87,15 +101,15 @@ function applyPose(vrm: any, t: number, moving: boolean) {
   const lFt = getBone(vrm, VRMHumanBoneName.LeftFoot)
   const rFt = getBone(vrm, VRMHumanBoneName.RightFoot)
 
-  const legAmp = 0.42
-  if (lUL) lUL.rotation.x =  swing * legAmp * amp
-  if (rUL) rUL.rotation.x = -swing * legAmp * amp
-  // Knee: bends on the back-swinging leg
-  if (lLL) lLL.rotation.x = Math.max(0, -swing) * legAmp * 0.6 * amp
-  if (rLL) rLL.rotation.x = Math.max(0,  swing) * legAmp * 0.6 * amp
-  // Foot angle
-  if (lFt) lFt.rotation.x = moving ? -swing * 0.15 : 0
-  if (rFt) rFt.rotation.x = moving ?  swing * 0.15 : 0
+  const legAmp = moving ? 0.44 : 0
+  lerpRot(lUL, 'x',  swing * legAmp, alpha)
+  lerpRot(rUL, 'x', -swing * legAmp, alpha)
+  // Knee bends on trailing (backward-swinging) leg
+  lerpRot(lLL, 'x', moving ? Math.max(0, -swing) * 0.38 : 0, alpha)
+  lerpRot(rLL, 'x', moving ? Math.max(0,  swing) * 0.38 : 0, alpha)
+  // Foot flexes with stride
+  lerpRot(lFt, 'x', moving ? -swing * 0.12 : 0, alpha)
+  lerpRot(rFt, 'x', moving ?  swing * 0.12 : 0, alpha)
 }
 
 export const VRMCharacter = ({
@@ -165,13 +179,21 @@ export const VRMCharacter = ({
     if (!vrmRef.current) return
     const delta = clockRef.current.getDelta()
     totalTimeRef.current += delta
+
     vrmRef.current.scene.position.copy(posRef.current)
-    if (facingRef && movingRef?.current) {
-      vrmRef.current.scene.rotation.y = THREE.MathUtils.lerp(
-        vrmRef.current.scene.rotation.y, facingRef.current + Math.PI, 0.15,
-      )
+
+    // Smoothly rotate character to face movement direction
+    if (facingRef) {
+      const targetY = facingRef.current + Math.PI
+      const currentY = vrmRef.current.scene.rotation.y
+      // Shortest-path lerp to avoid spinning 360°
+      let diff = targetY - currentY
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      vrmRef.current.scene.rotation.y = currentY + diff * 0.15
     }
-    applyPose(vrmRef.current, totalTimeRef.current, movingRef?.current ?? false)
+
+    applyVRMPose(vrmRef.current, totalTimeRef.current, movingRef?.current ?? false)
     vrmRef.current.update(delta)
   })
 
