@@ -1,17 +1,18 @@
 /**
  * VRMCharacter — Mixamo FBX → VRM animation
  *
- * Fix #3: After VRMUtils.combineSkeletons(), bone nodes are merged into a
- * single skeleton. THREE.AnimationMixer resolves track targets by traversing
- * vrm.scene looking for an object whose .name matches the track's node token.
- * After skeleton merging the raw bone objects may no longer sit at the top of
- * the scene graph name index, so the lookup silently returns undefined and
- * every bone stays at T-pose even though 23 tracks are reported.
- *
- * Solution: name each track using the bone node's UUID instead of its .name.
- * THREE.PropertyBinding supports the syntax  "uuid:XXXXX.quaternion"  which
- * bypasses the name search and resolves directly to the object — always works
- * regardless of scene-graph restructuring.
+ * Fix Summary:
+ *  1. Use getNormalizedBoneNode() instead of getRawBoneNode() — normalized
+ *     nodes are always accessible after VRMUtils operations and their
+ *     quaternions are what the mixer should drive.
+ *  2. Temporarily rename each bone to a unique tag before building the clip
+ *     so PropertyBinding can find it by name from vrm.scene, then restore
+ *     the original name. This is simpler and more reliable than dot-paths
+ *     or UUID prefixes across Three.js versions.
+ *  3. combineSkeletons() is called AFTER animations are loaded — bone nodes
+ *     are stable during retargeting, preventing UUID/name drift.
+ *  4. walkClip action is also .play()-ed at weight 0 so it is primed in the
+ *     mixer and fade-in is instant and glitch-free.
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -29,6 +30,7 @@ const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/pu
 const IDLE_URL  = `${BASE_ANIM}/idle.fbx`
 const WALK_URL  = `${BASE_ANIM}/walk.fbx`
 
+// Mixamo bone name → VRM humanoid bone key
 const mixamoVRMRigMap: Record<string, string> = {
   mixamorigHips:           'hips',
   mixamorigSpine:          'spine',
@@ -60,6 +62,19 @@ function normaliseMixamoName(raw: string): string {
   return raw
 }
 
+/**
+ * Retargets a Mixamo FBX animation clip to a VRM skeleton.
+ *
+ * Strategy:
+ *  - Use vrm.humanoid.getNormalizedBoneNode(key) — these nodes are the actual
+ *    scene-graph objects the mixer drives for VRM1, and they remain valid
+ *    after combineSkeletons().
+ *  - Temporarily assign a unique sentinel name to each target bone so
+ *    THREE.PropertyBinding can resolve it via simple name lookup from
+ *    vrm.scene. Restore the original name after building the clip.
+ *  - Quaternion rest-pose correction is applied per Mixamo retargeting spec.
+ *  - Hip position track is scaled from cm → m.
+ */
 async function loadMixamoAnimation(
   url: string,
   vrm: any,
@@ -81,7 +96,7 @@ async function loadMixamoAnimation(
   const _quatA = new THREE.Quaternion()
   const _vec3  = new THREE.Vector3()
 
-  // Scale: Mixamo FBX = centimetres, VRM = metres
+  // Scale factor: Mixamo FBX uses centimetres, VRM uses metres
   const motionHipsHeight =
     asset.getObjectByName('mixamorigHips')?.position.y ??
     asset.getObjectByName('mixamorig_Hips')?.position.y ?? 1
@@ -90,28 +105,29 @@ async function loadMixamoAnimation(
   const vrmHipsHeight = Math.abs(vrmHipsY - vrmRootY)
   const hipsPositionScale = vrmHipsHeight / motionHipsHeight
 
+  // We'll temporarily rename bones during track construction
+  const nameRestoreMap = new Map<THREE.Object3D, string>()
+
   clip.tracks.forEach((track: THREE.KeyframeTrack) => {
-    const [rawBoneName, property] = track.name.split('.')
+    const dotIdx = track.name.lastIndexOf('.')
+    if (dotIdx === -1) return
+    const rawBoneName = track.name.slice(0, dotIdx)
+    const property    = track.name.slice(dotIdx + 1)
+
     const mixamoName = normaliseMixamoName(rawBoneName)
     const vrmBoneKey = mixamoVRMRigMap[mixamoName]
     if (!vrmBoneKey) return
 
-    // FIX #3: get the raw bone node and use its UUID as the track binding target.
-    // After VRMUtils.combineSkeletons() the mixer can no longer find bones by
-    // .name (scene-graph name lookup fails silently). UUID lookup is direct and
-    // always resolves correctly.
-    const vrmRawNode = vrm.humanoid?.getRawBoneNode(vrmBoneKey) as THREE.Object3D | null
-    if (!vrmRawNode) return
+    // Use getNormalizedBoneNode — works for both VRM0 and VRM1 post-combineSkeletons
+    const vrmNode = vrm.humanoid?.getNormalizedBoneNode(vrmBoneKey) as THREE.Object3D | null
+    if (!vrmNode) return
 
-    // Register the node in the mixer's UUID→object map so PropertyBinding can find it
-    // THREE.AnimationObjectGroup isn't needed — we just set the uuid track prefix:
-    // track name format: "<nodeName>.<property>" where nodeName can be looked
-    // up via mixer._bindings, BUT the reliable cross-version approach is to
-    // temporarily rename the node to a unique string, build the track, then
-    // restore. Instead we use the officially supported dot-path from the root:
-    // build a path by walking from vrm.scene down to the bone.
-    const path = getBonePath(vrm.scene, vrmRawNode)
-    if (!path) return // bone not reachable from vrm.scene — skip
+    // Give this node a unique sentinel name so PropertyBinding can find it
+    if (!nameRestoreMap.has(vrmNode)) {
+      nameRestoreMap.set(vrmNode, vrmNode.name)
+      vrmNode.name = `__vrm_${vrmBoneKey}_${vrmNode.uuid.slice(0, 8)}`
+    }
+    const trackNodeName = vrmNode.name
 
     const mixamoNode =
       asset.getObjectByName(rawBoneName) ??
@@ -133,7 +149,6 @@ async function loadMixamoAnimation(
         _quatA.toArray(newValues, i)
       }
 
-      // VRM0 axis correction — keep Float32Array (plain .map() would break Three.js)
       let finalValues: Float32Array
       if (isVRM0) {
         finalValues = new Float32Array(newValues.length)
@@ -145,7 +160,7 @@ async function loadMixamoAnimation(
       }
 
       tracks.push(new THREE.QuaternionKeyframeTrack(
-        `${path}.${property}`,
+        `${trackNodeName}.${property}`,
         track.times,
         finalValues,
       ))
@@ -157,40 +172,20 @@ async function loadMixamoAnimation(
         scaledValues[i] = (isVRM0 && i % 3 !== 1 ? -hipValues[i] : hipValues[i]) * hipsPositionScale
       }
       tracks.push(new THREE.VectorKeyframeTrack(
-        `${path}.${property}`,
+        `${trackNodeName}.${property}`,
         track.times,
         scaledValues,
       ))
     }
   })
 
-  console.info(`[VRMCharacter] ${label}: ${tracks.length} tracks (VRM${isVRM0 ? '0' : '1'})`)
-  return new THREE.AnimationClip(label, clip.duration, tracks)
-}
+  // Restore all bone names after clip is built
+  nameRestoreMap.forEach((originalName, node) => {
+    node.name = originalName
+  })
 
-/**
- * Walk from `root` down to `target` and return a dot-separated name path
- * that THREE.PropertyBinding can use to resolve the node, e.g.
- * "Armature.J_Bip_C_Hips".  Returns null if target is not reachable.
- *
- * Why not just use target.name?  Because PropertyBinding searches by name
- * starting from the mixer root and uses only the FIRST match — after
- * combineSkeletons() duplicates can exist, and the first match may be the
- * wrong (pre-merged) bone.  A full dot-path is unambiguous.
- */
-function getBonePath(root: THREE.Object3D, target: THREE.Object3D): string | null {
-  // BFS from root to target, collecting names along the way
-  const queue: Array<{ obj: THREE.Object3D; path: string }> = [
-    { obj: root, path: root.name || 'Scene' },
-  ]
-  while (queue.length) {
-    const { obj, path } = queue.shift()!
-    if (obj === target) return path
-    for (const child of obj.children) {
-      queue.push({ obj: child, path: child.name ? `${path}.${child.name}` : path })
-    }
-  }
-  return null
+  console.info(`[VRMCharacter] ${label}: ${tracks.length} tracks retargeted (VRM${isVRM0 ? '0' : '1'})`)
+  return new THREE.AnimationClip(label, clip.duration, tracks)
 }
 
 interface Props {
@@ -223,7 +218,7 @@ export const VRMCharacter = ({
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      // ── 1. Resolve VRM URL
+      // ── 1. Resolve VRM URL from Supabase profile
       let vrmUrl = PLAYER_VRMS[email]
       try {
         const { data } = await supabase
@@ -246,7 +241,7 @@ export const VRMCharacter = ({
       }
       if (isLocalPlayer) setVrmUrl(vrmUrl)
 
-      // ── 2. Load VRM
+      // ── 2. Load VRM (do NOT call combineSkeletons yet)
       const loader = new GLTFLoader()
       loader.register((parser) => new VRMLoaderPlugin(parser))
       const vrmGltf = await new Promise<any>((res, rej) =>
@@ -256,23 +251,27 @@ export const VRMCharacter = ({
 
       const vrm = vrmGltf.userData.vrm
       if (!vrm) return
+
       VRMUtils.removeUnnecessaryVertices(vrmGltf.scene)
-      VRMUtils.combineSkeletons(vrmGltf.scene)
+      // NOTE: rotateVRM0 before adding to scene so world transforms are correct
       VRMUtils.rotateVRM0(vrm)
       vrm.scene.position.copy(posRef.current)
       scene.add(vrm.scene)
       vrmRef.current = vrm
       onVRMLoaded?.(vrm)
 
-      // ── 3. Load + convert FBX animations (after VRM is in scene so world
-      //       positions of bones are correct for rest-pose correction)
+      // ── 3. Load + retarget FBX animations BEFORE combineSkeletons
+      //       so bone nodes/names are stable during retargeting
       const [idleClip, walkClip] = await Promise.all([
         loadMixamoAnimation(IDLE_URL, vrm, 'idle'),
         loadMixamoAnimation(WALK_URL, vrm, 'walk'),
       ])
       if (cancelled) return
 
-      // ── 4. Mixer bound to vrm.scene
+      // ── 4. NOW it is safe to combine skeletons (clips already built)
+      VRMUtils.combineSkeletons(vrmGltf.scene)
+
+      // ── 5. Mixer bound to vrm.scene
       const mixer = new THREE.AnimationMixer(vrm.scene)
       mixerRef.current = mixer
 
@@ -290,8 +289,12 @@ export const VRMCharacter = ({
         action.setLoop(THREE.LoopRepeat, Infinity)
         action.setEffectiveWeight(0)
         action.setEffectiveTimeScale(1)
+        // Pre-prime the walk action at weight 0 so first fade-in is instant
+        action.play()
         walkActRef.current = action
       }
+
+      console.info('[VRMCharacter] loaded & animations primed ✓')
     }
 
     load()
@@ -310,26 +313,28 @@ export const VRMCharacter = ({
     const delta  = clockRef.current.getDelta()
     const moving = movingRef?.current ?? false
 
+    // Transition between idle ↔ walk only on state change
     if (moving !== wasMoving.current) {
       wasMoving.current = moving
       if (moving) {
         idleActRef.current?.fadeOut(0.2)
         if (walkActRef.current) {
-          walkActRef.current.reset()
-          walkActRef.current.play()
+          walkActRef.current.setEffectiveWeight(1)
           walkActRef.current.fadeIn(0.2)
         }
       } else {
         walkActRef.current?.fadeOut(0.2)
         if (idleActRef.current) {
-          if (!idleActRef.current.isRunning()) idleActRef.current.play()
+          idleActRef.current.setEffectiveWeight(1)
           idleActRef.current.fadeIn(0.2)
         }
       }
     }
 
+    // Follow posRef
     vrmRef.current.scene.position.copy(posRef.current)
 
+    // Smooth rotation toward facing direction
     if (facingRef) {
       const targetY  = facingRef.current + Math.PI
       const currentY = vrmRef.current.scene.rotation.y
