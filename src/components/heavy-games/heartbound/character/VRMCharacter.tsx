@@ -1,15 +1,16 @@
 /**
- * VRMCharacter — Mixamo GLB animation retargeting
+ * VRMCharacter — Mixamo GLB → VRM animation retargeting
  *
- * Correct pattern (verified from three-vrm community examples):
+ * Verified pattern from gabber.dev + pixiv/three-vrm examples:
+ * - MIXAMO_VRM_MAP values are lowercase strings (e.g. 'hips', 'spine')
+ *   matching the keys accepted by vrm.humanoid.getNormalizedBoneNode()
+ * - Track name = vrmNode.name + '.' + property (e.g. 'J_Bip_C_Hips.quaternion')
  * - AnimationMixer targets vrm.scene
- * - Track names use getNormalizedBoneNode(boneName).name directly
- * - No path building needed — Three.js resolves by Object3D.name search
- * - Quaternion tracks only (no position except Hips Y)
+ * - mixer.update() then vrm.update() every frame
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
-import { VRMLoaderPlugin, VRMUtils, VRMHumanBoneName } from '@pixiv/three-vrm'
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as THREE from 'three'
 import { AccessorySystem } from '../../../avatar/AccessorySystem'
@@ -22,77 +23,83 @@ const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/pu
 const IDLE_URL  = `${BASE_ANIM}/idle.glb`
 const WALK_URL  = `${BASE_ANIM}/walk.glb`
 
-const CORE_TO_VRM: Record<string, VRMHumanBoneName> = {
-  Hips:           VRMHumanBoneName.Hips,
-  Spine:          VRMHumanBoneName.Spine,
-  Spine1:         VRMHumanBoneName.Chest,
-  Spine2:         VRMHumanBoneName.UpperChest,
-  Neck:           VRMHumanBoneName.Neck,
-  Head:           VRMHumanBoneName.Head,
-  LeftShoulder:   VRMHumanBoneName.LeftShoulder,
-  LeftArm:        VRMHumanBoneName.LeftUpperArm,
-  LeftForeArm:    VRMHumanBoneName.LeftLowerArm,
-  LeftHand:       VRMHumanBoneName.LeftHand,
-  RightShoulder:  VRMHumanBoneName.RightShoulder,
-  RightArm:       VRMHumanBoneName.RightUpperArm,
-  RightForeArm:   VRMHumanBoneName.RightLowerArm,
-  RightHand:      VRMHumanBoneName.RightHand,
-  LeftUpLeg:      VRMHumanBoneName.LeftUpperLeg,
-  LeftLeg:        VRMHumanBoneName.LeftLowerLeg,
-  LeftFoot:       VRMHumanBoneName.LeftFoot,
-  LeftToeBase:    VRMHumanBoneName.LeftToes,
-  RightUpLeg:     VRMHumanBoneName.RightUpperLeg,
-  RightLeg:       VRMHumanBoneName.RightLowerLeg,
-  RightFoot:      VRMHumanBoneName.RightFoot,
-  RightToeBase:   VRMHumanBoneName.RightToes,
+// ─── Mixamo core bone name → VRM humanoid bone key (lowercase strings) ───────────
+// Values MUST be lowercase strings exactly as accepted by getNormalizedBoneNode().
+// Ref: https://github.com/pixiv/three-vrm/blob/dev/packages/three-vrm-core/src/humanoid/VRMHumanBoneName.ts
+const MIXAMO_VRM_MAP: Record<string, string> = {
+  Hips:           'hips',
+  Spine:          'spine',
+  Spine1:         'chest',
+  Spine2:         'upperChest',
+  Neck:           'neck',
+  Head:           'head',
+  LeftShoulder:   'leftShoulder',
+  LeftArm:        'leftUpperArm',
+  LeftForeArm:    'leftLowerArm',
+  LeftHand:       'leftHand',
+  RightShoulder:  'rightShoulder',
+  RightArm:       'rightUpperArm',
+  RightForeArm:   'rightLowerArm',
+  RightHand:      'rightHand',
+  LeftUpLeg:      'leftUpperLeg',
+  LeftLeg:        'leftLowerLeg',
+  LeftFoot:       'leftFoot',
+  LeftToeBase:    'leftToes',
+  RightUpLeg:     'rightUpperLeg',
+  RightLeg:       'rightLowerLeg',
+  RightFoot:      'rightFoot',
+  RightToeBase:   'rightToes',
 }
 
+/** Strip any Mixamo prefix to get bare bone name: "mixamorig_Hips" → "Hips" */
 function coreBoneName(raw: string): string {
   const pipeIdx = raw.lastIndexOf('|')
   let name = pipeIdx !== -1 ? raw.slice(pipeIdx + 1) : raw
-  if (name.startsWith('mixamorig_'))      name = name.slice('mixamorig_'.length)
-  else if (name.startsWith('mixamorig:')) name = name.slice('mixamorig:'.length)
-  else if (name.startsWith('mixamorig'))  name = name.slice('mixamorig'.length)
+  if      (name.startsWith('mixamorig_'))  name = name.slice('mixamorig_'.length)
+  else if (name.startsWith('mixamorig:'))  name = name.slice('mixamorig:'.length)
+  else if (name.startsWith('mixamorig'))   name = name.slice('mixamorig'.length)
   return name
 }
 
-/**
- * Retarget a Mixamo clip to VRM normalized bone nodes.
- *
- * THREE.AnimationMixer resolves track targets by searching the scene graph
- * for an Object3D whose .name matches the track's node name. So we just
- * set cloned.name = vrmNode.name + ".quaternion" and the mixer finds it.
- */
-function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE.AnimationClip {
-  const tracks: THREE.KeyframeTrack[] = []
+async function loadMixamoAnimation(
+  url: string,
+  vrm: any,
+  label: string
+): Promise<THREE.AnimationClip | null> {
+  const gltf = await new Promise<any>((res, rej) =>
+    new GLTFLoader().load(url, res, undefined, rej)
+  ).catch(e => { console.error(`[VRMCharacter] ${label} load error:`, e); return null })
 
-  for (const track of clip.tracks) {
-    const dotIdx   = track.name.indexOf('.')
-    if (dotIdx === -1) continue
-    const rawBone  = track.name.substring(0, dotIdx)
-    const property = track.name.substring(dotIdx)   // e.g. ".quaternion"
-    const core     = coreBoneName(rawBone)
-
-    // Only quaternion tracks. Skip position/scale (Mixamo root motion = garbage).
-    if (!property.startsWith('.quaternion')) continue
-
-    const vrmBoneName = CORE_TO_VRM[core]
-    if (!vrmBoneName) continue
-
-    const node = vrm.humanoid?.getNormalizedBoneNode(vrmBoneName)
-    if (!node) continue
-
-    const t       = track as THREE.QuaternionKeyframeTrack
-    const cloned  = new THREE.QuaternionKeyframeTrack(
-      `${node.name}.quaternion`,
-      t.times,
-      t.values,
-    )
-    tracks.push(cloned)
+  if (!gltf?.animations?.length) {
+    console.error(`[VRMCharacter] ${label}: no animation clips in file`)
+    return null
   }
 
-  console.info(`[VRMCharacter] ${label}: ${tracks.length} tracks`)
-  return new THREE.AnimationClip(clip.name, clip.duration, tracks)
+  const clip   = gltf.animations[0]
+  const tracks: THREE.KeyframeTrack[] = []
+
+  clip.tracks.forEach((track: THREE.KeyframeTrack) => {
+    const [mixamoBoneName, property] = track.name.split('.')
+    const core       = coreBoneName(mixamoBoneName)
+    const vrmBoneKey = MIXAMO_VRM_MAP[core]
+    if (!vrmBoneKey) return
+
+    const vrmNodeName = vrm.humanoid?.getNormalizedBoneNode(vrmBoneKey)?.name
+    if (!vrmNodeName) return
+
+    // Rebuild track with VRM node name, keep original property (quaternion/position/scale)
+    if (property === 'quaternion') {
+      tracks.push(new THREE.QuaternionKeyframeTrack(
+        `${vrmNodeName}.quaternion`,
+        track.times,
+        track.values,
+      ))
+    }
+    // Skip position/scale — Mixamo bakes root motion which breaks VRM position
+  })
+
+  console.info(`[VRMCharacter] ${label}: ${tracks.length} tracks retargeted from ${clip.tracks.length} source tracks`)
+  return new THREE.AnimationClip(label, clip.duration, tracks)
 }
 
 interface Props {
@@ -139,7 +146,6 @@ export const VRMCharacter = ({
         }
       } catch (_) {}
 
-      // ── 2. Bond level
       if (isLocalPlayer) {
         try {
           const { data: bond } = await supabase
@@ -149,7 +155,7 @@ export const VRMCharacter = ({
       }
       if (isLocalPlayer) setVrmUrl(vrmUrl)
 
-      // ── 3. Load VRM
+      // ── 2. Load VRM
       const loader = new GLTFLoader()
       loader.register((parser) => new VRMLoaderPlugin(parser))
       const vrmGltf = await new Promise<any>((res, rej) =>
@@ -167,24 +173,19 @@ export const VRMCharacter = ({
       vrmRef.current = vrm
       onVRMLoaded?.(vrm)
 
-      // ── 4. Load animation GLBs
-      const animLoader = new GLTFLoader()
-      const [idleGltf, walkGltf] = await Promise.all([
-        new Promise<any>((res, rej) => animLoader.load(IDLE_URL, res, undefined, rej))
-          .catch(e => { console.error('[VRMCharacter] idle.glb error:', e); return null }),
-        new Promise<any>((res, rej) => animLoader.load(WALK_URL, res, undefined, rej))
-          .catch(e => { console.error('[VRMCharacter] walk.glb error:', e); return null }),
+      // ── 3. Load + retarget animations
+      const [idleClip, walkClip] = await Promise.all([
+        loadMixamoAnimation(IDLE_URL, vrm, 'idle'),
+        loadMixamoAnimation(WALK_URL, vrm, 'walk'),
       ])
       if (cancelled) return
 
-      // ── 5. AnimationMixer on vrm.scene
-      // Three.js resolves track node names by searching vrm.scene's children,
-      // so the mixer must be rooted at vrm.scene, not normalizedHumanBonesRoot.
+      // ── 4. Set up mixer on vrm.scene
       const mixer = new THREE.AnimationMixer(vrm.scene)
       mixerRef.current = mixer
 
-      if (idleGltf?.animations?.length) {
-        const action = mixer.clipAction(retargetClip(idleGltf.animations[0], vrm, 'idle'))
+      if (idleClip) {
+        const action = mixer.clipAction(idleClip)
         action.setLoop(THREE.LoopRepeat, Infinity)
         action.setEffectiveWeight(1)
         action.setEffectiveTimeScale(1)
@@ -192,8 +193,8 @@ export const VRMCharacter = ({
         idleActRef.current = action
       }
 
-      if (walkGltf?.animations?.length) {
-        const action = mixer.clipAction(retargetClip(walkGltf.animations[0], vrm, 'walk'))
+      if (walkClip) {
+        const action = mixer.clipAction(walkClip)
         action.setLoop(THREE.LoopRepeat, Infinity)
         action.setEffectiveWeight(0)
         action.setEffectiveTimeScale(1)
