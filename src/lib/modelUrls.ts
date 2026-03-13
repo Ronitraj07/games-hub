@@ -1,11 +1,14 @@
 // All 3D model URLs served from Supabase Storage
-// Base URL for the models bucket
 const BASE = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/public/models'
 
+export const PLAYER_VRMS: Record<string, string> = {
+  'sinharonitraj@gmail.com':     `${BASE}/characters/sparkles.vrm`,
+  'radhikadidwania567@gmail.com': `${BASE}/characters/shizzy.vrm`,
+  'shizzandsparkles@gmail.com':  `${BASE}/characters/sparkles.vrm`,
+}
+
 export const MODELS = {
-  // ── Characters ──────────────────────────────────────────
-  male:          `${BASE}/characters/male.glb`,
-  female:        `${BASE}/characters/female.glb`,
+  // ── NPCs ────────────────────────────────────────────────
   npc_male:      `${BASE}/characters/npc_male.glb`,
   npc_female:    `${BASE}/characters/npc_female.glb`,
   npc_elder:     `${BASE}/characters/npc_elder.glb`,
@@ -47,8 +50,8 @@ export const MODELS = {
 
   // ── Fantasy ─────────────────────────────────────────────
   fairy:  `${BASE}/fantasy/fairy.glb`,
-  spirit: `${BASE}/fantasy/spirit.glb`,   // placeholder — upload when ready
-  golem:  `${BASE}/fantasy/golem.glb`,    // placeholder — upload when ready
+  spirit: `${BASE}/fantasy/spirit.glb`,
+  golem:  `${BASE}/fantasy/golem.glb`,
 } as const
 
 export type ModelKey = keyof typeof MODELS

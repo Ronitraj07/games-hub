@@ -1,16 +1,12 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAvatarProfile } from '../../hooks/useAvatarProfile';
-import { AvatarSetup } from '../avatar/AvatarSetup';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const { loading: avatarLoading, hasAvatar } = useAvatarProfile(user?.uid ?? null);
 
-  // 1. Firebase auth still loading
-  if (loading || avatarLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -21,21 +17,10 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   }
 
-  // 2. Not logged in → go to login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 3. Logged in but no avatar yet → show avatar setup
-  if (!hasAvatar) {
-    return (
-      <AvatarSetup
-        firebaseUid={user.uid}
-        onComplete={() => window.location.reload()}
-      />
-    );
-  }
-
-  // 4. All good → show the page
+  // VRM loads directly inside the game scene — no setup screen needed
   return <>{children}</>;
 };
