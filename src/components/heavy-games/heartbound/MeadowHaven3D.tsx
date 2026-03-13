@@ -1,9 +1,8 @@
 /**
  * MeadowHaven3D — Phase 3 (VRM)
  * Local player → VRMCharacter (sparkles.vrm / shizzy.vrm)
- * Remote players → SkyKidCharacter (unchanged — they don’t have VRMs yet)
- * CharacterCustomizer removed from main flow (VRM = no customizer needed)
- * All terrain, NPCs, pond, forest, fireflies, bond XP — unchanged.
+ * Remote players → SkyKidCharacter (unchanged)
+ * Fix: pass posRef (MutableRefObject) not posRef.current (stale snapshot)
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -21,7 +20,6 @@ import { NPCS, NPC } from './npcData';
 import { SkyKidCharacter, SkyKidConfig, DEFAULT_SKYKID_CONFIG } from './character/SkyKidCharacter';
 import { VRMCharacter } from './character/VRMCharacter';
 
-// ── Constants ───────────────────────────────────────────────────────────────
 const WORLD_SIZE  = 48;
 const MOVE_SPEED  = 0.09;
 const CAM_DIST    = 12;
@@ -53,7 +51,6 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
   }, []);
 }
 
-// ── Terrain ────────────────────────────────────────────────────────────────
 function terrainY(x: number, z: number): number {
   return (
     Math.sin(x * 0.28) * 1.2 +
@@ -64,7 +61,6 @@ function terrainY(x: number, z: number): number {
   );
 }
 
-// ── Remote avatar (still SkyKid — partner doesn’t have VRM yet) ─────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
   const posRef = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
   useFrame(() => {
@@ -82,7 +78,6 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
   );
 }
 
-// ── Terrain mesh ─────────────────────────────────────────────────────────────
 function Terrain() {
   const geo = useRef<THREE.PlaneGeometry>(null!);
   useEffect(() => {
@@ -129,7 +124,6 @@ function Terrain() {
   );
 }
 
-// ── Pond ───────────────────────────────────────────────────────────────────
 function Pond() {
   const waterRef = useRef<THREE.Mesh>(null!), rippleRef = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
@@ -170,7 +164,6 @@ function Pond() {
   );
 }
 
-// ── Trees ───────────────────────────────────────────────────────────────────
 const TREE_POSITIONS: [number, number, number, number][] = [
   [-14,-6,1.0,0],[-12,8,1.3,1],[-16,2,0.9,2],[13,-7,1.1,0],[14,5,1.4,1],[15,10,0.85,2],
   [-6,-14,1.0,0],[5,-15,1.2,1],[-10,-13,1.3,2],[7,14,0.9,0],[-5,15,1.1,1],[10,13,1.0,2],
@@ -199,7 +192,6 @@ function Tree({ x, z, scale, variant }: { x: number; z: number; scale: number; v
 }
 function Forest() { return <>{TREE_POSITIONS.map(([x, z, s, v], i) => <Tree key={i} x={x} z={z} scale={s} variant={v} />)}</>; }
 
-// ── Fireflies ───────────────────────────────────────────────────────────────
 function Fireflies() {
   const count = 32;
   const positions = useMemo(() => {
@@ -233,7 +225,6 @@ function Fireflies() {
   );
 }
 
-// ── Decorations ──────────────────────────────────────────────────────────────
 function Decorations() {
   return (
     <>
@@ -258,7 +249,6 @@ function Decorations() {
   );
 }
 
-// ── Flowers ───────────────────────────────────────────────────────────────────
 const FLOWER_POS: [number,number][] = [ [-7,-5],[5,-7],[-4,6],[8,4],[-9,1],[9,-2],[2,-11],[-2,10],[6,8],[-6,-9],[11,0],[-11,0],[4,6],[-5,-4],[7,-10],[-8,8] ];
 function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number]; collected:boolean; onCollect:()=>void; playerPos:React.MutableRefObject<THREE.Vector3> }) {
   const ref = useRef<THREE.Group>(null!), colRef = useRef(collected);
@@ -276,7 +266,6 @@ function Flower({ pos, collected, onCollect, playerPos }: { pos:[number,number];
   );
 }
 
-// ── Glow ring ────────────────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => { if (ref.current) (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3); });
@@ -287,7 +276,6 @@ function GlowRing({ color }: { color: string }) {
   );
 }
 
-// ── NPC sprite ────────────────────────────────────────────────────────────────
 function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   npc: NPC; playerPos: React.MutableRefObject<THREE.Vector3>;
   onNearby: (npc: NPC|null) => void; isNearby: boolean; showPrompt: boolean;
@@ -310,7 +298,6 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   );
 }
 
-// ── Lighting ─────────────────────────────────────────────────────────────────
 function Lighting() {
   return (
     <>
@@ -326,7 +313,6 @@ function Lighting() {
   );
 }
 
-// ── Camera ──────────────────────────────────────────────────────────────────
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   useFrame(() => {
@@ -336,7 +322,6 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ── Movement ────────────────────────────────────────────────────────────────
 function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, blockedRef }: {
   keysRef: React.MutableRefObject<Set<string>>;
   posRef: React.MutableRefObject<THREE.Vector3>;
@@ -368,7 +353,6 @@ function MovementController({ keysRef, posRef, movingRef, facingRef, onPublish, 
   return null;
 }
 
-// ── Scene ────────────────────────────────────────────────────────────────────
 function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
   myEmail: string; myName: string; myUid: string; myColor: string;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
@@ -430,11 +414,10 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
       <VRMCharacter
         email={myEmail}
         uid={myUid}
-        position={posRef.current}
+        posRef={posRef}          // ← live ref, NOT posRef.current
         isLocalPlayer={true}
       />
 
-      {/* ── REMOTE PLAYERS — SkyKid (until they also get VRMs) ── */}
       {Object.values(remoteSnap)
         .filter(p => p.email !== myEmail && p.online)
         .map(p => <RemoteAvatar key={p.email} player={p} />)
@@ -449,7 +432,6 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
   );
 }
 
-// ── Dialogue ───────────────────────────────────────────────────────────────
 function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onClose: () => void }) {
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
@@ -473,7 +455,6 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   );
 }
 
-// ── Game menu ─────────────────────────────────────────────────────────────
 function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange }: {
   bondXP: number; flowerCount: number;
   onClose: () => void; onExit: () => void;
@@ -613,7 +594,6 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
   );
 }
 
-// ── Virtual joystick ──────────────────────────────────────────────────────────
 function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<string>> }) {
   return (
     <div className="absolute bottom-4 right-4 z-10"
@@ -636,7 +616,6 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
   );
 }
 
-// ── Root ─────────────────────────────────────────────────────────────────────
 interface Props {
   myColor: string; onBack: () => void;
   bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void;
@@ -764,7 +743,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </Suspense>
       </Canvas>
 
-      {/* Bond XP bar */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -776,12 +754,10 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
-      {/* Flower counter */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">🌸 {flowerCount}</div>
       </div>
 
-      {/* Menu */}
       <div className="absolute top-3 right-3 z-10">
         <button onClick={() => setMenuOpen(true)}
           className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition">☰ Menu</button>
