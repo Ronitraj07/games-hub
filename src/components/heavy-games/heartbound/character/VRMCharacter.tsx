@@ -1,9 +1,9 @@
 /**
  * VRMCharacter — Mixamo GLB animation retargeting
  *
- * Key fix: AnimationMixer must target vrm.humanoid.normalizedHumanBonesRoot
- * (the normalized pose proxy), NOT vrm.scene (the raw skeleton).
- * three-vrm copies normalized pose → raw skeleton each frame via vrm.update().
+ * Works with both VRM 0.x and VRM 1.x.
+ * Mixer root = normalizedHumanBonesRoot (VRM1) or vrm.scene (VRM0 fallback).
+ * Idle plays at weight 1 by default; walk starts at weight 0 and fades in.
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -54,12 +54,12 @@ function coreBoneName(raw: string): string {
   return name
 }
 
-/**
- * Retarget clip to drive VRM normalized bone nodes.
- * Track names must match the Object3D.name of each normalized bone node
- * so that the AnimationMixer (rooted at normalizedHumanBonesRoot) finds them.
- */
-function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE.AnimationClip {
+function retargetClip(
+  clip: THREE.AnimationClip,
+  vrm: any,
+  mixerRoot: THREE.Object3D,
+  label: string
+): THREE.AnimationClip {
   const newTracks: THREE.KeyframeTrack[] = []
 
   for (const track of clip.tracks) {
@@ -67,8 +67,8 @@ function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE
     if (dotIdx === -1) continue
     const rawBone  = track.name.substring(0, dotIdx)
     const property = track.name.substring(dotIdx)
+    const core     = coreBoneName(rawBone)
 
-    const core      = coreBoneName(rawBone)
     const isQuat    = property.startsWith('.quaternion')
     const isHipsPos = property.startsWith('.position') && core === 'Hips'
     if (!isQuat && !isHipsPos) continue
@@ -79,13 +79,34 @@ function retargetClip(clip: THREE.AnimationClip, vrm: any, label: string): THREE
     const node = vrm.humanoid?.getNormalizedBoneNode(vrmBoneName)
     if (!node) continue
 
+    // Build the path relative to mixerRoot so AnimationMixer resolves it
+    const path = buildPath(node, mixerRoot)
+    if (path === null) continue
+
     const cloned = track.clone()
-    cloned.name  = node.name + property
+    // If node IS the root, path is empty string → just use property without leading dot
+    cloned.name = path ? `${path}${property}` : node.name + property
     newTracks.push(cloned)
   }
 
-  console.info(`[VRMCharacter] ${label}: retargeted ${newTracks.length} tracks`)
+  console.info(`[VRMCharacter] ${label}: ${newTracks.length} tracks retargeted`)
   return new THREE.AnimationClip(clip.name, clip.duration, newTracks)
+}
+
+/**
+ * Build the dot-separated path from mixerRoot down to target node.
+ * AnimationMixer uses this path to traverse the scene graph.
+ * Returns null if node is not a descendant of root.
+ */
+function buildPath(node: THREE.Object3D, root: THREE.Object3D): string | null {
+  const parts: string[] = []
+  let current: THREE.Object3D | null = node
+  while (current && current !== root) {
+    parts.unshift(current.name)
+    current = current.parent
+  }
+  if (current !== root) return null
+  return parts.join('/')
 }
 
 interface Props {
@@ -160,7 +181,17 @@ export const VRMCharacter = ({
       vrmRef.current = vrm
       onVRMLoaded?.(vrm)
 
-      // ── 4. Load animation GLBs in parallel
+      const vrmMeta = vrm.meta?.metaVersion ?? vrm.meta?.version ?? '?'
+      console.info('[VRMCharacter] VRM meta version:', vrmMeta)
+
+      // ── 4. Pick mixer root
+      // VRM1: normalizedHumanBonesRoot exists and is the correct target
+      // VRM0: use vrm.scene directly (VRMUtils.rotateVRM0 already fixed axes)
+      const mixerRoot: THREE.Object3D =
+        vrm.humanoid?.normalizedHumanBonesRoot ?? vrm.scene
+      console.info('[VRMCharacter] mixer root:', mixerRoot.name || mixerRoot.type)
+
+      // ── 5. Load animation GLBs
       const animLoader = new GLTFLoader()
       const [idleGltf, walkGltf] = await Promise.all([
         new Promise<any>((res, rej) => animLoader.load(IDLE_URL, res, undefined, rej))
@@ -170,30 +201,26 @@ export const VRMCharacter = ({
       ])
       if (cancelled) return
 
-      // ── 5. Retarget + AnimationMixer
-      // CRITICAL: mixer must target the normalizedHumanBonesRoot, NOT vrm.scene.
-      // three-vrm's normalized humanoid proxy lives here; vrm.update() then
-      // propagates it down to the actual skeleton each frame.
-      const normalizedRoot = vrm.humanoid?.normalizedHumanBonesRoot
-      if (!normalizedRoot) {
-        console.error('[VRMCharacter] no normalizedHumanBonesRoot — VRM may be VRM0 or malformed')
-        return
-      }
-
-      const mixer = new THREE.AnimationMixer(normalizedRoot)
+      // ── 6. Retarget + AnimationMixer
+      const mixer = new THREE.AnimationMixer(mixerRoot)
       mixerRef.current = mixer
 
       if (idleGltf?.animations?.length) {
-        const action = mixer.clipAction(retargetClip(idleGltf.animations[0], vrm, 'idle'))
+        const clip   = retargetClip(idleGltf.animations[0], vrm, mixerRoot, 'idle')
+        const action = mixer.clipAction(clip)
         action.setLoop(THREE.LoopRepeat, Infinity)
+        action.setEffectiveWeight(1)   // idle starts VISIBLE
+        action.setEffectiveTimeScale(1)
         action.play()
         idleActRef.current = action
       }
 
       if (walkGltf?.animations?.length) {
-        const action = mixer.clipAction(retargetClip(walkGltf.animations[0], vrm, 'walk'))
+        const clip   = retargetClip(walkGltf.animations[0], vrm, mixerRoot, 'walk')
+        const action = mixer.clipAction(clip)
         action.setLoop(THREE.LoopRepeat, Infinity)
-        action.setEffectiveWeight(0)
+        action.setEffectiveWeight(0)   // walk starts invisible
+        action.setEffectiveTimeScale(1)
         action.play()
         walkActRef.current = action
       }
@@ -213,22 +240,20 @@ export const VRMCharacter = ({
     const delta  = clockRef.current.getDelta()
     const moving = movingRef?.current ?? false
 
-    // Crossfade idle ↔ walk
+    // Crossfade idle ↔ walk on state change
     if (moving !== wasMoving.current) {
       wasMoving.current = moving
       if (moving) {
-        walkActRef.current?.reset().fadeIn(0.25)
-        idleActRef.current?.fadeOut(0.25)
+        idleActRef.current?.fadeOut(0.3)
+        walkActRef.current?.reset().fadeIn(0.3)
       } else {
-        idleActRef.current?.reset().fadeIn(0.25)
-        walkActRef.current?.fadeOut(0.25)
+        walkActRef.current?.fadeOut(0.3)
+        idleActRef.current?.reset().fadeIn(0.3)
       }
     }
-    if (walkActRef.current) walkActRef.current.timeScale = moving ? 1.0 : 0
 
     vrmRef.current.scene.position.copy(posRef.current)
 
-    // Facing direction (shortest-path lerp)
     if (facingRef) {
       const targetY  = facingRef.current + Math.PI
       const currentY = vrmRef.current.scene.rotation.y
@@ -238,7 +263,6 @@ export const VRMCharacter = ({
       vrmRef.current.scene.rotation.y = currentY + diff * 0.15
     }
 
-    // Order matters: mixer first, then vrm.update() propagates to raw skeleton
     mixerRef.current.update(delta)
     vrmRef.current.update(delta)
   })
