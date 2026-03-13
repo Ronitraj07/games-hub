@@ -1,8 +1,7 @@
 /**
  * MeadowHaven3D — Phase 3 (VRM)
- * Local player → VRMCharacter (sparkles.vrm / shizzy.vrm)
- * Remote players → SkyKidCharacter (unchanged)
- * Fix: pass posRef (MutableRefObject) not posRef.current (stale snapshot)
+ * Local + remote players → VRMCharacter
+ * Animations: procedural walk/idle via applyWalkPose inside VRMCharacter
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -17,7 +16,6 @@ import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSy
 import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
-import { SkyKidCharacter, SkyKidConfig, DEFAULT_SKYKID_CONFIG } from './character/SkyKidCharacter';
 import { VRMCharacter } from './character/VRMCharacter';
 
 const WORLD_SIZE  = 48;
@@ -61,19 +59,27 @@ function terrainY(x: number, z: number): number {
   );
 }
 
+// ── Remote avatar now uses VRMCharacter too ───────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const posRef = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  const posRef    = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  const movingRef = useRef(player.moving);
+
   useFrame(() => {
     const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
+    const prev = posRef.current.clone();
     posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
+    movingRef.current = posRef.current.distanceTo(prev) > 0.001;
   });
+
   if (!player.online) return null;
-  const cfg: SkyKidConfig = { ...DEFAULT_SKYKID_CONFIG, outfitColor: player.spriteColor, capeColor: player.spriteColor };
+
   return (
-    <SkyKidCharacter
-      config={cfg} name={player.name} isMe={false}
-      staticPos={[posRef.current.x, posRef.current.y, posRef.current.z]}
-      moving={player.moving}
+    <VRMCharacter
+      email={player.email}
+      uid={player.email}
+      posRef={posRef}
+      movingRef={movingRef}
+      isLocalPlayer={false}
     />
   );
 }
@@ -410,14 +416,17 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* ── LOCAL PLAYER — VRM ── */}
+      {/* ── LOCAL PLAYER ── */}
       <VRMCharacter
         email={myEmail}
         uid={myUid}
-        posRef={posRef}          // ← live ref, NOT posRef.current
+        posRef={posRef}
+        movingRef={movingRef}
+        facingRef={facingRef}
         isLocalPlayer={true}
       />
 
+      {/* ── REMOTE PLAYERS — also VRM now ── */}
       {Object.values(remoteSnap)
         .filter(p => p.email !== myEmail && p.online)
         .map(p => <RemoteAvatar key={p.email} player={p} />)
