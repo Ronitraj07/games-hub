@@ -10,18 +10,17 @@ import { supabase } from '../../../../lib/supabase'
 import { AccessoryId } from '../../../../types/accessories'
 
 interface Props {
-  email: string
-  uid: string
-  position: THREE.Vector3
-  isLocalPlayer: boolean
-  onVRMLoaded?: (vrm: any) => void
+  email:          string
+  uid:            string
+  posRef:         React.MutableRefObject<THREE.Vector3>  // live ref from MeadowHaven3D
+  isLocalPlayer:  boolean
+  onVRMLoaded?:   (vrm: any) => void
 }
 
-export const VRMCharacter = ({ email, uid, position, isLocalPlayer, onVRMLoaded }: Props) => {
+export const VRMCharacter = ({ email, uid, posRef, isLocalPlayer, onVRMLoaded }: Props) => {
   const { scene } = useThree()
-  const vrmRef = useRef<any>(null)
-  const clockRef = useRef(new THREE.Clock())
-  const posRef = useRef(position.clone())
+  const vrmRef    = useRef<any>(null)
+  const clockRef  = useRef(new THREE.Clock())
 
   const {
     equippedAccessories,
@@ -79,14 +78,14 @@ export const VRMCharacter = ({ email, uid, position, isLocalPlayer, onVRMLoaded 
           VRMUtils.combineSkeletons(gltf.scene)
           VRMUtils.rotateVRM0(vrm)
 
-          vrm.scene.position.copy(position)
+          // Place at current live position
+          vrm.scene.position.copy(posRef.current)
           scene.add(vrm.scene)
           vrmRef.current = vrm
-          posRef.current.copy(position)
           onVRMLoaded?.(vrm)
         },
         undefined,
-        (err) => console.error('[VRMCharacter] load error:', err)
+        (err: unknown) => console.error('[VRMCharacter] load error:', err)
       )
     }
 
@@ -100,16 +99,15 @@ export const VRMCharacter = ({ email, uid, position, isLocalPlayer, onVRMLoaded 
     }
   }, [email, uid])
 
-  // Sync position ref every frame (so accessories follow character)
+  // Every frame: push live posRef into the VRM scene + tick spring bones
   useFrame(() => {
     if (!vrmRef.current) return
     const delta = clockRef.current.getDelta()
+    vrmRef.current.scene.position.copy(posRef.current)   // ← THE KEY LINE
     vrmRef.current.update(delta)
-    posRef.current.copy(vrmRef.current.scene.position)
   })
 
   return (
-    // Accessories rendered as R3F children, follow posRef
     <AccessorySystem
       equipped={isLocalPlayer ? equippedAccessories : []}
       position={posRef.current}
