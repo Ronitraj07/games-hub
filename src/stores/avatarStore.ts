@@ -1,44 +1,39 @@
 import { create } from 'zustand'
-import { AvatarProfile, AvatarType, DefaultAvatarData, VRoidAvatarData } from '../types/avatar'
+import { AccessoryId } from '../types/accessories'
 
 interface AvatarStore {
-  avatarProfile: AvatarProfile | null
-  isLoading: boolean
-  setAvatarProfile: (profile: AvatarProfile) => void
-  setDefaultAvatar: (data: DefaultAvatarData) => void
-  setVRoidAvatar: (data: VRoidAvatarData) => void
-  setAvatarType: (type: AvatarType) => void
-  clearAvatar: () => void
+  vrmUrl: string | null
+  equippedAccessories: AccessoryId[]
+  unlockedAccessories: AccessoryId[]
+  bondLevel: number
+  setVrmUrl: (url: string) => void
+  setEquippedAccessories: (accessories: AccessoryId[]) => void
+  setUnlockedAccessories: (accessories: AccessoryId[]) => void
+  setBondLevel: (level: number) => void
+  equipAccessory: (id: AccessoryId) => void
+  unequipAccessory: (id: AccessoryId) => void
 }
 
 export const useAvatarStore = create<AvatarStore>((set) => ({
-  avatarProfile: null,
-  isLoading: false,
+  vrmUrl: null,
+  equippedAccessories: ['sakura_petals'], // default starter accessory
+  unlockedAccessories: ['sakura_petals'],
+  bondLevel: 1,
 
-  setAvatarProfile: (profile) => set({ avatarProfile: profile }),
+  setVrmUrl: (url) => set({ vrmUrl: url }),
+  setEquippedAccessories: (accessories) => set({ equippedAccessories: accessories }),
+  setUnlockedAccessories: (accessories) => set({ unlockedAccessories: accessories }),
+  setBondLevel: (level) => set({ bondLevel: level }),
 
-  setDefaultAvatar: (data) =>
-    set({
-      avatarProfile: {
-        avatarType: 'default',
-        defaultData: data,
-      },
-    }),
-
-  setVRoidAvatar: (data) =>
-    set({
-      avatarProfile: {
-        avatarType: 'vroid',
-        vroidData: data,
-      },
-    }),
-
-  setAvatarType: (type) =>
+  equipAccessory: (id) =>
     set((state) => ({
-      avatarProfile: state.avatarProfile
-        ? { ...state.avatarProfile, avatarType: type }
-        : { avatarType: type },
+      equippedAccessories: state.equippedAccessories.includes(id)
+        ? state.equippedAccessories
+        : [...state.equippedAccessories, id],
     })),
 
-  clearAvatar: () => set({ avatarProfile: null }),
+  unequipAccessory: (id) =>
+    set((state) => ({
+      equippedAccessories: state.equippedAccessories.filter((a) => a !== id),
+    })),
 }))
