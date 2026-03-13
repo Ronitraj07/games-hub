@@ -76,12 +76,19 @@ export const PlayerLoader = ({ email, uid, position = [0, 0, 0], onLoaded }: Pro
             onLoaded?.()
           },
           undefined,
-          (err) => {
-            if (!cancelled) setError(`Failed to load VRM: ${err.message}`)
+          (err: unknown) => {
+            if (!cancelled) {
+              const msg = err instanceof Error ? err.message
+                : (err as { message?: string })?.message ?? String(err)
+              setError(`Failed to load VRM: ${msg}`)
+            }
           }
         )
-      } catch (err: any) {
-        if (!cancelled) setError(err.message)
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err)
+          setError(msg)
+        }
       }
     }
 
