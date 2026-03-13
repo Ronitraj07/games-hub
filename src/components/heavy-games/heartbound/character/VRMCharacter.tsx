@@ -19,67 +19,76 @@ interface Props {
   onVRMLoaded?:  (vrm: any) => void
 }
 
-// Simple procedural walk animation applied to VRM humanoid bones
-function applyWalkPose(vrm: any, t: number, moving: boolean) {
-  const humanoid = vrm?.humanoid
-  if (!humanoid) return
+/**
+ * MUST use getNormalizedBoneNode — it returns a bone in VRM normalized space
+ * where rotation 0,0,0 = bind/rest pose, so our values are additive and visible.
+ * getRawBoneNode returns the raw skeleton bone which has baked parent transforms
+ * that silently cancel out any rotations we set.
+ */
+function getBone(vrm: any, name: VRMHumanBoneName): THREE.Object3D | null {
+  return vrm?.humanoid?.getNormalizedBoneNode(name) ?? null
+}
 
-  const getBone = (name: VRMHumanBoneName) =>
-    humanoid.getRawBoneNode(name) as THREE.Object3D | null
+function applyPose(vrm: any, t: number, moving: boolean) {
+  if (!vrm?.humanoid) return
 
-  // Idle sway
-  const sway = moving ? 0 : Math.sin(t * 1.5) * 0.015
-
-  const spine = getBone(VRMHumanBoneName.Spine)
-  if (spine) spine.rotation.z = sway
-
-  const head = getBone(VRMHumanBoneName.Head)
-  if (head) head.rotation.y = moving ? Math.sin(t * 4) * 0.06 : Math.sin(t * 0.8) * 0.04
-
-  if (!moving) {
-    // Reset limbs to idle
-    const lArm = getBone(VRMHumanBoneName.LeftUpperArm)
-    const rArm = getBone(VRMHumanBoneName.RightUpperArm)
-    if (lArm) { lArm.rotation.z =  0.3 + Math.sin(t * 1.5) * 0.04 }
-    if (rArm) { rArm.rotation.z = -0.3 - Math.sin(t * 1.5) * 0.04 }
-    return
-  }
-
-  // Walk cycle — opposite arm/leg swing
-  const freq = 4.5, amp = 0.45
+  const freq  = 5.0
   const swing = Math.sin(t * freq)
+  const amp   = moving ? 0.5 : 0.0
 
-  const lUpperArm = getBone(VRMHumanBoneName.LeftUpperArm)
-  const rUpperArm = getBone(VRMHumanBoneName.RightUpperArm)
-  const lLowerArm = getBone(VRMHumanBoneName.LeftLowerArm)
-  const rLowerArm = getBone(VRMHumanBoneName.RightLowerArm)
-  const lUpperLeg = getBone(VRMHumanBoneName.LeftUpperLeg)
-  const rUpperLeg = getBone(VRMHumanBoneName.RightUpperLeg)
-  const lLowerLeg = getBone(VRMHumanBoneName.LeftLowerLeg)
-  const rLowerLeg = getBone(VRMHumanBoneName.RightLowerLeg)
-  const hips      = getBone(VRMHumanBoneName.Hips)
+  // ── Spine / head ──────────────────────────────────────────────────────────
+  const spine = getBone(vrm, VRMHumanBoneName.Spine)
+  const chest = getBone(vrm, VRMHumanBoneName.Chest)
+  const head  = getBone(vrm, VRMHumanBoneName.Head)
 
-  if (lUpperArm) { lUpperArm.rotation.x =  swing * amp * 0.6; lUpperArm.rotation.z =  0.25 }
-  if (rUpperArm) { rUpperArm.rotation.x = -swing * amp * 0.6; rUpperArm.rotation.z = -0.25 }
-  if (lLowerArm) { lLowerArm.rotation.x = Math.max(0,  swing) * 0.4 }
-  if (rLowerArm) { rLowerArm.rotation.x = Math.max(0, -swing) * 0.4 }
+  if (spine) spine.rotation.z = moving ? -swing * 0.03 : Math.sin(t * 1.2) * 0.012
+  if (chest) chest.rotation.z = moving ? -swing * 0.02 : 0
+  if (head)  head.rotation.y  = moving ? swing * 0.05  : Math.sin(t * 0.7) * 0.03
 
-  if (lUpperLeg) lUpperLeg.rotation.x =  swing * amp
-  if (rUpperLeg) rUpperLeg.rotation.x = -swing * amp
-  if (lLowerLeg) lLowerLeg.rotation.x = Math.max(0,  swing) * amp * 0.6
-  if (rLowerLeg) rLowerLeg.rotation.x = Math.max(0, -swing) * amp * 0.6
+  // ── Arms ──────────────────────────────────────────────────────────────────
+  const lUA = getBone(vrm, VRMHumanBoneName.LeftUpperArm)
+  const rUA = getBone(vrm, VRMHumanBoneName.RightUpperArm)
+  const lLA = getBone(vrm, VRMHumanBoneName.LeftLowerArm)
+  const rLA = getBone(vrm, VRMHumanBoneName.RightLowerArm)
 
-  // Hip bob
-  if (hips) hips.position.y = Math.abs(Math.sin(t * freq)) * 0.04
-  if (spine) spine.rotation.z = -swing * 0.04
+  // Idle: arms hang slightly out; Walk: swing front/back
+  if (lUA) {
+    lUA.rotation.x = moving ?  swing * amp * 0.55 : Math.sin(t * 1.2) * 0.02
+    lUA.rotation.z =  0.18   // natural outward hang
+  }
+  if (rUA) {
+    rUA.rotation.x = moving ? -swing * amp * 0.55 : Math.sin(t * 1.2) * 0.02
+    rUA.rotation.z = -0.18
+  }
+  if (lLA) lLA.rotation.x = moving ? Math.max(0,  swing) * 0.35 : 0.05
+  if (rLA) rLA.rotation.x = moving ? Math.max(0, -swing) * 0.35 : 0.05
+
+  // ── Legs ──────────────────────────────────────────────────────────────────
+  const lUL = getBone(vrm, VRMHumanBoneName.LeftUpperLeg)
+  const rUL = getBone(vrm, VRMHumanBoneName.RightUpperLeg)
+  const lLL = getBone(vrm, VRMHumanBoneName.LeftLowerLeg)
+  const rLL = getBone(vrm, VRMHumanBoneName.RightLowerLeg)
+
+  if (lUL) lUL.rotation.x =  swing * amp
+  if (rUL) rUL.rotation.x = -swing * amp
+  // Knee bends on the trailing leg
+  if (lLL) lLL.rotation.x = Math.max(0, -swing) * amp * 0.55
+  if (rLL) rLL.rotation.x = Math.max(0,  swing) * amp * 0.55
+
+  // ── Hip vertical bob ──────────────────────────────────────────────────────
+  const hips = getBone(vrm, VRMHumanBoneName.Hips)
+  if (hips) {
+    hips.position.y = moving ? Math.abs(swing) * 0.035 : 0
+    hips.rotation.z = moving ?  swing * 0.03            : 0
+  }
 }
 
 export const VRMCharacter = ({
   email, uid, posRef, movingRef, facingRef, isLocalPlayer, onVRMLoaded,
 }: Props) => {
-  const { scene }  = useThree()
-  const vrmRef     = useRef<any>(null)
-  const clockRef   = useRef(new THREE.Clock())
+  const { scene }    = useThree()
+  const vrmRef       = useRef<any>(null)
+  const clockRef     = useRef(new THREE.Clock())
   const totalTimeRef = useRef(0)
 
   const {
@@ -154,10 +163,10 @@ export const VRMCharacter = ({
     const delta = clockRef.current.getDelta()
     totalTimeRef.current += delta
 
-    // Sync position
+    // Position sync
     vrmRef.current.scene.position.copy(posRef.current)
 
-    // Rotate to face movement direction
+    // Face direction of movement
     if (facingRef && movingRef?.current) {
       vrmRef.current.scene.rotation.y = THREE.MathUtils.lerp(
         vrmRef.current.scene.rotation.y,
@@ -166,11 +175,10 @@ export const VRMCharacter = ({
       )
     }
 
-    // Procedural walk / idle animation
-    const isMoving = movingRef?.current ?? false
-    applyWalkPose(vrmRef.current, totalTimeRef.current, isMoving)
+    // Procedural pose via normalized bones
+    applyPose(vrmRef.current, totalTimeRef.current, movingRef?.current ?? false)
 
-    // VRM spring bones
+    // Tick spring bones / LookAt
     vrmRef.current.update(delta)
   })
 
