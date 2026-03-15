@@ -1,2 +1,12 @@
-// World module — populated in Phase 5
-export {};
+// World module — Phase 2 complete
+export { Terrain, OceanPlane, DistantMountains, terrainHeight, WORLD_HALF } from './Terrain'
+export { Forest }          from './Trees'
+export { Rocks }           from './Rocks'
+export { Pond }            from './Pond'
+export { Atmosphere, Fireflies, BlossomPetals } from './Atmosphere'
+export { Lighting }        from './Lighting'
+export { SpawnPortal }     from './SpawnPortal'
+export { BondTree }        from './BondTree'
+export { CampfireCircle }  from './CampfireCircle'
+export { FlowerFields }    from './FlowerFields'
+export { LakesideRetreat } from './LakesideRetreat'
