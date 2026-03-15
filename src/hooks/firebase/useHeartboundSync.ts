@@ -22,6 +22,7 @@ export interface PlayerState {
   y:           number;
   dir:         'up' | 'down' | 'left' | 'right';
   moving:      boolean;
+  sprinting?:  boolean;
   spriteColor: string;
   online:      boolean;
   updatedAt:   number;
@@ -74,7 +75,7 @@ export const useHeartboundSync = (
     if (!myPath || !isFirebaseOk()) return;
     set(ref(database, myPath), {
       email: myEmail, name: myName, spriteColor,
-      online: true, x: 0, y: 0, dir: 'down', moving: false,
+      online: true, x: 0, y: 0, dir: 'down', moving: false, sprinting: false,
       updatedAt: Date.now(),
     } satisfies PlayerState);
   }, [myPath, myEmail, myName, spriteColor]);
@@ -84,7 +85,7 @@ export const useHeartboundSync = (
     if (!myPath || !isFirebaseOk()) return;
     set(ref(database, myPath), {
       email: myEmail, name: myName, spriteColor,
-      online: false, x: 0, y: 0, dir: 'down', moving: false,
+      online: false, x: 0, y: 0, dir: 'down', moving: false, sprinting: false,
       updatedAt: Date.now(),
     } satisfies PlayerState);
   }, [myPath, myEmail, myName, spriteColor]);
