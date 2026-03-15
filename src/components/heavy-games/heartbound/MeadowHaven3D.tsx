@@ -9,6 +9,10 @@
  *  - Canvas initial camera position updated to match new spawn + orbital default
  *  - MovementController: camera direction is now correctly read from the orbital camera
  *    (no change needed — MovementController already reads camera.getWorldDirection())
+ *
+ * Phase 2 additions:
+ *  - BondTree, CampfireCircle, FlowerFields, LakesideRetreat wired into Scene
+ *  - MOVE_BOUND updated to 490 (matches 1000×1000 world)
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -30,15 +34,18 @@ import { Pond } from './world/Pond'
 import { Lighting } from './world/Lighting'
 import { Atmosphere, Fireflies, BlossomPetals } from './world/Atmosphere'
 import { SpawnPortal, SPAWN_POS } from './world/SpawnPortal'
+import { BondTree }        from './world/BondTree'
+import { CampfireCircle }  from './world/CampfireCircle'
+import { FlowerFields }    from './world/FlowerFields'
+import { LakesideRetreat } from './world/LakesideRetreat'
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-// Spawn is now at SpawnPortal location (well clear of the pond at 0,0,10)
+// ─── Constants ─────────────────────────────────────────────────────────────
 const SPAWN = SPAWN_POS.clone()
 
-const MOVE_BOUND  = 190
+const MOVE_BOUND  = 490   // 1000×1000 world
 const POND_RADIUS = 14
 
-// ─── NPC remapping ───────────────────────────────────────────────────────────
+// ─── NPC remapping ───────────────────────────────────────────────────────
 const NPC_SCALE = WORLD_HALF / 14
 function npcWorldPos(npc: NPC): [number, number, number] {
   const wx = (npc.tx - 12) * NPC_SCALE * 0.55
@@ -46,7 +53,7 @@ function npcWorldPos(npc: NPC): [number, number, number] {
   return [wx, terrainHeight(wx, wz) + 1.0, wz]
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
     if (typeof window === 'undefined') return false
@@ -70,7 +77,7 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
   }, [])
 }
 
-// ─── Remote avatar ───────────────────────────────────────────────────────────
+// ─── Remote avatar ──────────────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
   const posRef       = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9))
   const movingRef    = useRef(player.moving)
@@ -92,7 +99,7 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
   )
 }
 
-// ─── Flower collectibles ──────────────────────────────────────────────────────
+// ─── Flower collectibles ─────────────────────────────────────────────────────
 const FLOWER_POS: [number, number][] = [
   [-28,-20],[20,-28],[-16,24],[32,16],[-36,4],[36,-8],[8,-44],
   [-8,40],[24,32],[-24,-36],[44,0],[-44,0],[16,24],[-20,-16],
@@ -167,7 +174,7 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
   )
 }
 
-// ─── Scene ────────────────────────────────────────────────────────────────────
+// ─── Scene ─────────────────────────────────────────────────────────────────────
 function Scene({
   myEmail, myName, myUid, myColor,
   onCollect, onBondXP,
@@ -234,6 +241,12 @@ function Scene({
       <BlossomPetals />
       <SpawnPortal />
 
+      {/* ─ Phase 2 landmarks ────────────────────────────────── */}
+      <BondTree />
+      <CampfireCircle />
+      <FlowerFields />
+      <LakesideRetreat />
+
       {FLOWER_POS.map((pos, i) => (
         <Flower key={i} pos={pos} collected={collectedFlowers.has(i)}
           onCollect={() => handleFlowerCollect(i)} playerPos={posRef} />
@@ -258,7 +271,6 @@ function Scene({
         .map(p => <RemoteAvatar key={p.email} player={p} />)
       }
 
-      {/* Orbital camera — replaces old fixed-offset CameraRig */}
       <CameraController target={posRef} domRef={domRef} />
 
       <MovementController
@@ -272,7 +284,7 @@ function Scene({
   )
 }
 
-// ─── Dialogue box ─────────────────────────────────────────────────────────────
+// ─── Dialogue box ──────────────────────────────────────────────────────────────
 function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onClose: () => void }) {
   return (
     <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-20 pointer-events-auto">
@@ -296,7 +308,7 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
   )
 }
 
-// ─── Game menu ────────────────────────────────────────────────────────────────
+// ─── Game menu ───────────────────────────────────────────────────────────────────
 function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange }: {
   bondXP: number; flowerCount: number
   onClose: () => void; onExit: () => void
@@ -462,7 +474,7 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
   )
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
+// ─── Root ─────────────────────────────────────────────────────────────────────────
 interface Props {
   myColor: string; onBack: () => void
   bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void
