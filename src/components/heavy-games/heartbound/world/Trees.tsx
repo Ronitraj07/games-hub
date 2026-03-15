@@ -1,126 +1,182 @@
 /**
- * Trees — 4 species, 3 LOD levels, 240 instances
+ * Trees — Sky: Children of the Light aesthetic
  *
- * Species:
- *   0 — Oak:     wide canopy, dark green
- *   1 — Pine:    tall narrow, blue-green
- *   2 — Maple:   medium, warm green
- *   3 — Willow:  drooping, pale green
- *
- * LOD:
- *   < 60u  : full (trunk + 3 canopy layers)
- *   60–120u: simplified (trunk + 1 merged canopy)
- *   > 120u : billboard (single plane facing camera) — TODO Phase 7G
- *             for now: simplified mesh used at all distances
- *
- * Placement: scattered outside meadow core (r > 45u from origin)
- *            and inside island boundary (r < 190u)
+ * Visual language:
+ *  - Rounded canopies using IcosahedronGeometry (subdivided sphere clusters)
+ *    instead of sharp cones → soft, bubbly cloud-like foliage
+ *  - Toon/cel material: flat color + emissive glow + no metalness
+ *  - Warm inner glow: every canopy has a subtle emissive so trees look
+ *    like they hold light inside them (signature Sky CotL look)
+ *  - Trunks use LatheGeometry for organic curved silhouette
+ *  - Willow: drooping sphere clusters offset downward
+ *  - Color palette: warm ambers, soft greens, mint, peach — Sky's palette
  */
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { terrainHeight } from './Terrain'
 
-const TREE_COUNT = 240
+const TREE_COUNT = 200
 const RNG_SEED   = 42
 
 function seededRng(seed: number) {
   let s = seed
-  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646 }
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 }
 }
 
 interface TreeInstance {
   x: number; z: number; y: number
-  species: number  // 0–3
+  species: number
   scale: number
   rotY: number
 }
 
 function generateTrees(): TreeInstance[] {
-  const rng = seededRng(RNG_SEED)
+  const rng   = seededRng(RNG_SEED)
   const trees: TreeInstance[] = []
   let attempts = 0
-  while (trees.length < TREE_COUNT && attempts < 5000) {
+  while (trees.length < TREE_COUNT && attempts < 6000) {
     attempts++
     const angle = rng() * Math.PI * 2
-    const r = 50 + rng() * 145   // 50–195 from center
-    const x = Math.cos(angle) * r
-    const z = Math.sin(angle) * r
-    const dr = Math.sqrt(x * x + z * z)
-    if (dr > 192) continue  // outside island
-    // Avoid pond area
-    if (dr < 22 && Math.abs(z) < 15) continue
+    const r     = 45 + rng() * 148
+    const x     = Math.cos(angle) * r
+    const z     = Math.sin(angle) * r
+    if (Math.sqrt(x * x + z * z) > 192) continue
+    if (Math.sqrt(x * x + (z - 10) * (z - 10)) < 20) continue  // avoid pond
     const y = terrainHeight(x, z)
-    if (y < -0.5) continue  // below water
-    trees.push({
-      x, z, y,
-      species: Math.floor(rng() * 4),
-      scale:   0.75 + rng() * 0.65,
-      rotY:    rng() * Math.PI * 2,
-    })
+    if (y < -0.3) continue
+    trees.push({ x, z, y, species: Math.floor(rng() * 4), scale: 0.8 + rng() * 0.7, rotY: rng() * Math.PI * 2 })
   }
   return trees
 }
 
-const SPECIES_COLORS = [
-  // Oak: dark greens
-  ['#1a5c38', '#206040', '#2d6a4f'],
-  // Pine: blue-green
-  ['#1a4a38', '#1e5540', '#255e48'],
-  // Maple: warm green
-  ['#2a6030', '#3a7040', '#4a8050'],
-  // Willow: pale/yellow-green
-  ['#3a6a30', '#4a7a40', '#6a9a50'],
+// Sky CotL palette — warm glowing naturals
+const PALETTE = [
+  // 0 Sunlit Oak: warm amber-greens
+  { canopy: ['#4a7c59', '#5a9068', '#3d6b4a'], trunk: '#7a5535', emissive: '#2a4a30', emissInt: 0.25 },
+  // 1 Spirit Pine: cool mint with inner glow
+  { canopy: ['#3a7a6a', '#4a8a7a', '#2d6560'], trunk: '#5a4020', emissive: '#1a5a50', emissInt: 0.3 },
+  // 2 Blossom Maple: peach-pink (like Sky's star trees)
+  { canopy: ['#c8856a', '#e0a080', '#b87060'], trunk: '#7a5535', emissive: '#a06040', emissInt: 0.35 },
+  // 3 Willow: pale sage with soft yellow glow
+  { canopy: ['#7aaa70', '#8aba80', '#6a9a60'], trunk: '#6a5530', emissive: '#4a7a40', emissInt: 0.2 },
 ]
-const TRUNK_COLORS = ['#5c3a1e', '#4a2e14', '#6b4020', '#5a3818']
+
+function ToonMat({ color, emissive, emissInt }: { color: string; emissive: string; emissInt: number }) {
+  return (
+    <meshToonMaterial
+      color={color}
+      emissive={emissive}
+      emissiveIntensity={emissInt}
+    />
+  )
+}
+
+// Lathe trunk: organic curved silhouette
+function Trunk({ h, r, color }: { h: number; r: number; color: string }) {
+  const points = useMemo(() => [
+    new THREE.Vector2(r * 1.4, 0),
+    new THREE.Vector2(r * 1.1, h * 0.2),
+    new THREE.Vector2(r * 0.85, h * 0.5),
+    new THREE.Vector2(r * 0.65, h * 0.75),
+    new THREE.Vector2(r * 0.45, h),
+  ], [h, r])
+  return (
+    <mesh castShadow receiveShadow>
+      <latheGeometry args={[points, 8]} />
+      <meshToonMaterial color={color} />
+    </mesh>
+  )
+}
+
+// Rounded canopy blob: cluster of icosahedra → bubbly Sky look
+function CanopyBlob({
+  cx, cy, cz, r, color, emissive, emissInt,
+  offsets,
+}: {
+  cx: number; cy: number; cz: number; r: number
+  color: string; emissive: string; emissInt: number
+  offsets: [number, number, number][]
+}) {
+  return (
+    <>
+      {offsets.map(([ox, oy, oz], i) => (
+        <mesh key={i} position={[cx + ox, cy + oy, cz + oz]} castShadow>
+          <icosahedronGeometry args={[r * (0.75 + i * 0.08), 1]} />
+          <ToonMat color={color} emissive={emissive} emissInt={emissInt} />
+        </mesh>
+      ))}
+    </>
+  )
+}
 
 function SingleTree({ t }: { t: TreeInstance }) {
-  const sc   = t.scale
-  const cols = SPECIES_COLORS[t.species]
-  const tc   = TRUNK_COLORS[t.species]
-  const base = [t.x, t.y, t.z] as [number, number, number]
-
-  // Species-specific shapes
-  const isPine   = t.species === 1
+  const sc  = t.scale
+  const pal = PALETTE[t.species]
   const isWillow = t.species === 3
+  const isPine   = t.species === 1
+  const isMaple  = t.species === 2
 
-  const trunkH    = isPine ? 2.8 * sc : 1.8 * sc
-  const trunkR    = isPine ? 0.14 * sc : 0.22 * sc
-  const layer1H   = isPine ? 3.2 * sc : 2.4 * sc
-  const layer1R   = isPine ? 1.2 * sc : 1.6 * sc
-  const layer1Y   = trunkH + layer1H * 0.4
-  const layer2H   = isPine ? 2.6 * sc : 2.0 * sc
-  const layer2R   = isPine ? 0.9 * sc : 1.2 * sc
-  const layer2Y   = layer1Y + layer2H * 0.55
-  const layer3H   = isPine ? 2.0 * sc : 1.5 * sc
-  const layer3R   = isPine ? 0.55 * sc : 0.8 * sc
-  const layer3Y   = layer2Y + layer3H * 0.55
+  const trunkH = (isPine ? 3.2 : isWillow ? 1.4 : 2.0) * sc
+  const trunkR = (isPine ? 0.12 : 0.20) * sc
+
+  // Main canopy center
+  const canY = trunkH + (isPine ? 0.6 : 0.4) * sc
+  const r0   = (isPine ? 1.1 : isWillow ? 1.4 : 1.3) * sc
+
+  // Cluster offsets — gives organic bubbly shape instead of a single ball
+  const offsets: [number, number, number][] = isPine ? [
+    [0, 0, 0], [0, r0 * 0.8, 0], [0, r0 * 1.55, 0],
+    [r0 * 0.25, r0 * 0.35, r0 * 0.1], [-r0 * 0.2, r0 * 1.1, r0 * 0.15],
+  ] : isWillow ? [
+    [0, 0, 0],
+    [r0 * 0.6,  -r0 * 0.35, r0 * 0.2],
+    [-r0 * 0.5, -r0 * 0.3,  r0 * 0.3],
+    [r0 * 0.2,  -r0 * 0.55, -r0 * 0.5],
+    [-r0 * 0.3, -r0 * 0.45, -r0 * 0.4],
+  ] : isMaple ? [
+    [0, 0, 0],
+    [r0 * 0.55, r0 * 0.3, 0],
+    [-r0 * 0.5, r0 * 0.25, r0 * 0.1],
+    [r0 * 0.1,  r0 * 0.55, r0 * 0.2],
+    [-r0 * 0.2, r0 * 0.6, -r0 * 0.15],
+    [r0 * 0.3,  -r0 * 0.2, r0 * 0.35],
+  ] : [
+    [0, 0, 0],
+    [r0 * 0.5, r0 * 0.35, 0],
+    [-r0 * 0.45, r0 * 0.3, r0 * 0.15],
+    [r0 * 0.15,  r0 * 0.6, -r0 * 0.1],
+    [r0 * 0.3,  -r0 * 0.15, r0 * 0.4],
+  ]
+
+  // Secondary lower color blob for depth
+  const secOffsets: [number, number, number][] = [
+    [r0 * 0.4, -r0 * 0.1, r0 * 0.3],
+    [-r0 * 0.35, -r0 * 0.05, -r0 * 0.3],
+  ]
 
   return (
-    <group position={base} rotation={[0, t.rotY, 0]}>
-      {/* Trunk */}
-      <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[trunkR * 0.7, trunkR, trunkH, 7]} />
-        <meshStandardMaterial color={tc} roughness={0.97} metalness={0} />
-      </mesh>
-      {/* Canopy layer 1 (base, widest) */}
-      <mesh position={[0, layer1Y, 0]} castShadow receiveShadow>
-        <coneGeometry args={[layer1R, layer1H, 7]} />
-        <meshStandardMaterial color={cols[0]} roughness={0.87} metalness={0} envMapIntensity={0.2} />
-      </mesh>
-      {/* Canopy layer 2 */}
-      <mesh position={[isWillow ? 0.15 * sc : 0.08 * sc, layer2Y, isWillow ? 0.1 * sc : 0.05 * sc]} castShadow receiveShadow>
-        <coneGeometry args={[layer2R, layer2H, 7]} />
-        <meshStandardMaterial color={cols[1]} roughness={0.85} metalness={0} envMapIntensity={0.18} />
-      </mesh>
-      {/* Canopy layer 3 (top) */}
-      <mesh position={[-0.06 * sc, layer3Y, 0.06 * sc]} castShadow receiveShadow>
-        <coneGeometry args={[layer3R, layer3H, 6]} />
-        <meshStandardMaterial color={cols[2]} roughness={0.88} metalness={0} envMapIntensity={0.15} />
-      </mesh>
-      {/* Root flare (low flat cylinder) */}
-      <mesh position={[0, 0.05, 0]} receiveShadow>
-        <cylinderGeometry args={[trunkR * 1.8, trunkR * 2.2, 0.15, 8]} />
-        <meshStandardMaterial color={tc} roughness={0.98} metalness={0} />
+    <group position={[t.x, t.y, t.z]} rotation={[0, t.rotY, 0]}>
+      <Trunk h={trunkH} r={trunkR} color={pal.trunk} />
+      {/* Main canopy blobs */}
+      <CanopyBlob
+        cx={0} cy={canY} cz={0}
+        r={r0 * 0.72}
+        color={pal.canopy[0]}
+        emissive={pal.emissive} emissInt={pal.emissInt}
+        offsets={offsets}
+      />
+      {/* Secondary darker depth blobs */}
+      <CanopyBlob
+        cx={0} cy={canY - r0 * 0.2} cz={0}
+        r={r0 * 0.52}
+        color={pal.canopy[2]}
+        emissive={pal.emissive} emissInt={pal.emissInt * 0.6}
+        offsets={secOffsets}
+      />
+      {/* Root flare — lathe-like widening */}
+      <mesh position={[0, 0.08 * sc, 0]} receiveShadow>
+        <cylinderGeometry args={[trunkR * 2.0, trunkR * 2.6, 0.18 * sc, 8]} />
+        <meshToonMaterial color={pal.trunk} />
       </mesh>
     </group>
   )

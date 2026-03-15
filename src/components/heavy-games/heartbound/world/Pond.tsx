@@ -1,8 +1,12 @@
 /**
- * Pond — scaled up to match new 400×400 world
- * Radius: 14 units (was 4 — proportional to world)
- * Animated water color + ripple ring
- * Lily pads + floating flowers
+ * Pond — Sky: Children of the Light aesthetic
+ *
+ * - Deep luminous teal water (Sky's iconic glowing water)
+ * - meshToonMaterial for cel-shade consistency
+ * - Inner light column effect via a tall transparent cylinder
+ * - Lily pads: flat rounded, warm olive green
+ * - Shore ring: warm sandy toon material
+ * - Animated water color: cycles between deep teal and soft blue-green
  */
 import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
@@ -14,29 +18,29 @@ export const POND_RADIUS = 14
 
 export function Pond() {
   const waterRef  = useRef<THREE.Mesh>(null!)
-  const rippleRef = useRef<THREE.Mesh>(null!)
+  const glowRef   = useRef<THREE.Mesh>(null!)
 
   useFrame(({ clock }) => {
-    if (!waterRef.current) return
-    const t   = clock.elapsedTime
-    const mat = waterRef.current.material as THREE.MeshStandardMaterial
-    mat.color.setRGB(
-      0.22 + 0.04 * Math.sin(t * 0.35),
-      0.52 + 0.07 * Math.sin(t * 0.28 + 1.1),
-      0.82 + 0.05 * Math.sin(t * 0.45 + 2.3),
-    )
-    mat.opacity = 0.80 + 0.06 * Math.sin(t * 0.55)
-    mat.envMapIntensity = 2.5 + 0.5 * Math.sin(t * 0.4)
-    if (rippleRef.current) {
-      const p = 1.0 + 0.025 * Math.sin(t * 1.1)
-      rippleRef.current.scale.set(p, p, p)
+    const t = clock.elapsedTime
+    if (waterRef.current) {
+      const mat = waterRef.current.material as THREE.MeshToonMaterial
+      mat.color.setRGB(
+        0.04 + 0.03 * Math.sin(t * 0.3),
+        0.45 + 0.08 * Math.sin(t * 0.22 + 1.0),
+        0.55 + 0.07 * Math.sin(t * 0.28 + 2.1),
+      )
+      mat.emissiveIntensity = 0.25 + 0.1 * Math.sin(t * 0.55)
+    }
+    if (glowRef.current) {
+      const mat = glowRef.current.material as THREE.MeshBasicMaterial
+      mat.opacity = 0.06 + 0.04 * Math.sin(t * 0.7)
     }
   })
 
   const lilyPads = useMemo(() => Array.from({ length: 10 }, (_, i) => ({
     angle: (i / 10) * Math.PI * 2 + i * 0.4,
-    r:     4 + (i % 3) * 2.5,
-    size:  0.8 + (i % 3) * 0.3,
+    r:     5 + (i % 3) * 2.5,
+    size:  0.9 + (i % 3) * 0.35,
     hasFl: i % 3 === 0,
   })), [])
 
@@ -46,24 +50,30 @@ export function Pond() {
   return (
     <group position={[cx, 0.05, cz]}>
       {/* Bed */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 0]}>
-        <circleGeometry args={[POND_RADIUS + 1.5, 56]} />
-        <meshStandardMaterial color="#0a1e2e" roughness={0.85} metalness={0.05} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.32, 0]}>
+        <circleGeometry args={[POND_RADIUS + 1.5, 48]} />
+        <meshToonMaterial color="#0a1e2e" />
       </mesh>
-      {/* Shore ring */}
+      {/* Shore — warm sandy */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
-        <ringGeometry args={[POND_RADIUS, POND_RADIUS + 2.5, 56]} />
-        <meshStandardMaterial color="#5a8870" roughness={0.95} metalness={0} transparent opacity={0.6} />
+        <ringGeometry args={[POND_RADIUS, POND_RADIUS + 2.8, 48]} />
+        <meshToonMaterial color="#c8a870" />
       </mesh>
       {/* Water surface */}
       <mesh ref={waterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
-        <circleGeometry args={[POND_RADIUS, 56]} />
-        <meshStandardMaterial color="#4ab8e8" roughness={0.04} metalness={0.2} transparent opacity={0.85} envMapIntensity={2.5} />
+        <circleGeometry args={[POND_RADIUS, 48]} />
+        <meshToonMaterial
+          color="#0d7280"
+          emissive="#065060"
+          emissiveIntensity={0.25}
+          transparent
+          opacity={0.88}
+        />
       </mesh>
-      {/* Ripple */}
-      <mesh ref={rippleRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.07, 0]}>
-        <ringGeometry args={[POND_RADIUS * 0.4, POND_RADIUS * 0.5, 36]} />
-        <meshBasicMaterial color="#a0d8f0" transparent opacity={0.15} />
+      {/* Glow column — Sky's glowing water effect */}
+      <mesh ref={glowRef} position={[0, 1.5, 0]}>
+        <cylinderGeometry args={[POND_RADIUS * 0.6, POND_RADIUS * 0.8, 3.0, 32, 1, true]} />
+        <meshBasicMaterial color="#40e0d0" transparent opacity={0.07} side={THREE.DoubleSide} />
       </mesh>
       {/* Lily pads */}
       {lilyPads.map((lp, i) => {
@@ -72,17 +82,19 @@ export function Pond() {
         return (
           <group key={i}>
             <mesh rotation={[-Math.PI / 2, lp.angle, 0]} position={[lx, 0.09, lz]}>
-              <circleGeometry args={[lp.size, 14]} />
-              <meshStandardMaterial color={i % 2 === 0 ? '#1a5c38' : '#2d6a4f'} roughness={0.75} metalness={0} />
+              <circleGeometry args={[lp.size, 12]} />
+              <meshToonMaterial color={i % 2 === 0 ? '#2d6040' : '#3d7050'} />
             </mesh>
             {lp.hasFl && (
-              <Billboard position={[lx, 0.35, lz]}>
-                <Text fontSize={0.5} anchorX="center" anchorY="middle">🌸</Text>
+              <Billboard position={[lx, 0.45, lz]}>
+                <Text fontSize={0.55} anchorX="center" anchorY="middle">🌸</Text>
               </Billboard>
             )}
           </group>
         )
       })}
+      {/* Point light — glowing water source */}
+      <pointLight color="#40c0b0" intensity={4} distance={28} decay={2} position={[0, 0.5, 0]} />
     </group>
   )
 }

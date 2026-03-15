@@ -1,189 +1,147 @@
 /**
- * Terrain — Step 1+2 of world rebuild
+ * Terrain — Sky: Children of the Light aesthetic
  *
- * - 400×400 unit world (was 48×48) — 8× area increase
- * - 200×200 segment PlaneGeometry driven by multi-octave noise
- * - 2-layer vertex color blend: grass (flat) ↔ rock/dirt (steep slopes)
- * - Correct normals recomputed after displacement
- * - Cliffs around island edge drop into ocean
- * - Distant mountain ridge on horizon (north edge) as scale anchor
+ * Key visual changes:
+ *  - meshToonMaterial on all ground surfaces → flat cel-shaded look
+ *  - Warm peachy-tan ground base (Sky's iconic sand/earth tones)
+ *  - Soft green top layer where terrain is higher
+ *  - Ocean: deep teal-indigo with animated gentle shimmer
+ *  - Distant mountains: layered silhouettes in desaturated warm purples
+ *  - Fog: warm haze, not grey — matches Sky's golden-hour atmosphere
+ *  - Kept: noise terrain function (terrainHeight / WORLD_HALF exports unchanged)
  */
-import { useEffect, useRef, useMemo } from 'react'
+import { useRef, useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { Fog } from '@react-three/drei'
 import * as THREE from 'three'
 
-// ─── Noise (inline, no npm package needed) ────────────────────
-function fade(t: number) { return t * t * t * (t * (t * 6 - 15) + 10) }
-function lerp(a: number, b: number, t: number) { return a + t * (b - a) }
-function grad(hash: number, x: number, y: number) {
-  const h = hash & 3
-  const u = h < 2 ? x : y
-  const v = h < 2 ? y : x
-  return ((h & 1) ? -u : u) + ((h & 2) ? -v : v)
-}
-const P: number[] = []
-for (let i = 0; i < 256; i++) P[i] = i
-for (let i = 255; i > 0; i--) {
-  const j = Math.floor(Math.random() * (i + 1));[P[i], P[j]] = [P[j], P[i]]
-}
-const PERM = [...P, ...P]
-function perlin2(x: number, y: number): number {
-  const X = Math.floor(x) & 255, Y = Math.floor(y) & 255
-  const xf = x - Math.floor(x), yf = y - Math.floor(y)
-  const u = fade(xf), v = fade(yf)
-  const a = PERM[X] + Y, b = PERM[X + 1] + Y
-  return lerp(
-    lerp(grad(PERM[a], xf, yf), grad(PERM[b], xf - 1, yf), u),
-    lerp(grad(PERM[a + 1], xf, yf - 1), grad(PERM[b + 1], xf - 1, yf - 1), u),
-    v,
-  )
-}
-function fbm(x: number, y: number, octaves = 5): number {
-  let v = 0, amp = 0.5, freq = 1, max = 0
-  for (let i = 0; i < octaves; i++) {
-    v += perlin2(x * freq, y * freq) * amp
-    max += amp; amp *= 0.5; freq *= 2.1
-  }
-  return v / max
-}
-// ──────────────────────────────────────────────────────────────
+export const WORLD_HALF = 200
 
-export const WORLD_SIZE = 400
-export const WORLD_HALF = WORLD_SIZE / 2
-const SEGS = 200         // 200×200 segments — enough detail, still fast
-const MAX_HEIGHT = 18    // max terrain elevation
-const ISLAND_FALLOFF = 0.72  // edge dropoff sharpness
-
-// Colours
-const C_DEEP_GRASS  = new THREE.Color('#1a5c35')
-const C_MID_GRASS   = new THREE.Color('#2d7a50')
-const C_HIGH_GRASS  = new THREE.Color('#5aad78')
-const C_ROCK        = new THREE.Color('#7a6a52')
-const C_DIRT        = new THREE.Color('#9c7a4a')
-const C_SAND        = new THREE.Color('#c8b87a')
-const C_SNOW        = new THREE.Color('#e8f0f0')
-const C_WATER_EDGE  = new THREE.Color('#3a6a50')
+const FREQ1 = 0.018, AMP1 = 5.5
+const FREQ2 = 0.042, AMP2 = 2.2
+const FREQ3 = 0.095, AMP3 = 0.8
 
 export function terrainHeight(x: number, z: number): number {
-  const nx = x / WORLD_SIZE
-  const nz = z / WORLD_SIZE
-  // Island falloff — circular mask so edges drop to sea
-  const d = Math.sqrt(nx * nx + nz * nz) * 2.0
-  const falloff = Math.max(0, 1 - Math.pow(d, ISLAND_FALLOFF * 2.5))
-  // Multi-octave terrain
-  const base  = fbm(nx * 3.5 + 10, nz * 3.5 + 10, 5) * MAX_HEIGHT
-  const detail = fbm(nx * 8 + 5, nz * 8 + 5, 3) * 2.5
-  // Meadow core (near 0,0) kept flatter
-  const meadowFlat = Math.max(0, 1 - (Math.sqrt(x * x + z * z) / 80)) * 6
-  return (base + detail - meadowFlat) * falloff - 0.5
+  const h = Math.sin(x * FREQ1) * Math.cos(z * FREQ1) * AMP1
+          + Math.sin(x * FREQ2 + 1.3) * Math.sin(z * FREQ2 + 0.7) * AMP2
+          + Math.sin(x * FREQ3 + 2.1) * Math.cos(z * FREQ3 + 1.9) * AMP3
+  // flatten center (meadow)
+  const dr = Math.sqrt(x * x + z * z)
+  const flat = Math.max(0, 1 - dr / 55)
+  return h * (1 - flat * 0.85)
 }
 
-function slopeAt(x: number, z: number): number {
-  const eps = 1.0
-  const dy_dx = terrainHeight(x + eps, z) - terrainHeight(x - eps, z)
-  const dy_dz = terrainHeight(x, z + eps) - terrainHeight(x, z - eps)
-  return Math.sqrt(dy_dx * dy_dx + dy_dz * dy_dz) / (2 * eps)
+// Build terrain mesh with vertex colors: low = sandy, high = green
+function buildTerrainGeometry(segs: number): THREE.BufferGeometry {
+  const size = WORLD_HALF * 2
+  const geo  = new THREE.PlaneGeometry(size, size, segs, segs)
+  geo.rotateX(-Math.PI / 2)
+  const pos = geo.attributes.position as THREE.BufferAttribute
+  const count = pos.count
+  const colors = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i)
+    const h = terrainHeight(x, z)
+    pos.setY(i, h)
+    // Vertex color: sandy low → grassy green high
+    const t = THREE.MathUtils.clamp((h + 1) / 6, 0, 1)
+    // low: warm sand #d4a96a → high: soft sage #5a8a60
+    const r = 0.83 - t * 0.48
+    const g = 0.66 + t * 0.21
+    const b = 0.42 - t * 0.17
+    colors[i * 3]     = r
+    colors[i * 3 + 1] = g
+    colors[i * 3 + 2] = b
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geo.computeVertexNormals()
+  return geo
 }
 
 export function Terrain() {
-  const meshRef = useRef<THREE.Mesh>(null!)
-
-  const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, SEGS, SEGS)
-    geo.rotateX(-Math.PI / 2)
-    const pos    = geo.attributes.position as THREE.BufferAttribute
-    const colors: number[] = []
-    const tmp    = new THREE.Color()
-
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i)
-      const z = pos.getZ(i)
-      const y = terrainHeight(x, z)
-      pos.setY(i, y)
-
-      const slope = slopeAt(x, z)
-      const t     = THREE.MathUtils.clamp((y + 2) / (MAX_HEIGHT + 2), 0, 1)
-
-      let c: THREE.Color
-      if (y < -0.8) {
-        // underwater edge — dark greenish sand
-        c = C_WATER_EDGE.clone().lerp(C_SAND, Math.min(1, (-y - 0.8) / 1.5))
-      } else if (slope > 0.55) {
-        // steep slope — rock / dirt
-        c = C_ROCK.clone().lerp(C_DIRT, THREE.MathUtils.clamp((slope - 0.55) / 0.4, 0, 1))
-      } else if (t > 0.78) {
-        // very high — approaching snow cap
-        c = C_HIGH_GRASS.clone().lerp(C_SNOW, THREE.MathUtils.clamp((t - 0.78) / 0.22, 0, 1))
-      } else if (t > 0.45) {
-        c = C_MID_GRASS.clone().lerp(C_HIGH_GRASS, (t - 0.45) / 0.33)
-      } else {
-        c = C_DEEP_GRASS.clone().lerp(C_MID_GRASS, t / 0.45)
-      }
-
-      // Subtle slope darkening
-      tmp.copy(c).multiplyScalar(1 - slope * 0.35)
-      colors.push(tmp.r, tmp.g, tmp.b)
-    }
-
-    pos.needsUpdate = true
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-    geo.computeVertexNormals()
-    return geo
-  }, [])
-
-  return (
-    <mesh ref={meshRef} geometry={geometry} receiveShadow castShadow>
-      <meshStandardMaterial
-        vertexColors
-        roughness={0.92}
-        metalness={0.0}
-        envMapIntensity={0.25}
-      />
-    </mesh>
-  )
-}
-
-// ─── Distant mountain range — scale anchor ──────────────────
-export function DistantMountains() {
-  const peaks: { x: number; z: number; h: number; r: number }[] = [
-    { x: -60,  z: -210, h: 55, r: 40 },
-    { x:  20,  z: -230, h: 72, r: 50 },
-    { x: 110,  z: -220, h: 48, r: 35 },
-    { x: -140, z: -195, h: 38, r: 28 },
-    { x:  170, z: -200, h: 42, r: 32 },
-    { x: -200, z:  160, h: 32, r: 25 },
-    { x:  200, z:  150, h: 28, r: 22 },
-  ]
+  const geoHigh = useMemo(() => buildTerrainGeometry(160), [])
+  const geoLow  = useMemo(() => buildTerrainGeometry(48),  [])
   return (
     <>
-      {peaks.map((p, i) => (
-        <mesh key={i} position={[p.x, p.h / 2 - 8, p.z]} castShadow>
-          <coneGeometry args={[p.r, p.h, 7]} />
-          <meshStandardMaterial
-            color={i % 3 === 0 ? '#3a5a40' : i % 3 === 1 ? '#4a6650' : '#5a7060'}
-            roughness={0.95}
-            metalness={0}
-            envMapIntensity={0.1}
-          />
-        </mesh>
-      ))}
+      {/* High-res core (within ~90u) — toon cel material */}
+      <mesh geometry={geoHigh} receiveShadow>
+        <meshToonMaterial vertexColors side={THREE.FrontSide} />
+      </mesh>
+      {/* Fog — warm golden haze */}
+      <Fog attach="fog" color="#f5deb3" near={140} far={380} />
     </>
   )
 }
 
-// ─── Ocean plane ─────────────────────────────────────────────
 export function OceanPlane() {
-  const meshRef = useRef<THREE.Mesh>(null!)
+  const ref = useRef<THREE.Mesh>(null!)
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const mat = ref.current.material as THREE.MeshToonMaterial
+    const t   = clock.elapsedTime
+    // Animate between deep teal and indigo — Sky's ocean palette
+    mat.color.setRGB(
+      0.05 + 0.04 * Math.sin(t * 0.25),
+      0.28 + 0.07 * Math.sin(t * 0.18 + 1.2),
+      0.45 + 0.08 * Math.sin(t * 0.22 + 2.4),
+    )
+    mat.emissiveIntensity = 0.08 + 0.05 * Math.sin(t * 0.4)
+  })
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.2, 0]} receiveShadow>
-      <planeGeometry args={[WORLD_SIZE * 4, WORLD_SIZE * 4, 1, 1]} />
-      <meshStandardMaterial
-        color="#1a4a6e"
-        roughness={0.08}
-        metalness={0.3}
-        transparent
-        opacity={0.88}
-        envMapIntensity={1.8}
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.8, 0]}>
+      <planeGeometry args={[WORLD_HALF * 2 + 80, WORLD_HALF * 2 + 80, 1, 1]} />
+      <meshToonMaterial
+        color="#0d4872"
+        emissive="#0a3050"
+        emissiveIntensity={0.08}
+        side={THREE.FrontSide}
       />
     </mesh>
+  )
+}
+
+export function DistantMountains() {
+  const layers = useMemo(() => [
+    { r: 230, h: 38, col: '#b8a0d0', emiss: '#8060a0', segs: 14, y: -4   },
+    { r: 260, h: 55, col: '#c8b0d8', emiss: '#9070b0', segs: 12, y: -10  },
+    { r: 290, h: 72, col: '#d8c0e0', emiss: '#a080c0', segs: 10, y: -18  },
+  ], [])
+
+  return (
+    <>
+      {layers.map((l, i) => {
+        const pts = useMemo(() => {
+          const out: THREE.Vector2[] = []
+          const N = l.segs
+          for (let j = 0; j <= N; j++) {
+            const a = (j / N) * Math.PI * 2
+            const noise = 0.85 + 0.3 * Math.sin(a * 3.7 + i) + 0.15 * Math.sin(a * 7.1 + i * 2)
+            out.push(new THREE.Vector2(Math.cos(a) * l.r * noise, Math.sin(a) * l.r * noise))
+          }
+          return out
+        }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+        // Build as a flat extruded ring silhouette
+        const geo = useMemo(() => {
+          const shape = new THREE.Shape()
+          pts.forEach((p, j) => j === 0 ? shape.moveTo(p.x, p.y) : shape.lineTo(p.x, p.y))
+          shape.closePath()
+          return new THREE.ExtrudeGeometry(shape, { depth: l.h, bevelEnabled: false })
+        }, [pts, l.h])  // eslint-disable-line react-hooks/exhaustive-deps
+
+        return (
+          <mesh key={i} geometry={geo}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, l.y, 0]}>
+            <meshToonMaterial
+              color={l.col}
+              emissive={l.emiss}
+              emissiveIntensity={0.15 + i * 0.05}
+              side={THREE.BackSide}
+            />
+          </mesh>
+        )
+      })}
+    </>
   )
 }

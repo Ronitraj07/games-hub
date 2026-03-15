@@ -1,11 +1,14 @@
 /**
- * VRMCharacter — Mixamo FBX → VRM  (Fix v7 — sprint support)
+ * VRMCharacter — v8
  *
- * v7 adds:
- *  - sprintingRef prop: when true, walk clock advances at WALK_RATE_SPRINT (1.4x)
- *    instead of WALK_RATE_NORMAL (0.75x), making legs cycle faster during sprint.
- *    No new animation needed — same happy walk, just faster playback.
- *  - Blend rate bumped to 10x for snappier sprint entry/exit.
+ * Sliding fix:
+ *  - Walk clock is now driven by DISTANCE TRAVELED, not wall-clock time.
+ *    Legs cycle proportional to how far the character actually moves.
+ *  - Walk animation rate tuned so one full leg cycle = ~2.4 world units walked.
+ *  - Sprint uses same cycle but driven at sprint distance speed.
+ *
+ * Sky:CotL feel:
+ *  - No visual changes here — just the animation timing fix.
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -23,10 +26,13 @@ const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/pu
 const IDLE_URL  = `${BASE_ANIM}/idle.fbx`
 const WALK_URL  = `${BASE_ANIM}/happywalk.fbx`
 
-// Walk cycle playback rates
-const WALK_RATE_NORMAL = 0.75   // normal walk
-const WALK_RATE_SPRINT = 1.40   // sprint — same animation, faster legs
-const BLEND_RATE       = 10     // idle↔walk crossfade speed
+// How many world-units of travel = one full walk animation cycle
+// Tune this until feet don't slide: if feet slide forward increase this,
+// if they moonwalk decrease it.
+const STRIDE_LENGTH        = 2.4   // world units per full cycle
+const STRIDE_LENGTH_SPRINT = 3.6   // sprinting has longer strides
+
+const BLEND_RATE = 12   // idle↔walk crossfade speed (higher = snappier)
 
 const mixamoVRMRigMap: Record<string, string> = {
   mixamorigHips:           'hips',
@@ -160,12 +166,14 @@ export const VRMCharacter = ({
 }: Props) => {
   const { scene } = useThree()
 
-  const vrmRef      = useRef<any>(null)
-  const idleRef     = useRef<AnimData | null>(null)
-  const walkRef     = useRef<AnimData | null>(null)
-  const idleTimeRef = useRef(0)
-  const walkTimeRef = useRef(0)
-  const blendRef    = useRef(0)
+  const vrmRef        = useRef<any>(null)
+  const idleRef       = useRef<AnimData | null>(null)
+  const walkRef       = useRef<AnimData | null>(null)
+  const idleTimeRef   = useRef(0)
+  // Walk phase driven by DISTANCE, not time
+  const walkPhaseRef  = useRef(0)
+  const blendRef      = useRef(0)
+  const prevPosRef    = useRef<THREE.Vector3 | null>(null)
 
   const {
     equippedAccessories, bondLevel,
@@ -222,15 +230,15 @@ export const VRMCharacter = ({
 
       VRMUtils.combineSkeletons(gltf.scene)
 
-      idleRef.current     = idle
-      walkRef.current     = walk
-      blendRef.current    = 0
-      idleTimeRef.current = 0
-      walkTimeRef.current = 0
+      idleRef.current    = idle
+      walkRef.current    = walk
+      blendRef.current   = 0
+      idleTimeRef.current  = 0
+      walkPhaseRef.current = 0
+      prevPosRef.current   = null
 
       console.info('[VRM] ready ✓')
     }
-
     load()
     return () => {
       cancelled = true
@@ -243,24 +251,38 @@ export const VRMCharacter = ({
   useFrame((_s, delta) => {
     if (!vrmRef.current) return
 
-    const moving    = movingRef?.current   ?? false
+    const moving    = movingRef?.current    ?? false
     const sprinting = sprintingRef?.current ?? false
+    const curPos    = posRef.current
 
-    // Smooth blend: 0 = idle, 1 = walk/sprint
+    // ── Distance-driven walk phase ──────────────────────────────────────────
+    // Measure how far the character moved this frame
+    let distThisFrame = 0
+    if (prevPosRef.current) {
+      distThisFrame = curPos.distanceTo(prevPosRef.current)
+    }
+    prevPosRef.current = curPos.clone()
+
+    // Accumulate walk phase proportional to distance
+    // phase goes 0→duration as character walks STRIDE_LENGTH world units
+    if (moving && walkRef.current) {
+      const stride = sprinting ? STRIDE_LENGTH_SPRINT : STRIDE_LENGTH
+      walkPhaseRef.current += (distThisFrame / stride) * walkRef.current.duration
+    }
+    idleTimeRef.current += delta
+
+    // ── Blend ───────────────────────────────────────────────────────────────
     const target = moving ? 1 : 0
     blendRef.current += (target - blendRef.current) * Math.min(delta * BLEND_RATE, 1)
     const blend = blendRef.current
 
-    // Walk clock speed: faster when sprinting
-    const walkRate = sprinting ? WALK_RATE_SPRINT : WALK_RATE_NORMAL
-    idleTimeRef.current += delta
-    walkTimeRef.current += delta * walkRate
-
     if (idleRef.current) applyAnim(idleRef.current, idleTimeRef.current, 1 - blend)
-    if (walkRef.current)  applyAnim(walkRef.current,  walkTimeRef.current, blend)
+    if (walkRef.current)  applyAnim(walkRef.current, walkPhaseRef.current, blend)
 
-    vrmRef.current.scene.position.copy(posRef.current)
+    // ── Position ────────────────────────────────────────────────────────────
+    vrmRef.current.scene.position.copy(curPos)
 
+    // ── Facing ──────────────────────────────────────────────────────────────
     if (facingRef) {
       const targetY  = facingRef.current + Math.PI
       const currentY = vrmRef.current.scene.rotation.y

@@ -1,97 +1,82 @@
 /**
- * Rocks — displaced IcosahedronGeometry + slope-aware placement
+ * Rocks — Sky: Children of the Light aesthetic
  *
- * Each rock:
- *  - Base: IcosahedronGeometry detail=1 (20 faces) with random vertex displacement
- *  - Multi-rock clusters: 1–3 rocks per group, varied size
- *  - Color: dark base, lighter top face (light-catching)
- *  - Moss patches: second slightly green tint on low/flat rocks
+ * Replaced BoxGeometry with IcosahedronGeometry (detail=1) for each rock.
+ * Icosahedra look like natural angular boulders when slightly scaled
+ * non-uniformly. Color palette matches Sky's warm sandy stone.
+ * meshToonMaterial for cel-shade consistency.
  */
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { terrainHeight } from './Terrain'
 
-const ROCK_CLUSTERS = 80
+const ROCK_COUNT = 80
+const RNG_SEED   = 77
 
 function seededRng(seed: number) {
   let s = seed
-  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646 }
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 }
 }
 
-function makeRockGeo(rng: () => number, scale: number): THREE.BufferGeometry {
-  const geo = new THREE.IcosahedronGeometry(scale, 1)
-  const pos = geo.attributes.position as THREE.BufferAttribute
-  for (let i = 0; i < pos.count; i++) {
-    const noise = 1 + (rng() - 0.5) * 0.55
-    pos.setXYZ(i, pos.getX(i) * noise, pos.getY(i) * noise * 0.75, pos.getZ(i) * noise)
-  }
-  pos.needsUpdate = true
-  geo.computeVertexNormals()
-  return geo
+interface RockInstance {
+  x: number; z: number; y: number
+  sx: number; sy: number; sz: number
+  rotX: number; rotY: number; rotZ: number
+  colorIdx: number
 }
 
-interface RockGroup {
-  cx: number; cz: number
-  rocks: { dx: number; dz: number; scale: number; rotY: number; color: string }[]
-}
-
-const ROCK_COLORS = ['#6b5a42', '#7a6a52', '#8a7a62', '#5a4a32', '#9a8a72']
-const MOSS_COLORS = ['#4a6a42', '#5a7a50', '#6a8a58']
-
-function generateRockGroups(): RockGroup[] {
-  const rng = seededRng(77)
-  const groups: RockGroup[] = []
+function generateRocks(): RockInstance[] {
+  const rng   = seededRng(RNG_SEED)
+  const rocks: RockInstance[] = []
   let attempts = 0
-  while (groups.length < ROCK_CLUSTERS && attempts < 2000) {
+  while (rocks.length < ROCK_COUNT && attempts < 3000) {
     attempts++
     const angle = rng() * Math.PI * 2
-    const r = 30 + rng() * 160
-    const cx = Math.cos(angle) * r
-    const cz = Math.sin(angle) * r
-    if (Math.sqrt(cx * cx + cz * cz) > 192) continue
-    if (Math.sqrt(cx * cx + cz * cz) < 18) continue  // keep pond clear
-    const y = terrainHeight(cx, cz)
-    if (y < 0) continue
-    const count = 1 + Math.floor(rng() * 3)
-    const rocks = Array.from({ length: count }, () => ({
-      dx:    (rng() - 0.5) * 3,
-      dz:    (rng() - 0.5) * 3,
-      scale: 0.25 + rng() * 0.7,
-      rotY:  rng() * Math.PI * 2,
-      color: rng() > 0.25
-        ? ROCK_COLORS[Math.floor(rng() * ROCK_COLORS.length)]
-        : MOSS_COLORS[Math.floor(rng() * MOSS_COLORS.length)],
-    }))
-    groups.push({ cx, cz, rocks })
+    const r     = 20 + rng() * 165
+    const x     = Math.cos(angle) * r
+    const z     = Math.sin(angle) * r
+    if (Math.sqrt(x * x + z * z) > 190) continue
+    if (Math.sqrt(x * x + (z - 10) * (z - 10)) < 18) continue
+    const y = terrainHeight(x, z)
+    if (y < -0.2) continue
+    rocks.push({
+      x, z, y,
+      sx: 0.4 + rng() * 1.0,
+      sy: 0.3 + rng() * 0.8,
+      sz: 0.35 + rng() * 0.9,
+      rotX: rng() * 0.6,
+      rotY: rng() * Math.PI * 2,
+      rotZ: rng() * 0.5,
+      colorIdx: Math.floor(rng() * 4),
+    })
   }
-  return groups
+  return rocks
 }
 
-function RockCluster({ g }: { g: RockGroup }) {
-  const rng = seededRng(Math.floor(g.cx * 1000 + g.cz))
-  const baseY = terrainHeight(g.cx, g.cz)
-  return (
-    <group position={[g.cx, baseY, g.cz]}>
-      {g.rocks.map((r, i) => {
-        const geo = useMemo(() => makeRockGeo(rng, r.scale), []) // eslint-disable-line
-        return (
-          <mesh
-            key={i}
-            geometry={geo}
-            position={[r.dx, r.scale * 0.5, r.dz]}
-            rotation={[0, r.rotY, 0]}
-            castShadow
-            receiveShadow
-          >
-            <meshStandardMaterial color={r.color} roughness={0.94} metalness={0.02} envMapIntensity={0.15} />
-          </mesh>
-        )
-      })}
-    </group>
-  )
-}
+// Sky palette rocks: warm sandstone, dusty rose, cool slate, mossy
+const ROCK_COLORS = ['#c8a870', '#b89060', '#9090a0', '#7a9070']
+const ROCK_EMISS  = ['#6a5030', '#5a4020', '#404060', '#3a5030']
 
 export function Rocks() {
-  const groups = useMemo(() => generateRockGroups(), [])
-  return <>{groups.map((g, i) => <RockCluster key={i} g={g} />)}</>
+  const rocks = useMemo(() => generateRocks(), [])
+  return (
+    <>
+      {rocks.map((r, i) => (
+        <mesh
+          key={i}
+          position={[r.x, r.y + r.sy * 0.45, r.z]}
+          rotation={[r.rotX, r.rotY, r.rotZ]}
+          scale={[r.sx, r.sy, r.sz]}
+          castShadow receiveShadow
+        >
+          <icosahedronGeometry args={[1, 1]} />
+          <meshToonMaterial
+            color={ROCK_COLORS[r.colorIdx]}
+            emissive={ROCK_EMISS[r.colorIdx]}
+            emissiveIntensity={0.08}
+          />
+        </mesh>
+      ))}
+    </>
+  )
 }
