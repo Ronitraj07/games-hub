@@ -3,6 +3,8 @@
  * Camera: fixed isometric-style 3rd person — does NOT rotate with player facing.
  * Movement: camera-relative WASD (imported MovementController)
  * Sprint: hold Shift for 2x speed + faster walk cycle
+ *
+ * Ghost movement fix: keyup now removes ALL Shift variants so key never sticks.
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -62,8 +64,8 @@ function terrainY(x: number, z: number): number {
 }
 
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const posRef    = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
-  const movingRef = useRef(player.moving);
+  const posRef       = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
+  const movingRef    = useRef(player.moving);
   const sprintingRef = useRef(player.sprinting ?? false);
   useFrame(() => {
     const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
@@ -668,6 +670,8 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         return;
       }
       keysRef.current.add(e.key);
+      // Also add canonical 'Shift' so MovementController finds it
+      if (e.key === 'ShiftLeft' || e.key === 'ShiftRight') keysRef.current.add('Shift');
       if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
         if (dialogueRef.current) closeDialogue();
         else if (!menuOpenRef.current && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
@@ -676,7 +680,15 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       if (e.key === 'm' || e.key === 'M') { if (dialogueRef.current) closeDialogue(); else setMenuOpen(p => !p); return; }
       if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); return; }
     };
-    const up   = (e: KeyboardEvent) => keysRef.current.delete(e.key);
+    const up = (e: KeyboardEvent) => {
+      keysRef.current.delete(e.key);
+      // Clear all Shift variants on any Shift release
+      if (e.key === 'Shift' || e.key === 'ShiftLeft' || e.key === 'ShiftRight') {
+        keysRef.current.delete('Shift');
+        keysRef.current.delete('ShiftLeft');
+        keysRef.current.delete('ShiftRight');
+      }
+    };
     const blur = () => keysRef.current.clear();
     document.addEventListener('keydown', down, true);
     document.addEventListener('keyup',   up);

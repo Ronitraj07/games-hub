@@ -1,21 +1,19 @@
 /**
  * MovementController — Camera-relative WASD + Shift to sprint
  *
- * Movement is always relative to the CAMERA facing direction, not the character.
- *   W = move away from camera (into screen)
- *   S = move toward camera (toward viewer)
- *   A = strafe left relative to camera
- *   D = strafe right relative to camera
- *
- * Hold Shift to sprint at 2× speed.
- * sprintingRef is written every frame so VRMCharacter can speed up the walk cycle.
+ * Ghost movement fixes:
+ *  - keysRef cleared on window blur + visibilitychange (tab switch / alt-tab)
+ *  - Shift stuck key: check both 'Shift', 'ShiftLeft', 'ShiftRight' on keydown
+ *    AND clear all three variants on keyup
+ *  - Pond block no longer skips onPublish (was leaving movingRef=true)
  */
+import { useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 
 const MOVE_SPEED_WALK = 0.09
-const MOVE_SPEED_RUN  = 0.18   // hold Shift
+const MOVE_SPEED_RUN  = 0.18
 const WORLD_SIZE      = 48
 const POND_RADIUS     = 3.8
 
@@ -44,28 +42,41 @@ export function MovementController({
 }: Props) {
   const { camera } = useThree()
 
+  // Clear all held keys on any focus loss — prevents ghost movement
+  useEffect(() => {
+    const clear = () => keysRef.current.clear()
+    window.addEventListener('blur',              clear)
+    document.addEventListener('visibilitychange', clear)
+    return () => {
+      window.removeEventListener('blur',              clear)
+      document.removeEventListener('visibilitychange', clear)
+    }
+  }, [keysRef])
+
   useFrame(() => {
     if (blockedRef.current) {
-      movingRef.current   = false
-      sprintingRef.current = false
-      return
-    }
-    const k = keysRef.current
-
-    const fwd  = k.has('ArrowUp')    || k.has('w') || k.has('W')
-    const back = k.has('ArrowDown')  || k.has('s') || k.has('S')
-    const left = k.has('ArrowLeft')  || k.has('a') || k.has('A')
-    const rght = k.has('ArrowRight') || k.has('d') || k.has('D')
-    const sprint = k.has('Shift') || k.has('ShiftLeft') || k.has('ShiftRight')
-
-    if (!fwd && !back && !left && !rght) {
       movingRef.current    = false
       sprintingRef.current = false
       return
     }
 
+    const k = keysRef.current
+
+    const fwd    = k.has('ArrowUp')    || k.has('w') || k.has('W')
+    const back   = k.has('ArrowDown')  || k.has('s') || k.has('S')
+    const left   = k.has('ArrowLeft')  || k.has('a') || k.has('A')
+    const rght   = k.has('ArrowRight') || k.has('d') || k.has('D')
+    const sprint = k.has('Shift') || k.has('ShiftLeft') || k.has('ShiftRight')
+
+    if (!fwd && !back && !left && !rght) {
+      movingRef.current    = false
+      sprintingRef.current = false
+      onPublish(posRef.current.x, posRef.current.z, false, false)
+      return
+    }
+
     const speed = sprint ? MOVE_SPEED_RUN : MOVE_SPEED_WALK
-    sprintingRef.current = sprint && (fwd || back || left || rght)
+    sprintingRef.current = sprint
 
     const camFwd   = new THREE.Vector3()
     const camRight = new THREE.Vector3()
@@ -81,16 +92,24 @@ export function MovementController({
     if (rght) move.addScaledVector(camRight,  1)
     move.normalize().multiplyScalar(speed)
 
-    movingRef.current = true
     facingRef.current = Math.atan2(move.x, move.z)
 
     const np   = posRef.current.clone().add(move)
     const half = WORLD_SIZE / 2 - 2
     np.x = Math.max(-half, Math.min(half, np.x))
     np.z = Math.max(-half, Math.min(half, np.z))
-    if (Math.hypot(np.x, np.z) < POND_RADIUS) return
+
+    // Pond block — still mark as not moving so animation stops
+    if (Math.hypot(np.x, np.z) < POND_RADIUS) {
+      movingRef.current    = false
+      sprintingRef.current = false
+      onPublish(posRef.current.x, posRef.current.z, false, false)
+      return
+    }
+
     np.y = terrainY(np.x, np.z)
     posRef.current.copy(np)
+    movingRef.current = true
     onPublish(np.x, np.z, true, sprint)
   })
 
