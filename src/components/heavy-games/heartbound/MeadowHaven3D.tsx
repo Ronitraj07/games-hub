@@ -24,7 +24,7 @@ import React, {
 } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
-  Billboard, Text, Environment, Points, PointMaterial,
+  Billboard, Text, Environment,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
@@ -33,7 +33,8 @@ import { getDisplayNameFromEmail } from '@/lib/auth-config';
 import { NPCS, NPC } from './npcData';
 import { VRMCharacter } from './character/VRMCharacter';
 import { MovementController } from './gameplay/MovementController';
-import { Terrain, Forest, OceanPlane, DistantMountains, terrainHeight, WORLD_HALF } from './world/Terrain';
+import { Terrain, OceanPlane, DistantMountains, terrainHeight, WORLD_HALF } from './world/Terrain';
+import { Forest } from './world/Trees';
 import { Rocks } from './world/Rocks';
 import { Pond } from './world/Pond';
 import { Lighting } from './world/Lighting';
@@ -42,19 +43,14 @@ import { Atmosphere, Fireflies, BlossomPetals } from './world/Atmosphere';
 // ─── Constants ───────────────────────────────────────────────────────────────
 const SPAWN = new THREE.Vector3(8, 0, 8);
 
-// Camera offset scaled up to match larger world
 const CAM_OFFSET = new THREE.Vector3(0, 14, 20);
 const CAM_LERP   = 0.07;
 const CAM_LOOK_Y = 2.0;
 
-// Movement boundary (island edge falloff starts ~190u)
-const MOVE_BOUND = 190;
+const MOVE_BOUND  = 190;
+const POND_RADIUS = 14;
 
 // ─── NPC world position remapping ────────────────────────────────────────────
-// Old system: npc.tx/ty were tile coords (0–24), mapped as x = tx-12, z = ty-9
-// New system: positions are already in world units in npcData, but we
-// scale them from the old 24-unit space into the new 400-unit space.
-// Factor = WORLD_HALF / 12 ≈ 16.67  →  old ±12 maps to new ±200
 const NPC_SCALE = WORLD_HALF / 14;
 function npcWorldPos(npc: NPC): [number, number, number] {
   const wx = (npc.tx - 12) * NPC_SCALE * 0.55;
@@ -88,7 +84,6 @@ function useQualityTier(): 'high' | 'medium' | 'low' {
 
 // ─── Remote avatar ────────────────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  // Old sync used (x+10)*20 / (z+9)*20 as wire format — decode back
   const posRef       = useRef(new THREE.Vector3(
     player.x / 20 - 10, 0, player.y / 20 - 9,
   ));
@@ -111,7 +106,7 @@ function RemoteAvatar({ player }: { player: PlayerState }) {
   );
 }
 
-// ─── Flower collectibles (positions scaled up) ───────────────────────────────
+// ─── Flower collectibles ────────────────────────────────────────────────────────
 const FLOWER_POS: [number, number][] = [
   [-28,-20],[20,-28],[-16,24],[32,16],[-36,4],[36,-8],[8,-44],
   [-8,40],[24,32],[-24,-36],[44,0],[-44,0],[16,24],[-20,-16],
@@ -144,7 +139,7 @@ function Flower({ pos, collected, onCollect, playerPos }: {
   );
 }
 
-// ─── Glow ring (NPC nearby indicator) ────────────────────────────────────────
+// ─── Glow ring ───────────────────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame(({ clock }) => {
@@ -208,7 +203,7 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-// ─── Scene (R3F context) ──────────────────────────────────────────────────────
+// ─── Scene ─────────────────────────────────────────────────────────────────────
 function Scene({
   myEmail, myName, myUid, myColor,
   onCollect, onBondXP,
@@ -263,27 +258,21 @@ function Scene({
     <>
       <Lighting />
       <Environment preset="sunset" />
-
-      {/* World geometry */}
       <Terrain />
       <OceanPlane />
       <DistantMountains />
       <Pond />
       <Forest />
       <Rocks />
-
-      {/* Atmosphere */}
       <Atmosphere />
       <Fireflies />
       <BlossomPetals />
 
-      {/* Collectibles */}
       {FLOWER_POS.map((pos, i) => (
         <Flower key={i} pos={pos} collected={collectedFlowers.has(i)}
           onCollect={() => handleFlowerCollect(i)} playerPos={posRef} />
       ))}
 
-      {/* NPCs */}
       {NPCS.map(npc => (
         <NPCSprite key={npc.id} npc={npc} playerPos={posRef}
           onNearby={handleNPCNearby}
@@ -291,7 +280,6 @@ function Scene({
           showPrompt={nearbyNPCRef.current?.id === npc.id && !blockedRef.current} />
       ))}
 
-      {/* Local player */}
       <VRMCharacter
         email={myEmail} uid={myUid}
         posRef={posRef} movingRef={movingRef}
@@ -299,7 +287,6 @@ function Scene({
         isLocalPlayer={true}
       />
 
-      {/* Remote players */}
       {Object.values(remoteSnap)
         .filter(p => p.email !== myEmail && p.online)
         .map(p => <RemoteAvatar key={p.email} player={p} />)
@@ -311,6 +298,7 @@ function Scene({
         sprintingRef={sprintingRef} facingRef={facingRef}
         onPublish={onPublish} blockedRef={blockedRef}
         moveBound={MOVE_BOUND}
+        pondRadius={POND_RADIUS}
       />
     </>
   );
@@ -651,7 +639,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </Suspense>
       </Canvas>
 
-      {/* Bond XP bar */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -663,12 +650,10 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
-      {/* Flower counter */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">🌸 {flowerCount}</div>
       </div>
 
-      {/* Menu button */}
       <div className="absolute top-3 right-3 z-10">
         <button onClick={() => setMenuOpen(true)}
           className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition">☰ Menu</button>
