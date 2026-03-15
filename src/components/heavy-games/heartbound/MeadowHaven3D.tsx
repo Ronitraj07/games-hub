@@ -1,181 +1,158 @@
 /**
- * MeadowHaven3D — Phase 7F/Step 1+2
+ * MeadowHaven3D — Phase 7F / Step 3
  *
- * What changed:
- *  - WORLD_SIZE: 48 → 400 (8× area increase)
- *  - Terrain: inline primitive → Terrain component (200×200 segs, noise heightmap, 2-layer vertex color, island falloff)
- *  - Trees:   30 hardcoded primitives → Forest component (240 instances, 4 species, 3-layer canopy, seeded placement)
- *  - Rocks:   10 smooth spheres → Rocks component (80 clusters, displaced IcosahedronGeometry)
- *  - Pond:    radius 3.8 → 14, proportional to new world
- *  - Fog:     linear fog(30,80) → fogExp2(0.006) — exponential atmospheric haze
- *  - Lights:  shadow camera widened to cover 400u
- *  - Atmosphere: Fireflies 32→80, BlossomPetals 300 added
- *  - Scale anchors: DistantMountains (7 peaks), OceanPlane
- *  - Movement bounds: clamped to ±192 (island edge)
- *  - SPAWN moved to (8, 0, 8) — still near center/campfire
- *  - Camera offset scaled up (was 7u back, now 14u back)
- *  - NPC positions remapped to new coordinate space
- *
- * All gameplay systems preserved: VRM avatars, NPC dialogues,
- * flower collection, Firebase sync, menu, quality tier, joystick.
+ * Changes vs previous version:
+ *  - CameraRig (fixed offset) replaced with CameraController (orbital mouse/touch drag + scroll zoom)
+ *  - SPAWN moved to SPAWN_POS from SpawnPortal (60, 0, -60) — outside pond completely
+ *  - SpawnPortal rendered at SPAWN_POS
+ *  - containerRef passed as domRef to CameraController so pointer events work
+ *  - Canvas initial camera position updated to match new spawn + orbital default
+ *  - MovementController: camera direction is now correctly read from the orbital camera
+ *    (no change needed — MovementController already reads camera.getWorldDirection())
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
-} from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import {
-  Billboard, Text, Environment,
-} from '@react-three/drei';
-import * as THREE from 'three';
-import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync';
-import { useAuth } from '@/contexts/AuthContext';
-import { getDisplayNameFromEmail } from '@/lib/auth-config';
-import { NPCS, NPC } from './npcData';
-import { VRMCharacter } from './character/VRMCharacter';
-import { MovementController } from './gameplay/MovementController';
-import { Terrain, OceanPlane, DistantMountains, terrainHeight, WORLD_HALF } from './world/Terrain';
-import { Forest } from './world/Trees';
-import { Rocks } from './world/Rocks';
-import { Pond } from './world/Pond';
-import { Lighting } from './world/Lighting';
-import { Atmosphere, Fireflies, BlossomPetals } from './world/Atmosphere';
+} from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Billboard, Text, Environment } from '@react-three/drei'
+import * as THREE from 'three'
+import { useHeartboundSync, PlayerState } from '@/hooks/firebase/useHeartboundSync'
+import { useAuth } from '@/contexts/AuthContext'
+import { getDisplayNameFromEmail } from '@/lib/auth-config'
+import { NPCS, NPC } from './npcData'
+import { VRMCharacter } from './character/VRMCharacter'
+import { MovementController } from './gameplay/MovementController'
+import { CameraController } from './gameplay/CameraController'
+import { Terrain, OceanPlane, DistantMountains, terrainHeight, WORLD_HALF } from './world/Terrain'
+import { Forest } from './world/Trees'
+import { Rocks } from './world/Rocks'
+import { Pond } from './world/Pond'
+import { Lighting } from './world/Lighting'
+import { Atmosphere, Fireflies, BlossomPetals } from './world/Atmosphere'
+import { SpawnPortal, SPAWN_POS } from './world/SpawnPortal'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const SPAWN = new THREE.Vector3(8, 0, 8);
+// Spawn is now at SpawnPortal location (well clear of the pond at 0,0,10)
+const SPAWN = SPAWN_POS.clone()
 
-const CAM_OFFSET = new THREE.Vector3(0, 14, 20);
-const CAM_LERP   = 0.07;
-const CAM_LOOK_Y = 2.0;
+const MOVE_BOUND  = 190
+const POND_RADIUS = 14
 
-const MOVE_BOUND  = 190;
-const POND_RADIUS = 14;
-
-// ─── NPC world position remapping ────────────────────────────────────────────
-const NPC_SCALE = WORLD_HALF / 14;
+// ─── NPC remapping ───────────────────────────────────────────────────────────
+const NPC_SCALE = WORLD_HALF / 14
 function npcWorldPos(npc: NPC): [number, number, number] {
-  const wx = (npc.tx - 12) * NPC_SCALE * 0.55;
-  const wz = (npc.ty - 9)  * NPC_SCALE * 0.55;
-  return [wx, terrainHeight(wx, wz) + 1.0, wz];
+  const wx = (npc.tx - 12) * NPC_SCALE * 0.55
+  const wz = (npc.ty - 9)  * NPC_SCALE * 0.55
+  return [wx, terrainHeight(wx, wz) + 1.0, wz]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(pointer: coarse)').matches;
-  }, []);
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(pointer: coarse)').matches
+  }, [])
 }
 
 function useQualityTier(): 'high' | 'medium' | 'low' {
   return useMemo(() => {
     try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-      if (!gl) return 'low';
-      const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info');
-      if (!ext) return 'medium';
-      const renderer = (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) as string;
-      if (/Intel|Mali|Adreno 3|Adreno 4|PowerVR/i.test(renderer)) return 'low';
-      if (/Adreno 5|GTX 7|GTX 8|GTX 9[0-4]|RX 4|RX 5[0-4]/i.test(renderer)) return 'medium';
-      return 'high';
-    } catch { return 'medium'; }
-  }, []);
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      if (!gl) return 'low'
+      const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info')
+      if (!ext) return 'medium'
+      const renderer = (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) as string
+      if (/Intel|Mali|Adreno 3|Adreno 4|PowerVR/i.test(renderer)) return 'low'
+      if (/Adreno 5|GTX 7|GTX 8|GTX 9[0-4]|RX 4|RX 5[0-4]/i.test(renderer)) return 'medium'
+      return 'high'
+    } catch { return 'medium' }
+  }, [])
 }
 
-// ─── Remote avatar ────────────────────────────────────────────────────────────
+// ─── Remote avatar ───────────────────────────────────────────────────────────
 function RemoteAvatar({ player }: { player: PlayerState }) {
-  const posRef       = useRef(new THREE.Vector3(
-    player.x / 20 - 10, 0, player.y / 20 - 9,
-  ));
-  const movingRef    = useRef(player.moving);
-  const sprintingRef = useRef(player.sprinting ?? false);
+  const posRef       = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9))
+  const movingRef    = useRef(player.moving)
+  const sprintingRef = useRef(player.sprinting ?? false)
   useFrame(() => {
-    const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
-    const prev = posRef.current.clone();
-    posRef.current.lerp(new THREE.Vector3(tx, terrainHeight(tx, tz), tz), 0.12);
-    movingRef.current    = posRef.current.distanceTo(prev) > 0.001;
-    sprintingRef.current = player.sprinting ?? false;
-  });
-  if (!player.online) return null;
+    const tx = player.x / 20 - 10, tz = player.y / 20 - 9
+    const prev = posRef.current.clone()
+    posRef.current.lerp(new THREE.Vector3(tx, terrainHeight(tx, tz), tz), 0.12)
+    movingRef.current    = posRef.current.distanceTo(prev) > 0.001
+    sprintingRef.current = player.sprinting ?? false
+  })
+  if (!player.online) return null
   return (
     <VRMCharacter
       email={player.email} uid={player.email}
       posRef={posRef} movingRef={movingRef} sprintingRef={sprintingRef}
       isLocalPlayer={false}
     />
-  );
+  )
 }
 
-// ─── Flower collectibles ────────────────────────────────────────────────────────
+// ─── Flower collectibles ──────────────────────────────────────────────────────
 const FLOWER_POS: [number, number][] = [
   [-28,-20],[20,-28],[-16,24],[32,16],[-36,4],[36,-8],[8,-44],
   [-8,40],[24,32],[-24,-36],[44,0],[-44,0],[16,24],[-20,-16],
   [28,-40],[-32,32],[40,-28],[-30,44],[10,-50],[50,10],
-];
+]
 
 function Flower({ pos, collected, onCollect, playerPos }: {
-  pos: [number, number]; collected: boolean; onCollect: () => void;
-  playerPos: React.MutableRefObject<THREE.Vector3>;
+  pos: [number, number]; collected: boolean; onCollect: () => void
+  playerPos: React.MutableRefObject<THREE.Vector3>
 }) {
-  const ref    = useRef<THREE.Group>(null!);
-  const colRef = useRef(collected);
-  colRef.current = collected;
+  const ref    = useRef<THREE.Group>(null!)
+  const colRef = useRef(collected)
+  colRef.current = collected
   useFrame(({ clock }) => {
-    if (!ref.current || colRef.current) return;
-    ref.current.position.y = terrainHeight(pos[0], pos[1]) + 1.2
-      + Math.sin(clock.elapsedTime * 2 + pos[0]) * 0.25;
-    if (
-      Math.hypot(playerPos.current.x - pos[0], playerPos.current.z - pos[1]) < 2.5
-      && !colRef.current
-    ) onCollect();
-  });
-  if (collected) return null;
+    if (!ref.current || colRef.current) return
+    ref.current.position.y = terrainHeight(pos[0], pos[1]) + 1.2 + Math.sin(clock.elapsedTime * 2 + pos[0]) * 0.25
+    if (Math.hypot(playerPos.current.x - pos[0], playerPos.current.z - pos[1]) < 2.5 && !colRef.current)
+      onCollect()
+  })
+  if (collected) return null
   return (
     <group ref={ref} position={[pos[0], terrainHeight(pos[0], pos[1]) + 1.2, pos[1]]}>
-      <Billboard>
-        <Text fontSize={0.7} anchorX="center" anchorY="middle">🌸</Text>
-      </Billboard>
+      <Billboard><Text fontSize={0.7} anchorX="center" anchorY="middle">🌸</Text></Billboard>
     </group>
-  );
+  )
 }
 
-// ─── Glow ring ───────────────────────────────────────────────────────────────────
+// ─── Glow ring ────────────────────────────────────────────────────────────────
 function GlowRing({ color }: { color: string }) {
-  const ref = useRef<THREE.Mesh>(null!);
+  const ref = useRef<THREE.Mesh>(null!)
   useFrame(({ clock }) => {
     if (ref.current)
-      (ref.current.material as THREE.MeshBasicMaterial).opacity =
-        0.3 + 0.3 * Math.sin(clock.elapsedTime * 3);
-  });
+      (ref.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.3 * Math.sin(clock.elapsedTime * 3)
+  })
   return (
     <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.8, 0]}>
       <ringGeometry args={[1.4, 2.0, 32]} />
       <meshBasicMaterial color={color} transparent opacity={0.4} side={THREE.DoubleSide} />
     </mesh>
-  );
+  )
 }
 
 // ─── NPC sprite ───────────────────────────────────────────────────────────────
 function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
-  npc: NPC; playerPos: React.MutableRefObject<THREE.Vector3>;
-  onNearby: (npc: NPC | null) => void; isNearby: boolean; showPrompt: boolean;
+  npc: NPC; playerPos: React.MutableRefObject<THREE.Vector3>
+  onNearby: (npc: NPC | null) => void; isNearby: boolean; showPrompt: boolean
 }) {
-  const groupRef = useRef<THREE.Group>(null!);
-  const wasNear  = useRef(false);
-  const [wx, , wz] = npcWorldPos(npc);
+  const groupRef = useRef<THREE.Group>(null!)
+  const wasNear  = useRef(false)
+  const [wx, , wz] = npcWorldPos(npc)
   useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    groupRef.current.position.y =
-      terrainHeight(wx, wz) + 1.2 + Math.sin(clock.elapsedTime * 1.2 + npc.tx) * 0.15;
-    const near = Math.hypot(playerPos.current.x - wx, playerPos.current.z - wz) < 4.5;
-    if (near !== wasNear.current) { wasNear.current = near; onNearby(near ? npc : null); }
-  });
+    if (!groupRef.current) return
+    groupRef.current.position.y = terrainHeight(wx, wz) + 1.2 + Math.sin(clock.elapsedTime * 1.2 + npc.tx) * 0.15
+    const near = Math.hypot(playerPos.current.x - wx, playerPos.current.z - wz) < 4.5
+    if (near !== wasNear.current) { wasNear.current = near; onNearby(near ? npc : null) }
+  })
   return (
     <group ref={groupRef} position={[wx, terrainHeight(wx, wz) + 1.2, wz]}>
       {isNearby && <GlowRing color={npc.color} />}
-      <Billboard>
-        <Text fontSize={1.1} anchorX="center" anchorY="middle">{npc.emoji}</Text>
-      </Billboard>
+      <Billboard><Text fontSize={1.1} anchorX="center" anchorY="middle">{npc.emoji}</Text></Billboard>
       <Billboard position={[0, 1.8, 0]}>
         <Text fontSize={0.28} color="white" anchorX="center" anchorY="middle"
           outlineWidth={0.04} outlineColor="black">{npc.name}</Text>
@@ -187,72 +164,60 @@ function NPCSprite({ npc, playerPos, onNearby, isNearby, showPrompt }: {
         </Billboard>
       )}
     </group>
-  );
+  )
 }
 
-// ─── Camera rig ───────────────────────────────────────────────────────────────
-function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
-  const { camera } = useThree();
-  const camTarget  = useRef(new THREE.Vector3());
-  useFrame(() => {
-    const p = target.current;
-    camTarget.current.set(p.x + CAM_OFFSET.x, p.y + CAM_OFFSET.y, p.z + CAM_OFFSET.z);
-    camera.position.lerp(camTarget.current, CAM_LERP);
-    camera.lookAt(p.x, p.y + CAM_LOOK_Y, p.z);
-  });
-  return null;
-}
-
-// ─── Scene ─────────────────────────────────────────────────────────────────────
+// ─── Scene ────────────────────────────────────────────────────────────────────
 function Scene({
   myEmail, myName, myUid, myColor,
   onCollect, onBondXP,
   nearbyNPCRef, setNearbyNPC,
-  blockedRef, posRef, movingRef, sprintingRef, facingRef, keysRef,
+  blockedRef, posRef, movingRef, sprintingRef, facingRef, keysRef, domRef,
 }: {
-  myEmail: string; myName: string; myUid: string; myColor: string;
-  onCollect: (n: number) => void; onBondXP: (xp: number) => void;
-  nearbyNPCRef: React.MutableRefObject<NPC | null>;
-  setNearbyNPC: (n: NPC | null) => void;
-  blockedRef: React.MutableRefObject<boolean>;
-  posRef: React.MutableRefObject<THREE.Vector3>;
-  movingRef: React.MutableRefObject<boolean>;
-  sprintingRef: React.MutableRefObject<boolean>;
-  facingRef: React.MutableRefObject<number>;
-  keysRef: React.MutableRefObject<Set<string>>;
+  myEmail: string; myName: string; myUid: string; myColor: string
+  onCollect: (n: number) => void; onBondXP: (xp: number) => void
+  nearbyNPCRef: React.MutableRefObject<NPC | null>
+  setNearbyNPC: (n: NPC | null) => void
+  blockedRef: React.MutableRefObject<boolean>
+  posRef: React.MutableRefObject<THREE.Vector3>
+  movingRef: React.MutableRefObject<boolean>
+  sprintingRef: React.MutableRefObject<boolean>
+  facingRef: React.MutableRefObject<number>
+  keysRef: React.MutableRefObject<Set<string>>
+  domRef: React.RefObject<HTMLDivElement>
 }) {
-  const remotePlayers = useRef<Record<string, PlayerState>>({});
+  const remotePlayers = useRef<Record<string, PlayerState>>({})
   const { publish, markOnline } = useHeartboundSync(
     myEmail, myName, myColor,
-    useCallback((p: Record<string, PlayerState>) => { remotePlayers.current = p; }, []),
-  );
-  const flowerCountRef = useRef(0);
-  const [collectedFlowers, setCollectedFlowers] = useState<Set<number>>(new Set());
-  const [remoteSnap, setRemoteSnap] = useState<Record<string, PlayerState>>({});
+    useCallback((p: Record<string, PlayerState>) => { remotePlayers.current = p }, []),
+  )
+  const flowerCountRef = useRef(0)
+  const [collectedFlowers, setCollectedFlowers] = useState<Set<number>>(new Set())
+  const [remoteSnap, setRemoteSnap] = useState<Record<string, PlayerState>>({})
 
-  useEffect(() => { markOnline(); }, [markOnline]);
+  useEffect(() => { markOnline() }, [markOnline])
   useEffect(() => {
-    const id = setInterval(() => setRemoteSnap({ ...remotePlayers.current }), 100);
-    return () => clearInterval(id);
-  }, []);
+    const id = setInterval(() => setRemoteSnap({ ...remotePlayers.current }), 100)
+    return () => clearInterval(id)
+  }, [])
 
   const handleFlowerCollect = useCallback((i: number) => {
-    if (collectedFlowers.has(i)) return;
-    setCollectedFlowers(prev => new Set([...prev, i]));
-    flowerCountRef.current++;
-    onCollect(flowerCountRef.current);
-    onBondXP(5);
-  }, [collectedFlowers, onCollect, onBondXP]);
+    if (collectedFlowers.has(i)) return
+    setCollectedFlowers(prev => new Set([...prev, i]))
+    flowerCountRef.current++
+    onCollect(flowerCountRef.current)
+    onBondXP(5)
+  }, [collectedFlowers, onCollect, onBondXP])
 
   const onPublish = useCallback((x: number, z: number, moving: boolean, sprinting: boolean) => {
-    publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving, sprinting });
-  }, [publish]);
+    publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving, sprinting })
+  }, [publish])
 
   const handleNPCNearby = useCallback((npc: NPC | null) => {
-    if (nearbyNPCRef.current?.id === npc?.id) return;
-    nearbyNPCRef.current = npc;
-    setNearbyNPC(npc);
-  }, [nearbyNPCRef, setNearbyNPC]);
+    if (nearbyNPCRef.current?.id === npc?.id) return
+    nearbyNPCRef.current = npc
+    setNearbyNPC(npc)
+  }, [nearbyNPCRef, setNearbyNPC])
 
   return (
     <>
@@ -267,6 +232,7 @@ function Scene({
       <Atmosphere />
       <Fireflies />
       <BlossomPetals />
+      <SpawnPortal />
 
       {FLOWER_POS.map((pos, i) => (
         <Flower key={i} pos={pos} collected={collectedFlowers.has(i)}
@@ -292,7 +258,9 @@ function Scene({
         .map(p => <RemoteAvatar key={p.email} player={p} />)
       }
 
-      <CameraRig target={posRef} />
+      {/* Orbital camera — replaces old fixed-offset CameraRig */}
+      <CameraController target={posRef} domRef={domRef} />
+
       <MovementController
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
         sprintingRef={sprintingRef} facingRef={facingRef}
@@ -301,7 +269,7 @@ function Scene({
         pondRadius={POND_RADIUS}
       />
     </>
-  );
+  )
 }
 
 // ─── Dialogue box ─────────────────────────────────────────────────────────────
@@ -325,23 +293,23 @@ function DialogueBox({ npc, lineIdx, onClose }: { npc: NPC; lineIdx: number; onC
         </button>
       </div>
     </div>
-  );
+  )
 }
 
 // ─── Game menu ────────────────────────────────────────────────────────────────
 function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, isFullscreen, quality, onQualityChange }: {
-  bondXP: number; flowerCount: number;
-  onClose: () => void; onExit: () => void;
-  onToggleFullscreen: () => void; isFullscreen: boolean;
-  quality: 'high' | 'medium' | 'low'; onQualityChange: (q: 'high' | 'medium' | 'low') => void;
+  bondXP: number; flowerCount: number
+  onClose: () => void; onExit: () => void
+  onToggleFullscreen: () => void; isFullscreen: boolean
+  quality: 'high' | 'medium' | 'low'; onQualityChange: (q: 'high' | 'medium' | 'low') => void
 }) {
-  const [tab, setTab] = useState<'inventory' | 'profile' | 'controls' | 'settings'>('inventory');
+  const [tab, setTab] = useState<'inventory' | 'profile' | 'controls' | 'settings'>('inventory')
   const tabs = [
     { key: 'inventory' as const, label: '🎒', full: 'Inventory' },
     { key: 'profile'   as const, label: '👤', full: 'Profile' },
     { key: 'controls'  as const, label: '🎮', full: 'Controls' },
     { key: 'settings'  as const, label: '⚙️',  full: 'Settings' },
-  ];
+  ]
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
@@ -363,9 +331,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
           {tabs.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition ${
-                tab === t.key
-                  ? 'text-white bg-white/5 border-b-2 border-pink-400'
-                  : 'text-white/35 hover:text-white/60 border-b-2 border-transparent'
+                tab === t.key ? 'text-white bg-white/5 border-b-2 border-pink-400' : 'text-white/35 hover:text-white/60 border-b-2 border-transparent'
               }`}>
               <span className="text-base">{t.label}</span><span>{t.full}</span>
             </button>
@@ -412,6 +378,8 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
               {[
                 { keys: 'W A S D / Arrows', action: 'Move' },
                 { keys: 'Shift',            action: 'Sprint' },
+                { keys: 'Mouse drag / Touch drag', action: 'Rotate camera' },
+                { keys: 'Scroll / Pinch',   action: 'Zoom camera' },
                 { keys: 'E / Enter',        action: 'Talk to NPC' },
                 { keys: 'Esc / M',          action: 'Menu' },
                 { keys: 'F',               action: 'Fullscreen' },
@@ -447,9 +415,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
                   {(['low', 'medium', 'high'] as const).map(q => (
                     <button key={q} onClick={() => onQualityChange(q)}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${
-                        quality === q
-                          ? 'bg-pink-500 text-white'
-                          : 'bg-white/8 text-white/40 hover:text-white hover:bg-white/15'
+                        quality === q ? 'bg-pink-500 text-white' : 'bg-white/8 text-white/40 hover:text-white hover:bg-white/15'
                       }`}>{q}</button>
                   ))}
                 </div>
@@ -470,7 +436,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 // ─── Virtual joystick ─────────────────────────────────────────────────────────
@@ -485,7 +451,7 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
         { label: '→', key: 'ArrowRight', col: 3, row: 2 },
       ] as const).map(btn => (
         <button key={btn.key}
-          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); keysRef.current.add(btn.key); }}
+          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); keysRef.current.add(btn.key) }}
           onPointerUp={() => keysRef.current.delete(btn.key)}
           onPointerLeave={() => keysRef.current.delete(btn.key)}
           onPointerCancel={() => keysRef.current.delete(btn.key)}
@@ -493,114 +459,114 @@ function VirtualJoystick({ keysRef }: { keysRef: React.MutableRefObject<Set<stri
           style={{ gridColumn: btn.col, gridRow: btn.row }}>{btn.label}</button>
       ))}
     </div>
-  );
+  )
 }
 
-// ─── Root component ───────────────────────────────────────────────────────────
+// ─── Root ─────────────────────────────────────────────────────────────────────
 interface Props {
-  myColor: string; onBack: () => void;
-  bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void;
+  myColor: string; onBack: () => void
+  bondXP: number; onCollect: (n: number) => void; onBondXP?: (xp: number) => void
 }
 
 export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onCollect, onBondXP }) => {
-  const { user }   = useAuth();
-  const myEmail    = user?.email ?? '';
-  const myUid      = user?.uid   ?? '';
-  const myName     = getDisplayNameFromEmail(myEmail);
-  const quality    = useQualityTier();
-  const isTouch    = useIsTouchDevice();
+  const { user }   = useAuth()
+  const myEmail    = user?.email ?? ''
+  const myUid      = user?.uid   ?? ''
+  const myName     = getDisplayNameFromEmail(myEmail)
+  const quality    = useQualityTier()
+  const isTouch    = useIsTouchDevice()
 
-  const containerRef   = useRef<HTMLDivElement>(null);
-  const posRef         = useRef(SPAWN.clone());
-  const movingRef      = useRef(false);
-  const sprintingRef   = useRef(false);
-  const facingRef      = useRef(0);
-  const keysRef        = useRef<Set<string>>(new Set());
-  const nearbyNPCRef   = useRef<NPC | null>(null);
-  const npcLineIdx     = useRef<Record<string, number>>({});
-  const talkedToRef    = useRef<Set<string>>(new Set());
-  const dialogueRef    = useRef<{ npc: NPC; lineIdx: number } | null>(null);
-  const menuOpenRef    = useRef(false);
-  const blockedRef     = useRef(false);
-  const escPressedRef  = useRef(false);
+  const containerRef   = useRef<HTMLDivElement>(null)
+  const posRef         = useRef(SPAWN.clone())
+  const movingRef      = useRef(false)
+  const sprintingRef   = useRef(false)
+  const facingRef      = useRef(0)
+  const keysRef        = useRef<Set<string>>(new Set())
+  const nearbyNPCRef   = useRef<NPC | null>(null)
+  const npcLineIdx     = useRef<Record<string, number>>({})
+  const talkedToRef    = useRef<Set<string>>(new Set())
+  const dialogueRef    = useRef<{ npc: NPC; lineIdx: number } | null>(null)
+  const menuOpenRef    = useRef(false)
+  const blockedRef     = useRef(false)
+  const escPressedRef  = useRef(false)
 
-  const [nearbyNPC,       setNearbyNPC]       = useState<NPC | null>(null);
-  const [dialogue,        setDialogue]        = useState<{ npc: NPC; lineIdx: number } | null>(null);
-  const [menuOpen,        setMenuOpen]        = useState(false);
-  const [isFullscreen,    setIsFullscreen]    = useState(false);
-  const [flowerCount,     setFlowerCount]     = useState(0);
-  const [qualityOverride, setQualityOverride] = useState<'high' | 'medium' | 'low' | null>(null);
-  const effectiveQuality = qualityOverride ?? quality;
+  const [nearbyNPC,       setNearbyNPC]       = useState<NPC | null>(null)
+  const [dialogue,        setDialogue]        = useState<{ npc: NPC; lineIdx: number } | null>(null)
+  const [menuOpen,        setMenuOpen]        = useState(false)
+  const [isFullscreen,    setIsFullscreen]    = useState(false)
+  const [flowerCount,     setFlowerCount]     = useState(0)
+  const [qualityOverride, setQualityOverride] = useState<'high' | 'medium' | 'low' | null>(null)
+  const effectiveQuality = qualityOverride ?? quality
 
-  useEffect(() => { dialogueRef.current = dialogue; blockedRef.current = !!dialogue || menuOpenRef.current; }, [dialogue]);
-  useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen; }, [menuOpen]);
+  useEffect(() => { dialogueRef.current = dialogue; blockedRef.current = !!dialogue || menuOpenRef.current }, [dialogue])
+  useEffect(() => { menuOpenRef.current = menuOpen; blockedRef.current = !!dialogueRef.current || menuOpen }, [menuOpen])
 
-  const requestFS = useCallback(() => containerRef.current?.requestFullscreen().catch(() => {}), []);
+  const requestFS = useCallback(() => containerRef.current?.requestFullscreen().catch(() => {}), [])
   const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) requestFS(); else document.exitFullscreen().catch(() => {});
-  }, [requestFS]);
+    if (!document.fullscreenElement) requestFS(); else document.exitFullscreen().catch(() => {})
+  }, [requestFS])
 
   useEffect(() => {
     const onFSChange = () => {
-      const isNowFS = !!document.fullscreenElement;
-      setIsFullscreen(isNowFS);
-      if (!isNowFS && escPressedRef.current) { escPressedRef.current = false; requestFS(); }
-    };
-    document.addEventListener('fullscreenchange', onFSChange);
-    return () => document.removeEventListener('fullscreenchange', onFSChange);
-  }, [requestFS]);
+      const isNowFS = !!document.fullscreenElement
+      setIsFullscreen(isNowFS)
+      if (!isNowFS && escPressedRef.current) { escPressedRef.current = false; requestFS() }
+    }
+    document.addEventListener('fullscreenchange', onFSChange)
+    return () => document.removeEventListener('fullscreenchange', onFSChange)
+  }, [requestFS])
 
   const openDialogue = useCallback((npc: NPC) => {
-    const idx = npcLineIdx.current[npc.id] ?? 0;
-    npcLineIdx.current[npc.id] = (idx + 1) % npc.lines.length;
-    setDialogue({ npc, lineIdx: idx });
-    if (!talkedToRef.current.has(npc.id)) { talkedToRef.current.add(npc.id); onBondXP?.(npc.xpReward); }
-  }, [onBondXP]);
-  const closeDialogue = useCallback(() => setDialogue(null), []);
+    const idx = npcLineIdx.current[npc.id] ?? 0
+    npcLineIdx.current[npc.id] = (idx + 1) % npc.lines.length
+    setDialogue({ npc, lineIdx: idx })
+    if (!talkedToRef.current.has(npc.id)) { talkedToRef.current.add(npc.id); onBondXP?.(npc.xpReward) }
+  }, [onBondXP])
+  const closeDialogue = useCallback(() => setDialogue(null), [])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault()
       if (e.key === 'Escape') {
-        e.preventDefault(); escPressedRef.current = true;
-        if (dialogueRef.current) { escPressedRef.current = false; closeDialogue(); }
-        else setMenuOpen(p => !p);
-        return;
+        e.preventDefault(); escPressedRef.current = true
+        if (dialogueRef.current) { escPressedRef.current = false; closeDialogue() }
+        else setMenuOpen(p => !p)
+        return
       }
-      keysRef.current.add(e.key);
-      if (e.key === 'ShiftLeft' || e.key === 'ShiftRight') keysRef.current.add('Shift');
+      keysRef.current.add(e.key)
+      if (e.key === 'ShiftLeft' || e.key === 'ShiftRight') keysRef.current.add('Shift')
       if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
-        if (dialogueRef.current) closeDialogue();
-        else if (!menuOpenRef.current && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current);
-        return;
+        if (dialogueRef.current) closeDialogue()
+        else if (!menuOpenRef.current && nearbyNPCRef.current) openDialogue(nearbyNPCRef.current)
+        return
       }
-      if (e.key === 'm' || e.key === 'M') { if (dialogueRef.current) closeDialogue(); else setMenuOpen(p => !p); return; }
-      if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); return; }
-    };
+      if (e.key === 'm' || e.key === 'M') { if (dialogueRef.current) closeDialogue(); else setMenuOpen(p => !p); return }
+      if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); return }
+    }
     const up = (e: KeyboardEvent) => {
-      keysRef.current.delete(e.key);
+      keysRef.current.delete(e.key)
       if (e.key === 'Shift' || e.key === 'ShiftLeft' || e.key === 'ShiftRight') {
-        keysRef.current.delete('Shift');
-        keysRef.current.delete('ShiftLeft');
-        keysRef.current.delete('ShiftRight');
+        keysRef.current.delete('Shift')
+        keysRef.current.delete('ShiftLeft')
+        keysRef.current.delete('ShiftRight')
       }
-    };
-    const blur = () => keysRef.current.clear();
-    document.addEventListener('keydown', down, true);
-    document.addEventListener('keyup',   up);
-    window.addEventListener('blur',      blur);
+    }
+    const blur = () => keysRef.current.clear()
+    document.addEventListener('keydown', down, true)
+    document.addEventListener('keyup',   up)
+    window.addEventListener('blur',      blur)
     return () => {
-      document.removeEventListener('keydown', down, true);
-      document.removeEventListener('keyup',   up);
-      window.removeEventListener('blur',      blur);
-    };
-  }, [closeDialogue, openDialogue, toggleFullscreen]);
+      document.removeEventListener('keydown', down, true)
+      document.removeEventListener('keyup',   up)
+      window.removeEventListener('blur',      blur)
+    }
+  }, [closeDialogue, openDialogue, toggleFullscreen])
 
-  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count); }, [onCollect]);
+  const handleCollect = useCallback((count: number) => { setFlowerCount(count); onCollect(count) }, [onCollect])
   const handleExit = useCallback(() => {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    onBack();
-  }, [onBack]);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    onBack()
+  }, [onBack])
 
   return (
     <div
@@ -613,7 +579,11 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       <Canvas
         shadows
         camera={{
-          position: [SPAWN.x + CAM_OFFSET.x, SPAWN.y + CAM_OFFSET.y, SPAWN.z + CAM_OFFSET.z],
+          position: [
+            SPAWN.x,
+            SPAWN.y + 28 * Math.cos(Math.PI / 4.5),
+            SPAWN.z + 28 * Math.sin(Math.PI / 4.5),
+          ],
           fov: 60,
           near: 0.5,
           far: 1200,
@@ -635,10 +605,12 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
             blockedRef={blockedRef} posRef={posRef}
             movingRef={movingRef} sprintingRef={sprintingRef}
             facingRef={facingRef} keysRef={keysRef}
+            domRef={containerRef}
           />
         </Suspense>
       </Canvas>
 
+      {/* Bond XP */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-4 py-1.5 flex items-center gap-2">
           <span className="text-white text-xs font-bold">💕 Bond XP</span>
@@ -650,14 +622,23 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
         </div>
       </div>
 
+      {/* Flower counter */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none">
         <div className="bg-black/45 backdrop-blur-md rounded-full px-3 py-1 text-white text-xs font-medium">🌸 {flowerCount}</div>
       </div>
 
+      {/* Menu button */}
       <div className="absolute top-3 right-3 z-10">
         <button onClick={() => setMenuOpen(true)}
           className="bg-black/45 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/60 transition">☰ Menu</button>
       </div>
+
+      {/* Camera hint */}
+      {!isTouch && (
+        <div className="absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
+          WASD · Shift sprint · <span className="text-white/50">Drag</span> rotate cam · <span className="text-white/50">Scroll</span> zoom · E talk · Esc menu
+        </div>
+      )}
 
       {dialogue && <DialogueBox npc={dialogue.npc} lineIdx={dialogue.lineIdx} onClose={closeDialogue} />}
 
@@ -682,12 +663,6 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
       )}
 
       {isTouch && <VirtualJoystick keysRef={keysRef} />}
-
-      {!isTouch && (
-        <div className="absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
-          WASD / Arrows · Shift to sprint · E to talk · Esc / M menu · F fullscreen
-        </div>
-      )}
     </div>
-  );
-};
+  )
+}
