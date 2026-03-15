@@ -2,6 +2,7 @@
  * MeadowHaven3D — Phase 3 (VRM)
  * Camera: fixed isometric-style 3rd person — does NOT rotate with player facing.
  * Movement: camera-relative WASD (imported MovementController)
+ * Sprint: hold Shift for 2x speed + faster walk cycle
  */
 import React, {
   useRef, useEffect, useCallback, useState, Suspense, useMemo,
@@ -23,11 +24,9 @@ const WORLD_SIZE  = 48;
 const POND_RADIUS = 3.8;
 const SPAWN = new THREE.Vector3(5, 0, 6);
 
-// Camera: fixed offset behind-and-above, does NOT rotate with player
-// This feels like Stardew Valley / classic RPG — stable, not disorienting
-const CAM_OFFSET = new THREE.Vector3(0, 5.5, 7.0); // behind (z+) and above (y+)
+const CAM_OFFSET = new THREE.Vector3(0, 5.5, 7.0);
 const CAM_LERP   = 0.07;
-const CAM_LOOK_Y = 1.2; // look at chest height
+const CAM_LOOK_Y = 1.2;
 
 function useIsTouchDevice(): boolean {
   return useMemo(() => {
@@ -65,17 +64,20 @@ function terrainY(x: number, z: number): number {
 function RemoteAvatar({ player }: { player: PlayerState }) {
   const posRef    = useRef(new THREE.Vector3(player.x / 20 - 10, 0, player.y / 20 - 9));
   const movingRef = useRef(player.moving);
+  const sprintingRef = useRef(player.sprinting ?? false);
   useFrame(() => {
     const tx = player.x / 20 - 10, tz = player.y / 20 - 9;
     const prev = posRef.current.clone();
     posRef.current.lerp(new THREE.Vector3(tx, terrainY(tx, tz), tz), 0.12);
-    movingRef.current = posRef.current.distanceTo(prev) > 0.001;
+    const dist = posRef.current.distanceTo(prev);
+    movingRef.current    = dist > 0.001;
+    sprintingRef.current = player.sprinting ?? false;
   });
   if (!player.online) return null;
   return (
     <VRMCharacter
       email={player.email} uid={player.email}
-      posRef={posRef} movingRef={movingRef}
+      posRef={posRef} movingRef={movingRef} sprintingRef={sprintingRef}
       isLocalPlayer={false}
     />
   );
@@ -316,19 +318,11 @@ function Lighting() {
   );
 }
 
-/**
- * CameraRig — fixed offset camera (does NOT rotate with player facing).
- * Camera always sits at player + CAM_OFFSET (behind and above).
- * This means W always moves INTO the screen and the view is stable.
- * MovementController uses camera direction for relative WASD.
- */
 function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   const camTarget  = useRef(new THREE.Vector3());
-
   useFrame(() => {
     const p = target.current;
-    // Fixed world-space offset: behind (+z) and above (+y)
     camTarget.current.set(
       p.x + CAM_OFFSET.x,
       p.y + CAM_OFFSET.y,
@@ -340,13 +334,13 @@ function CameraRig({ target }: { target: React.MutableRefObject<THREE.Vector3> }
   return null;
 }
 
-function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, facingRef, keysRef }: {
+function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPCRef, setNearbyNPC, blockedRef, posRef, movingRef, sprintingRef, facingRef, keysRef }: {
   myEmail: string; myName: string; myUid: string; myColor: string;
   onCollect: (n: number) => void; onBondXP: (xp: number) => void;
   nearbyNPCRef: React.MutableRefObject<NPC|null>; setNearbyNPC: (n: NPC|null) => void;
   blockedRef: React.MutableRefObject<boolean>; posRef: React.MutableRefObject<THREE.Vector3>;
-  movingRef: React.MutableRefObject<boolean>; facingRef: React.MutableRefObject<number>;
-  keysRef: React.MutableRefObject<Set<string>>;
+  movingRef: React.MutableRefObject<boolean>; sprintingRef: React.MutableRefObject<boolean>;
+  facingRef: React.MutableRefObject<number>; keysRef: React.MutableRefObject<Set<string>>;
 }) {
   const remotePlayers = useRef<Record<string, PlayerState>>({});
   const { publish, markOnline } = useHeartboundSync(
@@ -365,8 +359,8 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
     flowerCountRef.current++; onCollect(flowerCountRef.current); onBondXP(5);
   }, [collectedFlowers, onCollect, onBondXP]);
 
-  const onPublish = useCallback((x: number, z: number, moving: boolean) => {
-    publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving });
+  const onPublish = useCallback((x: number, z: number, moving: boolean, sprinting: boolean) => {
+    publish({ x: (x + 10) * 20, y: (z + 9) * 20, dir: 'down', moving, sprinting });
   }, [publish]);
 
   const handleNPCNearby = useCallback((npc: NPC|null) => {
@@ -399,7 +393,7 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
 
       <VRMCharacter
         email={myEmail} uid={myUid}
-        posRef={posRef} movingRef={movingRef} facingRef={facingRef}
+        posRef={posRef} movingRef={movingRef} sprintingRef={sprintingRef} facingRef={facingRef}
         isLocalPlayer={true}
       />
 
@@ -411,7 +405,8 @@ function Scene({ myEmail, myName, myUid, myColor, onCollect, onBondXP, nearbyNPC
       <CameraRig target={posRef} />
       <MovementController
         keysRef={keysRef} posRef={posRef} movingRef={movingRef}
-        facingRef={facingRef} onPublish={onPublish} blockedRef={blockedRef}
+        sprintingRef={sprintingRef} facingRef={facingRef}
+        onPublish={onPublish} blockedRef={blockedRef}
       />
     </>
   );
@@ -520,6 +515,7 @@ function GameMenu({ bondXP, flowerCount, onClose, onExit, onToggleFullscreen, is
             <div className="space-y-1.5">
               {[
                 { keys: 'W A S D / Arrows', action: 'Move' },
+                { keys: 'Shift',             action: 'Sprint' },
                 { keys: 'E / Enter',         action: 'Talk to NPC' },
                 { keys: 'Esc / M',           action: 'Menu' },
                 { keys: 'F',                 action: 'Fullscreen' },
@@ -617,6 +613,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
   const containerRef  = useRef<HTMLDivElement>(null);
   const posRef        = useRef(SPAWN.clone());
   const movingRef     = useRef(false);
+  const sprintingRef  = useRef(false);
   const facingRef     = useRef(0);
   const keysRef       = useRef<Set<string>>(new Set());
   const nearbyNPCRef  = useRef<NPC|null>(null);
@@ -723,7 +720,8 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
             onCollect={handleCollect} onBondXP={onBondXP ?? (() => {})}
             nearbyNPCRef={nearbyNPCRef} setNearbyNPC={setNearbyNPC}
             blockedRef={blockedRef} posRef={posRef}
-            movingRef={movingRef} facingRef={facingRef} keysRef={keysRef}
+            movingRef={movingRef} sprintingRef={sprintingRef}
+            facingRef={facingRef} keysRef={keysRef}
           />
         </Suspense>
       </Canvas>
@@ -774,7 +772,7 @@ export const MeadowHaven3D: React.FC<Props> = ({ myColor, onBack, bondXP, onColl
 
       {!isTouch && (
         <div className="absolute bottom-3 left-3 z-10 text-white/35 text-xs pointer-events-none">
-          WASD / Arrows · E to talk · Esc / M for menu · F fullscreen
+          WASD / Arrows · Shift to sprint · E to talk · Esc / M menu · F fullscreen
         </div>
       )}
     </div>

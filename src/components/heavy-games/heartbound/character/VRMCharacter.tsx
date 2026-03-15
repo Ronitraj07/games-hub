@@ -1,15 +1,11 @@
 /**
- * VRMCharacter — Mixamo FBX → VRM  (Fix v6)
+ * VRMCharacter — Mixamo FBX → VRM  (Fix v7 — sprint support)
  *
- * v6 fixes:
- *  1. Hip posTrack suppressed — world position is owned by posRef/MovementController.
- *     Applying the FBX hip position track was offsetting the whole avatar each frame,
- *     causing the classic "sliding on ice" look where feet don't plant.
- *  2. Walk playback rate slowed to 0.75x (was 1.0x — felt rushed).
- *  3. Blend speed increased to 8x/s for snappier idle↔walk transition.
- *  4. Separate idleTime / walkTime clocks so each animation loops independently
- *     and the blend crossfade doesn't cause a time-jump glitch.
- *  5. Walk URL updated to happywalk.fbx (in-place Mixamo Happy Walk Forward).
+ * v7 adds:
+ *  - sprintingRef prop: when true, walk clock advances at WALK_RATE_SPRINT (1.4x)
+ *    instead of WALK_RATE_NORMAL (0.75x), making legs cycle faster during sprint.
+ *    No new animation needed — same happy walk, just faster playback.
+ *  - Blend rate bumped to 10x for snappier sprint entry/exit.
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
@@ -23,14 +19,14 @@ import { PLAYER_VRMS } from '../../../../lib/modelUrls'
 import { supabase } from '../../../../lib/supabase'
 import { AccessoryId } from '../../../../types/accessories'
 
-const BASE_ANIM  = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/public/models/animations'
-const IDLE_URL   = `${BASE_ANIM}/idle.fbx`
-const WALK_URL   = `${BASE_ANIM}/happywalk.fbx`
+const BASE_ANIM = 'https://npkyivpfwrbqhmraicqr.supabase.co/storage/v1/object/public/models/animations'
+const IDLE_URL  = `${BASE_ANIM}/idle.fbx`
+const WALK_URL  = `${BASE_ANIM}/happywalk.fbx`
 
-// Walk playback speed multiplier — lower = slower cycle, less sliding feel
-const WALK_RATE  = 0.75
-// Blend speed (higher = snappier idle↔walk crossfade)
-const BLEND_RATE = 8
+// Walk cycle playback rates
+const WALK_RATE_NORMAL = 0.75   // normal walk
+const WALK_RATE_SPRINT = 1.40   // sprint — same animation, faster legs
+const BLEND_RATE       = 10     // idle↔walk crossfade speed
 
 const mixamoVRMRigMap: Record<string, string> = {
   mixamorigHips:           'hips',
@@ -63,12 +59,9 @@ function normaliseMixamoName(raw: string): string {
   return raw
 }
 
-// ── Sampler types ───────────────────────────────────────────────────────────
-
 interface BoneChannel {
   node:      THREE.Object3D
   quatTrack: THREE.QuaternionKeyframeTrack | null
-  // posTrack intentionally omitted — hip world position driven by posRef
 }
 
 interface AnimData {
@@ -76,17 +69,12 @@ interface AnimData {
   duration: number
 }
 
-// Scratch objects — allocated once
 const _q  = new THREE.Quaternion()
 const _qi = new THREE.QuaternionLinearInterpolant(
   new Float32Array(0), new Float32Array(0), 4, new Float32Array(4),
 )
 
-function sampleQuat(
-  track: THREE.QuaternionKeyframeTrack,
-  t: number,
-  target: THREE.Quaternion,
-) {
+function sampleQuat(track: THREE.QuaternionKeyframeTrack, t: number, target: THREE.Quaternion) {
   const interp = _qi as any
   interp.parameterPositions = track.times
   interp.sampleValues       = track.values
@@ -101,21 +89,12 @@ function applyAnim(anim: AnimData, t: number, weight: number) {
   for (const ch of anim.channels) {
     if (!ch.quatTrack) continue
     sampleQuat(ch.quatTrack, time, _q)
-    if (weight >= 0.999) {
-      ch.node.quaternion.copy(_q)
-    } else {
-      ch.node.quaternion.slerp(_q, weight)
-    }
+    if (weight >= 0.999) ch.node.quaternion.copy(_q)
+    else                 ch.node.quaternion.slerp(_q, weight)
   }
 }
 
-// ── FBX retargeter ───────────────────────────────────────────────────────────
-
-async function loadMixamoAnim(
-  url: string,
-  vrm: any,
-  label: string,
-): Promise<AnimData | null> {
+async function loadMixamoAnim(url: string, vrm: any, label: string): Promise<AnimData | null> {
   const asset = await new Promise<THREE.Group>((res, rej) =>
     new FBXLoader().load(url, res, undefined, rej)
   ).catch(e => { console.error(`[VRM] ${label} load err:`, e); return null })
@@ -126,55 +105,38 @@ async function loadMixamoAnim(
 
   const isVRM0 = vrm.meta?.metaVersion === '0'
   const map    = new Map<string, BoneChannel>()
-
-  const rri = new THREE.Quaternion()
-  const prw = new THREE.Quaternion()
-  const qa  = new THREE.Quaternion()
+  const rri    = new THREE.Quaternion()
+  const prw    = new THREE.Quaternion()
+  const qa     = new THREE.Quaternion()
 
   clip.tracks.forEach((track: THREE.KeyframeTrack) => {
-    // Only process quaternion tracks — skip position/scale entirely
     if (!(track instanceof THREE.QuaternionKeyframeTrack)) return
-
-    const dot      = track.name.lastIndexOf('.')
+    const dot = track.name.lastIndexOf('.')
     if (dot === -1) return
     const boneName = track.name.slice(0, dot)
     const vrmKey   = mixamoVRMRigMap[normaliseMixamoName(boneName)]
     if (!vrmKey) return
-
     const vrmNode = vrm.humanoid?.getNormalizedBoneNode(vrmKey) as THREE.Object3D | null
     if (!vrmNode) return
-
     if (!map.has(vrmKey)) map.set(vrmKey, { node: vrmNode, quatTrack: null })
     const ch = map.get(vrmKey)!
-
-    const fbxNode =
-      asset.getObjectByName(boneName) ??
-      asset.getObjectByName(normaliseMixamoName(boneName))
+    const fbxNode = asset.getObjectByName(boneName) ?? asset.getObjectByName(normaliseMixamoName(boneName))
     if (!fbxNode) return
-
     fbxNode.getWorldQuaternion(rri).invert()
-    fbxNode.parent
-      ? fbxNode.parent.getWorldQuaternion(prw)
-      : prw.identity()
-
+    fbxNode.parent ? fbxNode.parent.getWorldQuaternion(prw) : prw.identity()
     const src = track.values
     const dst = new Float32Array(src.length)
     for (let i = 0; i < src.length; i += 4) {
       qa.fromArray(src, i).premultiply(prw).multiply(rri)
       qa.toArray(dst, i)
     }
-
     let finalValues = dst
     if (isVRM0) {
       finalValues = new Float32Array(dst.length)
-      for (let i = 0; i < dst.length; i++) {
+      for (let i = 0; i < dst.length; i++)
         finalValues[i] = (i % 4 === 0 || i % 4 === 2) ? -dst[i] : dst[i]
-      }
     }
-
-    ch.quatTrack = new THREE.QuaternionKeyframeTrack(
-      `${vrmKey}.quaternion`, track.times, finalValues,
-    )
+    ch.quatTrack = new THREE.QuaternionKeyframeTrack(`${vrmKey}.quaternion`, track.times, finalValues)
   })
 
   const channels = Array.from(map.values()).filter(c => c.quatTrack)
@@ -182,20 +144,19 @@ async function loadMixamoAnim(
   return channels.length > 0 ? { channels, duration: clip.duration } : null
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
 interface Props {
   email:         string
   uid:           string
   posRef:        React.MutableRefObject<THREE.Vector3>
   movingRef?:    React.MutableRefObject<boolean>
+  sprintingRef?: React.MutableRefObject<boolean>
   facingRef?:    React.MutableRefObject<number>
   isLocalPlayer: boolean
   onVRMLoaded?:  (vrm: any) => void
 }
 
 export const VRMCharacter = ({
-  email, uid, posRef, movingRef, facingRef, isLocalPlayer, onVRMLoaded,
+  email, uid, posRef, movingRef, sprintingRef, facingRef, isLocalPlayer, onVRMLoaded,
 }: Props) => {
   const { scene } = useThree()
 
@@ -214,8 +175,6 @@ export const VRMCharacter = ({
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-
-      // 1. Resolve VRM URL
       let vrmUrl = PLAYER_VRMS[email]
       try {
         const { data } = await supabase
@@ -238,7 +197,6 @@ export const VRMCharacter = ({
       }
       if (isLocalPlayer) setVrmUrl(vrmUrl)
 
-      // 2. Load VRM
       const loader = new GLTFLoader()
       loader.register((parser) => new VRMLoaderPlugin(parser))
       const gltf = await new Promise<any>((res, rej) =>
@@ -256,14 +214,12 @@ export const VRMCharacter = ({
       vrmRef.current = vrm
       onVRMLoaded?.(vrm)
 
-      // 3. Retarget FBX BEFORE combineSkeletons
       const [idle, walk] = await Promise.all([
         loadMixamoAnim(IDLE_URL, vrm, 'idle'),
         loadMixamoAnim(WALK_URL, vrm, 'walk'),
       ])
       if (cancelled) return
 
-      // 4. Safe to combine now
       VRMUtils.combineSkeletons(gltf.scene)
 
       idleRef.current     = idle
@@ -287,25 +243,24 @@ export const VRMCharacter = ({
   useFrame((_s, delta) => {
     if (!vrmRef.current) return
 
-    const moving = movingRef?.current ?? false
+    const moving    = movingRef?.current   ?? false
+    const sprinting = sprintingRef?.current ?? false
 
-    // Smooth blend
+    // Smooth blend: 0 = idle, 1 = walk/sprint
     const target = moving ? 1 : 0
     blendRef.current += (target - blendRef.current) * Math.min(delta * BLEND_RATE, 1)
     const blend = blendRef.current
 
-    // Advance each clock independently
+    // Walk clock speed: faster when sprinting
+    const walkRate = sprinting ? WALK_RATE_SPRINT : WALK_RATE_NORMAL
     idleTimeRef.current += delta
-    walkTimeRef.current += delta * WALK_RATE
+    walkTimeRef.current += delta * walkRate
 
-    // Apply — idle fades out as walk fades in
     if (idleRef.current) applyAnim(idleRef.current, idleTimeRef.current, 1 - blend)
     if (walkRef.current)  applyAnim(walkRef.current,  walkTimeRef.current, blend)
 
-    // World position
     vrmRef.current.scene.position.copy(posRef.current)
 
-    // Smooth yaw
     if (facingRef) {
       const targetY  = facingRef.current + Math.PI
       const currentY = vrmRef.current.scene.rotation.y
