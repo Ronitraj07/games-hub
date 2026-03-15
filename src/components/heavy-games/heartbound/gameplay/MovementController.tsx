@@ -1,20 +1,51 @@
 /**
- * MovementController — Camera-relative WASD + Shift to sprint
+ * MovementController — Phase 1
  *
- * v2 changes:
- *  - terrainY replaced with imported terrainHeight (new noise-driven terrain)
- *  - WORLD_SIZE / pond constants replaced by moveBound + pondRadius props
- *  - moveBound defaults to 190 (matches 400×400 island boundary)
- *  - pondRadius defaults to 14 (matches new Pond component)
- *  - Ghost movement fixes preserved
+ * Changes from v2:
+ *  - moveBound default: 190 →  490 (matches 1000×1000 world)
+ *  - Pond block updated: meadow pond stays at (0,10), lakeside lake at (0,-280)
+ *  - Sprint speed bumped slightly (world is bigger, walking felt slow)
+ *  - getDistrict() exported — used by NPC placement, activity system, minimap
  */
 import { useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { terrainHeight } from '../world/Terrain'
 
-const MOVE_SPEED_WALK = 0.12
-const MOVE_SPEED_RUN  = 0.26
+const MOVE_SPEED_WALK = 0.14   // slightly faster — world is 6× bigger
+const MOVE_SPEED_RUN  = 0.32
+
+/**
+ * District enum — used by activity system, minimap, NPC placement
+ */
+export type District =
+  | 'meadow'
+  | 'market'
+  | 'flowers'
+  | 'ruins'
+  | 'cliffside'
+  | 'lakeside'
+  | 'unknown'
+
+/**
+ * getDistrict(x, z) — returns which district a world position is in.
+ * Matches the layout defined in Terrain.tsx comments.
+ */
+export function getDistrict(x: number, z: number): District {
+  // Meadow Core — center circle r < 130
+  if (Math.sqrt(x * x + z * z) < 130) return 'meadow'
+  // Cliffside NW
+  if (x < -80 && z < -80)  return 'cliffside'
+  // Ancient Ruins NE
+  if (x > 80  && z < -80)  return 'ruins'
+  // Flower Fields SE
+  if (x > 80  && z > 80)   return 'flowers'
+  // Market Village SW
+  if (x < -80 && z > 80)   return 'market'
+  // Lakeside Retreat N (z < -80, |x| < 220)
+  if (z < -80 && Math.abs(x) < 220) return 'lakeside'
+  return 'unknown'
+}
 
 interface Props {
   keysRef:      React.MutableRefObject<Set<string>>
@@ -24,17 +55,20 @@ interface Props {
   sprintingRef: React.MutableRefObject<boolean>
   onPublish:    (x: number, z: number, moving: boolean, sprinting: boolean) => void
   blockedRef:   React.MutableRefObject<boolean>
-  /** Island boundary — player clamped to ±moveBound. Default 190. */
+  /** Island boundary — player clamped to ±moveBound. Default 490. */
   moveBound?:   number
-  /** Pond block radius. Default 14. */
+  /** Meadow pond block radius. Default 14. */
   pondRadius?:  number
+  /** Lakeside lake block radius. Default 32. */
+  lakeRadius?:  number
 }
 
 export function MovementController({
   keysRef, posRef, movingRef, facingRef, sprintingRef,
   onPublish, blockedRef,
-  moveBound  = 190,
+  moveBound  = 490,
   pondRadius = 14,
+  lakeRadius = 32,
 }: Props) {
   const { camera } = useThree()
 
@@ -55,7 +89,7 @@ export function MovementController({
       return
     }
 
-    const k = keysRef.current
+    const k      = keysRef.current
     const fwd    = k.has('ArrowUp')    || k.has('w') || k.has('W')
     const back   = k.has('ArrowDown')  || k.has('s') || k.has('S')
     const left   = k.has('ArrowLeft')  || k.has('a') || k.has('A')
@@ -89,11 +123,21 @@ export function MovementController({
     facingRef.current = Math.atan2(move.x, move.z)
 
     const np = posRef.current.clone().add(move)
+
+    // ─ World boundary ───────────────────────────────────────────────
     np.x = Math.max(-moveBound, Math.min(moveBound, np.x))
     np.z = Math.max(-moveBound, Math.min(moveBound, np.z))
 
-    // Pond block — prevent walking into the pond center
+    // ─ Meadow pond block (center 0, 10) ─────────────────────────────
     if (Math.hypot(np.x, np.z - 10) < pondRadius * 0.55) {
+      movingRef.current    = false
+      sprintingRef.current = false
+      onPublish(posRef.current.x, posRef.current.z, false, false)
+      return
+    }
+
+    // ─ Lakeside lake block (center 0, -280) ─────────────────────────
+    if (Math.hypot(np.x, np.z + 280) < lakeRadius * 0.6) {
       movingRef.current    = false
       sprintingRef.current = false
       onPublish(posRef.current.x, posRef.current.z, false, false)
