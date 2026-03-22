@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 11: THE MUSEUM HEIST
@@ -11,6 +11,7 @@ export const scenario11_heist: Scenario = {
   difficulty: 'medium',
   startSceneId: 'scene_museum_basement',
   correctSuspectId: 'suspect_security_chief',
+  estimatedTime: 900,
 
   suspects: [
     {

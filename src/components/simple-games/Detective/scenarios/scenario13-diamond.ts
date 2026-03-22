@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 13: THE DIAMOND SWITCH
@@ -11,6 +11,7 @@ export const scenario13_diamond: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_diamond_exhibition',
   correctSuspectId: 'suspect_exhibition_manager',
+  estimatedTime: 900,
 
   suspects: [
     {

@@ -11,6 +11,7 @@ export const scenario3_missing: Scenario = {
   difficulty: 'medium',
   startSceneId: 'scene_arrival',
   correctSuspectId: 'suspect_accomplice',
+  estimatedTime: 900,
 
   suspects: [
     {

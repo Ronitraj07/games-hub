@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 7: THE MISSING HEIRLOOM
@@ -11,6 +11,7 @@ export const scenario7_heirloom: Scenario = {
   difficulty: 'easy',
   startSceneId: 'scene_dining_room',
   correctSuspectId: 'suspect_cousin',
+  estimatedTime: 900,
 
   suspects: [
     {

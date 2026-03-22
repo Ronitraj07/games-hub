@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 8: THE POISONING AT THE GALA
@@ -11,6 +11,7 @@ export const scenario8_poisoning: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_gala_hall',
   correctSuspectId: 'suspect_ex_wife',
+  estimatedTime: 900,
 
   suspects: [
     {

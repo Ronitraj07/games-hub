@@ -131,7 +131,7 @@ export const KissingWheel: React.FC = () => {
       sections.push({
         id: 'sp1',
         text: '🔥 Share a fantasy',
-        category: 'spicy',
+        category: 'spicy' as const,
         icon: '🔥',
       });
     }

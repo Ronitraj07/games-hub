@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 10: THE CORPORATE ESPIONAGE
@@ -11,6 +11,7 @@ export const scenario10_espionage: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_tech_campus',
   correctSuspectId: 'suspect_lead_engineer',
+  estimatedTime: 900,
 
   suspects: [
     {

@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 6: THE COUNTERFEIT MASTERPIECE
@@ -11,6 +11,7 @@ export const scenario6_forgery: Scenario = {
   difficulty: 'medium',
   startSceneId: 'scene_auction_house',
   correctSuspectId: 'suspect_apprentice',
+  estimatedTime: 900, // 15 minutes
 
   suspects: [
     {

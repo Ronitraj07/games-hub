@@ -1,8 +1,8 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
- * SCENARIO 1: MURDER IN THE MANOR
- * A classic mystery where a valuable painting has been stolen from a locked study.
+ * SCENARIO 1: THE STOLEN PEARL
+ * A priceless pearl necklace has been stolen from a locked room.
  * Investigation phase: Visit locations, collect evidence
  * Interrogation phase: Question suspects based on evidence
  * Conclusion phase: Accuse the thief
@@ -14,6 +14,7 @@ export const scenario1_theft: Scenario = {
   difficulty: 'medium',
   startSceneId: 'scene_arrival',
   correctSuspectId: 'suspect_butler',
+  estimatedTime: 900, // 15 minutes
 
   suspects: [
     {

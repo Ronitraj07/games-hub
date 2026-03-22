@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 9: THE BLACKMAIL LETTER
@@ -11,6 +11,7 @@ export const scenario9_blackmail: Scenario = {
   difficulty: 'medium',
   startSceneId: 'scene_office_building',
   correctSuspectId: 'suspect_accountant',
+  estimatedTime: 900,
 
   suspects: [
     {

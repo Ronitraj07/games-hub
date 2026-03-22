@@ -11,6 +11,7 @@ export const scenario2_murder: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_arrival',
   correctSuspectId: 'suspect_doctor',
+  estimatedTime: 900,
 
   suspects: [
     {

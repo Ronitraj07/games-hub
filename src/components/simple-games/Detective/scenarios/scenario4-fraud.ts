@@ -11,6 +11,7 @@ export const scenario4_fraud: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_arrival',
   correctSuspectId: 'suspect_cfo',
+  estimatedTime: 900,
 
   suspects: [
     {

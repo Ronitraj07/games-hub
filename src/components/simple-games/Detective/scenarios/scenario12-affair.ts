@@ -1,4 +1,4 @@
-import { Scenario } from './types';
+import { Scenario } from '../types';
 
 /**
  * SCENARIO 12: THE SECRET AFFAIR BLACKMAIL
@@ -11,6 +11,7 @@ export const scenario12_affair: Scenario = {
   difficulty: 'easy',
   startSceneId: 'scene_political_office',
   correctSuspectId: 'suspect_lobbyist',
+  estimatedTime: 900,
 
   suspects: [
     {

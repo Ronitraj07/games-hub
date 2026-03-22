@@ -11,6 +11,7 @@ export const scenario5_identity: Scenario = {
   difficulty: 'hard',
   startSceneId: 'scene_arrival',
   correctSuspectId: 'suspect_businessman',
+  estimatedTime: 900,
 
   suspects: [
     {
