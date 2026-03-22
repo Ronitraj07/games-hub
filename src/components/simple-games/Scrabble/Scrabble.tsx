@@ -3,8 +3,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
+import { GameBoard, GameBoardCell } from '@/components/shared/GameBoard';
 import { ScrabbleGameState, MULTIPLIER_MAP } from './types';
-import { createEmptyBoard, getInitialLetterBag, drawTiles, isValidWord, calculateWordScore } from './utils';
+import { createEmptyBoard, getInitialLetterBag, drawTiles, isValidWord, calculateWordScore, getPremiumType } from './utils';
 import { ArrowLeft, RotateCw, Send, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,6 +16,27 @@ const SCRABBLE_CONFIG = {
   description: 'Word game on a shared board. Form words to score points. Couple\'s Bonus when both collaborate!',
   supportsSolo: true,
   supportsAI: true,
+};
+
+// Board display component
+const ScrabbleBoardDisplay: React.FC<{ gameState: ScrabbleGameState | null }> = ({ gameState }) => {
+  if (!gameState) return null;
+
+  const cells: GameBoardCell[][] = Array.from({ length: 15 }, (_, row) =>
+    Array.from({ length: 15 }, (_, col) => ({
+      id: `cell-${row}-${col}`,
+      row,
+      col,
+      type: getPremiumType(row, col) as any,
+      content: gameState.board?.[row]?.[col]?.letter ? (
+        <div className="w-8 h-8 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded flex items-center justify-center font-bold text-yellow-900 shadow-lg text-sm">
+          {gameState.board[row][col].letter}
+        </div>
+      ) : undefined,
+    }))
+  );
+
+  return <GameBoard rows={15} cols={15} cells={cells} cellSize={32} showGridLines={true} />;
 };
 
 export const Scrabble: React.FC = () => {
@@ -224,14 +246,14 @@ export const Scrabble: React.FC = () => {
           </div>
         </div>
 
-        {/* Board (Simplified view) */}
-        <div className="glass-card p-8 rounded-2xl mb-6">
-          <div className="text-center text-blue-100 mb-4">
-            <p className="text-lg font-semibold">Board (9x9 simplified for MVP)</p>
-            <p className="text-sm text-blue-300">Grid layout to be implemented with Canvas</p>
+        {/* Board (Proper Scrabble 15x15) */}
+        <div className="glass-card p-8 rounded-2xl mb-6 flex flex-col items-center overflow-x-auto">
+          <div className="text-center mb-6">
+            <p className="text-lg font-semibold text-white">Scrabble Board</p>
+            <p className="text-sm text-blue-200">Premium squares: 🟦 DL • 🟪 TL • 🟥 DW • 🟩 TW</p>
           </div>
-          <div className="h-64 bg-blue-800/30 rounded border-2 border-blue-500/30 flex items-center justify-center">
-            <p className="text-blue-300">Scrabble board display - use Canvas/SVG for visual grid</p>
+          <div className="overflow-auto">
+            <ScrabbleBoardDisplay gameState={gameState} />
           </div>
         </div>
 
