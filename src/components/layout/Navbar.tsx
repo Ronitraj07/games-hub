@@ -21,7 +21,7 @@ export const Navbar: React.FC = () => {
   const isLeaderboard = location.pathname === '/leaderboard';
 
   return (
-    <nav className="sticky top-0 z-50 glass border-b border-white/30 dark:border-white/10">
+    <nav className="sticky top-0 z-50 glass border-b border-white/30 dark:border-white/10 hidden sm:block">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
 

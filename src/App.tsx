@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { GameProvider } from './contexts/GameContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/layout/Navbar';
+import { BottomNav } from './components/layout/BottomNav';
 import { Footer } from './components/layout/Footer';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
@@ -41,7 +42,8 @@ function App() {
               {/* App shell */}
               <div className="relative z-10 flex flex-col min-h-screen">
                 <Navbar />
-                <main className="flex-1">
+                <BottomNav />
+                <main className="flex-1 pb-20 sm:pb-0">
                   <Routes>
                     {/* ── Public routes ───────────────────────── */}
                     <Route path="/login"  element={<Login />} />

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
+import { useAchievements } from '@/hooks/useAchievements';
 import { getPlayerRole, getPlayerEmoji, getPartnerEmail, getPartnerName, getPartnerEmoji } from '@/lib/auth-config';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2 } from 'lucide-react';
+import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2, Star, Flame, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AchievementBadge } from '@/components/shared/AchievementBadge';
 
 type GameType = string;
 
@@ -30,10 +32,12 @@ const ALL_GAMES: { id: GameType; label: string; emoji: string }[] = [
 export const Profile: React.FC = () => {
   const { user, signOut }                 = useAuth();
   const { stats, loading }                = usePlayerStats();
+  const { earned: achievements, allAchievements, loading: achievementsLoading } = useAchievements();
   const navigate                          = useNavigate();
   const [signingOut, setSigningOut]       = useState(false);
   const [byGame, setByGame]               = useState<ByGame[]>([]);
   const [byGameLoading, setByGameLoading] = useState(true);
+  const [bestStreak, setBestStreak]       = useState(0);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -47,7 +51,7 @@ export const Profile: React.FC = () => {
       setByGameLoading(true);
       const { data } = await supabase
         .from('game_results')
-        .select('game_type, result')
+        .select('game_type, result, created_at')
         .eq('player_email', user.email);
       if (!data) { setByGameLoading(false); return; }
       const map: Record<string, ByGame> = {};
@@ -58,6 +62,19 @@ export const Profile: React.FC = () => {
         if (row.result === 'draw') map[row.game_type].draws++;
       }
       setByGame(Object.values(map));
+
+      // Calculate best streak
+      const sorted = (data as any[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      let maxStreak = 0, currentStreak = 0;
+      for (const result of sorted) {
+        if (result.result === 'win') {
+          currentStreak++;
+          maxStreak = Math.max(maxStreak, currentStreak);
+        } else {
+          currentStreak = 0;
+        }
+      }
+      setBestStreak(maxStreak);
       setByGameLoading(false);
     };
     fetchByGame();
@@ -111,21 +128,46 @@ export const Profile: React.FC = () => {
 
         {/* Stats Grid */}
         {!loading && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
               { icon: Trophy, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20', label: 'Total Games', value: stats.totalGames },
               { icon: Swords, color: 'text-pink-500',   bg: 'bg-pink-50 dark:bg-pink-900/20',     label: 'Wins',        value: stats.wins },
               { icon: Target, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', label: 'Win Rate',    value: `${winRate}%` },
-              { icon: Clock,  color: 'text-blue-500',   bg: 'bg-blue-50 dark:bg-blue-900/20',     label: 'Favourite',   value: stats.favoriteGame || '—' },
+              { icon: Flame,  color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20', label: 'Best Streak', value: bestStreak },
+              { icon: Star,   color: 'text-blue-500',   bg: 'bg-blue-50 dark:bg-blue-900/20',     label: 'Favourite',   value: stats.favoriteGame || '—' },
+              { icon: Award,  color: 'text-red-500',    bg: 'bg-red-50 dark:bg-red-900/20',       label: 'Achievements', value: achievements.length },
             ].map(({ icon: Icon, color, bg, label, value }) => (
-              <div key={label} className="glass-card p-5 flex items-center gap-4">
+              <div key={label} className="glass-card p-5 flex items-center gap-4 hover:scale-[1.02] transition-transform">
                 <div className={`p-3 rounded-2xl ${bg}`}><Icon className={`w-6 h-6 ${color}`} /></div>
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white truncate max-w-[120px]">{value}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{value}</p>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Achievements Section */}
+        {!achievementsLoading && (
+          <div className="glass-card p-6">
+            <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Trophy size={18} className="text-yellow-500" /> Achievements ({achievements.length}/{allAchievements.length})
+            </h2>
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+              {allAchievements.map(achievement => {
+                const isEarned = achievements.some(a => a.id === achievement.id);
+                const earned = achievements.find(a => a.id === achievement.id);
+                return (
+                  <AchievementBadge
+                    key={achievement.id}
+                    achievement={achievement}
+                    earned={isEarned}
+                    earnedDate={earned?.earnedDate}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 
