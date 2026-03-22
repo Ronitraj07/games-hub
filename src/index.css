@@ -1110,8 +1110,7 @@ html {
 
 /* Glass card active state */
 .glass-card-active {
-  ring-2 ring-pink-500/50;
-  shadow-lg shadow-pink-500/20;
+  @apply ring-2 ring-pink-500/50 shadow-lg shadow-pink-500/20;
 }
 
 /* === BUTTON RIPPLE EFFECT === */
