@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
+import { SceneRenderer } from '@/components/shared/SceneRenderer';
 import { DetectiveGameState, Scenario, Scene, EvidenceItem } from './types';
 import { SCENARIOS } from './scenarios';
 import { ArrowLeft, CheckCircle, XCircle, Loader } from 'lucide-react';
