@@ -135,7 +135,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       score: myScore,
       mode: 'vs-partner',
       opponentEmail: opp || undefined,
-      metadata: { seriesFormat: gameState.seriesFormat, difficulty: gameState.difficulty },
     });
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
@@ -148,7 +147,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const ctx = getCtx()!; ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
   }, []);
 
-  useEffect(() => { clearCanvas(); }, [phase]);
+  useEffect(() => { clearCanvas(); }, [soloPhase]);
 
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
@@ -273,7 +272,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
       result: soloResult === 'correct' ? 'win' : 'loss',
       score: soloScore,
       mode: 'solo',
-      metadata: { difficulty }
     });
   }, [soloPhase]);
 
@@ -448,7 +446,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const downloadDrawing = () => {
     const c = getCanvas(); if (!c) return;
     const a = document.createElement('a');
-    a.download = `pictionary-${word || gameState?.word}.png`; a.href = c.toDataURL(); a.click();
+    a.download = `pictionary-${soloWord || gameState?.word}.png`; a.href = c.toDataURL(); a.click();
   };
 
   const timerColor = timeLeft > 30 ? 'text-green-500' : timeLeft > 15 ? 'text-yellow-500' : 'text-red-500 animate-pulse';

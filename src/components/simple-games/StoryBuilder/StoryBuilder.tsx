@@ -149,7 +149,7 @@ export const StoryBuilder: React.FC = () => {
       recordGame({
         gameType: STORY_BUILDER_CONFIG.gameType,
         playerEmail: user?.email || '',
-        result: 'completed',
+        result: 'win',
         score: fullStory.split(' ').length, // Score based on word count
         mode: gameState.mode,
       });

@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
-import { ArrowLeft, RotateCw, Skip, Heart, Loader } from 'lucide-react';
+import { ArrowLeft, RotateCw, SkipBack, Heart, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface WheelSection {
@@ -180,7 +180,7 @@ export const KissingWheel: React.FC = () => {
     recordGame({
       gameType: WHEEL_BUILDER_CONFIG.gameType,
       playerEmail: user?.email || '',
-      result: 'completed',
+      result: 'win',
       score: gameState.completedDares.length + 1,
       mode: gameState.mode,
     });
@@ -315,7 +315,7 @@ export const KissingWheel: React.FC = () => {
                   disabled={gameState.skipsRemaining === 0 || isSpinning}
                   className="flex items-center justify-center gap-2 p-3 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 text-white font-bold rounded-lg transition"
                 >
-                  <Skip size={18} /> Skip
+                  <SkipBack size={18} /> Skip
                 </button>
                 <button
                   onClick={handleSpin}
