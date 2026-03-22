@@ -5,15 +5,13 @@ import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { useRivalryStats } from '@/hooks/supabase/useRivalryStats';
 import { GameCard } from '@/components/games/GameCard';
 import { Trophy, Clock, Target, Swords, Sparkles, Flame, Zap } from 'lucide-react';
+import { getGameStyle } from '@/lib/gameIcons';
 
 const SIMPLE_GAMES = [
   {
     id: 'tictactoe',
     name: 'Tic Tac Toe',
     description: 'Classic 3×3 grid battle',
-    icon: '💗',
-    gradient:  'from-rose-400 to-pink-500',
-    glowColor: 'shadow-rose-300/60 dark:shadow-rose-500/40',
     route: '/games/tictactoe',
     difficulty: 'Easy',
     players: '2' as const,
@@ -23,9 +21,6 @@ const SIMPLE_GAMES = [
     id: 'wordscramble',
     name: 'Word Scramble',
     description: 'Unscramble words vs the clock',
-    icon: '🔮',
-    gradient:  'from-violet-400 to-purple-600',
-    glowColor: 'shadow-violet-300/60 dark:shadow-violet-500/40',
     route: '/games/wordscramble',
     difficulty: 'Medium',
     players: '1-2' as const,
@@ -35,9 +30,6 @@ const SIMPLE_GAMES = [
     id: 'memorymatch',
     name: 'Memory Match',
     description: 'Find matching pairs together',
-    icon: '🌸',
-    gradient:  'from-pink-400 to-fuchsia-500',
-    glowColor: 'shadow-pink-300/60 dark:shadow-pink-500/40',
     route: '/games/memorymatch',
     difficulty: 'Medium',
     players: '1-2' as const,
@@ -47,33 +39,24 @@ const SIMPLE_GAMES = [
     id: 'connect4',
     name: 'Connect 4',
     description: 'Connect four in a row',
-    icon: '💎',
-    gradient:  'from-sky-400 to-blue-600',
-    glowColor: 'shadow-sky-300/60 dark:shadow-sky-500/40',
     route: '/games/connect4',
     difficulty: 'Medium',
     players: '2' as const,
     estimatedTime: '5-10 min',
   },
   {
-    id: 'trivia',
+    id: 'triviaquiz',
     name: 'Trivia Quiz',
     description: 'Test your love knowledge',
-    icon: '✨',
-    gradient:  'from-amber-400 to-rose-500',
-    glowColor: 'shadow-amber-300/60 dark:shadow-amber-500/40',
     route: '/games/triviaquiz',
     difficulty: 'Medium',
     players: '1-2' as const,
     estimatedTime: '10-15 min',
   },
   {
-    id: 'rps',
+    id: 'rockpaperscissors',
     name: 'Rock Paper Scissors',
     description: 'Best of 5 rounds',
-    icon: '🧧',
-    gradient:  'from-teal-400 to-cyan-500',
-    glowColor: 'shadow-teal-300/60 dark:shadow-teal-500/40',
     route: '/games/rockpaperscissors',
     difficulty: 'Easy',
     players: '2' as const,
@@ -83,9 +66,6 @@ const SIMPLE_GAMES = [
     id: 'pictionary',
     name: 'Pictionary',
     description: 'Draw and guess the word',
-    icon: '🎤',
-    gradient:  'from-orange-400 to-rose-500',
-    glowColor: 'shadow-orange-300/60 dark:shadow-orange-500/40',
     route: '/games/pictionary',
     difficulty: 'Hard',
     players: '2' as const,
@@ -95,9 +75,6 @@ const SIMPLE_GAMES = [
     id: 'mathduel',
     name: 'Math Duel',
     description: 'Quick-fire math challenges',
-    icon: '⚡',
-    gradient:  'from-lime-400 to-emerald-500',
-    glowColor: 'shadow-lime-300/60 dark:shadow-emerald-500/40',
     route: '/games/mathduel',
     difficulty: 'Medium',
     players: '1-2' as const,
@@ -107,9 +84,6 @@ const SIMPLE_GAMES = [
     id: 'truthordare',
     name: 'Truth or Dare',
     description: 'Secrets, dares & After Dark 🔞',
-    icon: '🔥',
-    gradient:  'from-rose-500 to-red-600',
-    glowColor: 'shadow-rose-400/60 dark:shadow-red-600/40',
     route: '/games/truthordare',
     difficulty: 'Easy',
     players: '2' as const,
@@ -119,9 +93,6 @@ const SIMPLE_GAMES = [
     id: 'detective',
     name: 'Detective',
     description: 'Solve mysteries together',
-    icon: '🔍',
-    gradient:  'from-purple-500 to-indigo-700',
-    glowColor: 'shadow-purple-400/60 dark:shadow-indigo-600/40',
     route: '/games/detective',
     difficulty: 'Hard',
     players: '1-2' as const,
@@ -131,9 +102,6 @@ const SIMPLE_GAMES = [
     id: 'scrabble',
     name: 'Scrabble',
     description: 'Word game on shared board',
-    icon: '📝',
-    gradient:  'from-blue-400 to-cyan-600',
-    glowColor: 'shadow-blue-300/60 dark:shadow-cyan-500/40',
     route: '/games/scrabble',
     difficulty: 'Medium',
     players: '1-2' as const,
@@ -143,9 +111,6 @@ const SIMPLE_GAMES = [
     id: 'storybuilder',
     name: 'Story Builder',
     description: 'Create stories together',
-    icon: '📖',
-    gradient:  'from-pink-500 to-rose-600',
-    glowColor: 'shadow-pink-400/60 dark:shadow-rose-500/40',
     route: '/games/storybuilder',
     difficulty: 'Easy',
     players: '1-2' as const,
@@ -155,9 +120,6 @@ const SIMPLE_GAMES = [
     id: 'kissingwheel',
     name: 'Kissing Wheel',
     description: 'Spin for romantic dares',
-    icon: '🎡',
-    gradient:  'from-orange-500 to-red-600',
-    glowColor: 'shadow-orange-400/60 dark:shadow-red-500/40',
     route: '/games/kissingwheel',
     difficulty: 'Easy',
     players: '1-2' as const,
@@ -270,10 +232,20 @@ export const Home: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {SIMPLE_GAMES.map((game) => {
               const lp = lastPlayed[game.id];
+              const style = getGameStyle(game.id);
               return (
                 <Link key={game.id} to={game.route} className="block group">
                   <div className="relative">
-                    <GameCard {...game} />
+                    <GameCard
+                      name={game.name}
+                      description={game.description}
+                      icon={style.icon}
+                      gradient={style.gradient}
+                      glowColor={style.glowColor}
+                      difficulty={game.difficulty}
+                      players={game.players}
+                      estimatedTime={game.estimatedTime}
+                    />
                     {lp && (
                       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
                         <Zap size={9} className="text-yellow-400" />

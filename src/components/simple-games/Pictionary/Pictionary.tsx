@@ -5,16 +5,15 @@ import { useGameStats } from '@/hooks/useGameStats';
 import { GameLobby } from '@/components/shared/GameLobby';
 import { GameModeBadge } from '@/components/shared/GameModeBadge';
 import { playCorrect, playWrong } from '@/utils/sounds';
-import { RefreshCw, ArrowLeft, Eraser, Trash2, Download, Trophy, Loader2 } from 'lucide-react';
+import { RefreshCw, ArrowLeft, Eraser, Trash2, Download, Trophy, Loader2, Zap } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { GameMode } from '@/components/shared/GameLobby';
-
-const WORDS = [
-  'Sunset','Rainbow','Castle','Dragon','Mermaid','Volcano','Spaceship','Dinosaur',
-  'Lighthouse','Butterfly','Snowman','Penguin','Guitar','Pizza','Balloon','Treasure',
-  'Wizard','Robot','Jungle','Waterfall','Campfire','Telescope','Cactus','Crown',
-  'Candle','Compass','Dolphin','Umbrella','Lantern','Heart','Kiss','Flower','Star','Moon',
-];
+import type { Difficulty, SeriesFormat, PictionarySeriesState, RoundResult } from './types';
+import { DifficultySelector } from './DifficultySelector';
+import { SeriesTracker } from './SeriesTracker';
+import { RoundSummary } from './RoundSummary';
+import { SeriesFinal } from './SeriesFinal';
+import { getWordPool, selectRandomWord, NORMAL_WORDS } from './wordPools';
 
 const COLORS = ['#1a1a1a','#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ec4899','#ffffff'];
 const BRUSH_SIZES = [3, 6, 10, 16];
@@ -25,23 +24,6 @@ const GUESS_TIME  = 30;
 const CANVAS_W = 600;
 const CANVAS_H = 400;
 
-interface PictionaryOnlineState {
-  word:         string;
-  drawerEmail:  string;
-  guesserEmail: string;
-  canvasData:   string;
-  guess:        string;
-  phase:        'waiting' | 'drawing' | 'guessing' | 'result';
-  result:       'correct' | 'timeout' | null;
-  p1Score:      number;
-  p2Score:      number;
-  round:        number;
-  drawerReady:  boolean;
-  guesserReady: boolean;
-  status:       'waiting' | 'active' | 'finished';
-  recorded?:    boolean;
-}
-
 export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const { user }       = useAuth();
   const { recordGame } = useGameStats();
@@ -49,6 +31,8 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const location       = useLocation();
 
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
+  const [seriesFormat, setSeriesFormat] = useState<SeriesFormat>('best-of-3');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
 
   const [activeRoomId,     setActiveRoomId]     = useState<string | null>(null);
   const [isHost,           setIsHost]           = useState(false);
@@ -69,19 +53,29 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const lastPos        = useRef<{ x: number; y: number } | null>(null);
   const syncTimer      = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Solo mode state
   const [drawing,       setDrawing]       = useState(false);
   const [color,         setColor]         = useState('#1a1a1a');
   const [brushSize,     setBrushSize]     = useState(6);
   const [erasing,       setErasing]       = useState(false);
-  const [word,          setWord]          = useState('');
-  const [guess,         setGuess]         = useState('');
   const [timeLeft,      setTimeLeft]      = useState(DRAW_TIME);
-  const [phase,         setPhase]         = useState<'idle' | 'drawing' | 'guessing' | 'result'>('idle');
-  const [result,        setResult]        = useState<'correct' | 'timeout' | null>(null);
-  const [score,         setScore]         = useState(0);
-  const [round,         setRound]         = useState(1);
-  const [usedWords,     setUsedWords]     = useState<string[]>([]);
   const [localRecorded, setLocalRecorded] = useState(false);
+
+  // Series state (for vs-partner mode)
+  const [seriesPhase, setSeriesPhase] = useState<'lobby' | 'format-select' | 'difficulty-select' | 'series-active' | 'round-summary' | 'series-complete'>('lobby');
+  const [usedWords, setUsedWords] = useState<string[]>([]);
+  const [roundResults, setRoundResults] = useState<RoundResult[]>([]);
+  const [player1SeriesScore, setPlayer1SeriesScore] = useState(0);
+  const [player2SeriesScore, setPlayer2SeriesScore] = useState(0);
+
+  // Solo mode only
+  const [soloPhase, setSoloPhase] = useState<'idle' | 'drawing' | 'guessing' | 'result'>('idle');
+  const [soloWord, setSoloWord] = useState('');
+  const [soloGuess, setSoloGuess] = useState('');
+  const [soloResult, setSoloResult] = useState<'correct' | 'timeout' | null>(null);
+  const [soloScore, setSoloScore] = useState(0);
+  const [soloRound, setSoloRound] = useState(1);
+  const [soloUsedWords, setSoloUsedWords] = useState<string[]>([]);
 
   const safeSession = activeRoomId
     ? `pictionary-room-${sanitizeFirebasePath(activeRoomId)}`
@@ -89,16 +83,32 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     ? sanitizeFirebasePath(sessionId)
     : `pictionary-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
 
-  const initialOnline: PictionaryOnlineState = {
-    word: '', drawerEmail: userKey ?? '', guesserEmail: '',
-    canvasData: '', guess: '', phase: 'waiting', result: null,
-    p1Score: 0, p2Score: 0, round: 1,
-    drawerReady: false, guesserReady: false, status: 'waiting',
+  const initialOnline: PictionarySeriesState = {
+    seriesFormat: 'best-of-3',
+    difficulty: 'normal',
+    seriesPhase: 'lobby',
+    player1Email: userKey ?? '',
+    player2Email: '',
+    currentRound: 1,
+    totalRounds: 3,
+    player1SeriesScore: 0,
+    player2SeriesScore: 0,
+    roundResults: [],
+    word: '',
+    drawerEmail: userKey ?? '',
+    guesserEmail: '',
+    canvasData: '',
+    guess: '',
+    phase: 'waiting',
+    result: null,
+    drawerReady: false,
+    guesserReady: false,
+    status: 'waiting',
     recorded: false,
   };
 
   const { gameState, updateGameState, patchGameState, loading } =
-    useRealtimeGame<PictionaryOnlineState>(safeSession, 'pictionary', initialOnline);
+    useRealtimeGame<PictionarySeriesState>(safeSession, 'pictionary', initialOnline);
 
   const isDrawer  = gameState?.drawerEmail  === userKey;
   const isGuesser = gameState?.guesserEmail === userKey;
@@ -114,11 +124,19 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   useEffect(() => {
     if (!gameState || gameState.status !== 'finished' || gameState.recorded || !userKey) return;
-    const myScore  = gameState.drawerEmail === userKey ? gameState.p1Score : gameState.p2Score;
-    const oppScore = gameState.drawerEmail === userKey ? gameState.p2Score : gameState.p1Score;
-    const res      = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
-    const opp      = gameState.drawerEmail === userKey ? gameState.guesserEmail : gameState.drawerEmail;
-    recordGame({ gameType: 'pictionary', playerEmail: userKey, result: res, score: myScore, mode: 'vs-partner', opponentEmail: opp || undefined });
+    const myScore = gameState.player1Email === userKey ? gameState.player1SeriesScore : gameState.player2SeriesScore;
+    const oppScore = gameState.player1Email === userKey ? gameState.player2SeriesScore : gameState.player1SeriesScore;
+    const res = myScore > oppScore ? 'win' : myScore < oppScore ? 'loss' : 'draw';
+    const opp = gameState.player1Email === userKey ? gameState.player2Email : gameState.player1Email;
+    recordGame({
+      gameType: 'pictionary',
+      playerEmail: userKey,
+      result: res,
+      score: myScore,
+      mode: 'vs-partner',
+      opponentEmail: opp || undefined,
+      metadata: { seriesFormat: gameState.seriesFormat, difficulty: gameState.difficulty },
+    });
     updateGameState({ ...gameState, recorded: true });
   }, [gameState?.status, gameState?.recorded]);
 
@@ -150,20 +168,36 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   }, [gameState?.canvasData]);
 
   useEffect(() => {
-    if (gameMode !== 'solo' || phase !== 'drawing') return;
+    if (gameMode !== 'solo' || soloPhase !== 'drawing') return;
     const t = setInterval(() => {
-      setTimeLeft(p => { if (p <= 1) { clearInterval(t); setPhase('guessing'); setTimeLeft(GUESS_TIME); return 0; } return p - 1; });
+      setTimeLeft(p => {
+        if (p <= 1) {
+          clearInterval(t);
+          setSoloPhase('guessing');
+          setTimeLeft(GUESS_TIME);
+          return 0;
+        }
+        return p - 1;
+      });
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, gameMode]);
+  }, [soloPhase, gameMode]);
 
   useEffect(() => {
-    if (gameMode !== 'solo' || phase !== 'guessing') return;
+    if (gameMode !== 'solo' || soloPhase !== 'guessing') return;
     const t = setInterval(() => {
-      setTimeLeft(p => { if (p <= 1) { clearInterval(t); setResult('timeout'); setPhase('result'); return 0; } return p - 1; });
+      setTimeLeft(p => {
+        if (p <= 1) {
+          clearInterval(t);
+          setSoloResult('timeout');
+          setSoloPhase('result');
+          return 0;
+        }
+        return p - 1;
+      });
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, gameMode]);
+  }, [soloPhase, gameMode]);
 
   useEffect(() => {
     if (gameMode !== 'vs-partner' || !isDrawer || gameState?.phase !== 'drawing') return;
@@ -189,7 +223,17 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     setTimeLeft(GUESS_TIME);
     const t = setInterval(() => {
       setTimeLeft(p => {
-        if (p <= 1) { clearInterval(t); updateGameState({ ...gameState!, result: 'timeout', phase: 'result' }); return 0; }
+        if (p <= 1) {
+          clearInterval(t);
+          updateGameState({
+            ...gameState!,
+            result: 'timeout',
+            phase: 'result',
+            seriesPhase: gameState!.currentRound >= gameState!.totalRounds ? 'series-complete' : 'round-summary',
+            status: gameState!.currentRound >= gameState!.totalRounds ? 'finished' : 'active',
+          });
+          return 0;
+        }
         return p - 1;
       });
     }, 1000);
@@ -197,82 +241,164 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   }, [gameState?.phase, isGuesser, gameMode]);
 
   const startSolo = () => {
-    const available = WORDS.filter(w => !usedWords.includes(w));
+    const wordPool = getWordPool(difficulty);
+    const available = wordPool.filter(w => !soloUsedWords.includes(w));
     const newWord   = available[Math.floor(Math.random() * available.length)];
-    setWord(newWord); setUsedWords(u => [...u, newWord]);
-    setTimeLeft(DRAW_TIME); setGuess(''); setResult(null); setPhase('drawing');
+    setSoloWord(newWord);
+    setSoloUsedWords(u => [...u, newWord]);
+    setTimeLeft(DRAW_TIME);
+    setSoloGuess('');
+    setSoloResult(null);
+    setSoloPhase('drawing');
   };
 
   const handleSoloGuess = (e: React.FormEvent) => {
     e.preventDefault();
-    // Fuzzy match: normalize whitespace, case-insensitive
     const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-    if (normalize(guess) === normalize(word)) {
+    if (normalize(soloGuess) === normalize(soloWord)) {
       const pts = timeLeft > 20 ? 20 : timeLeft > 10 ? 15 : 10;
-      setScore(s => s + pts); setResult('correct'); setPhase('result'); playCorrect();
-    } else playWrong();
-  };
-
-  useEffect(() => {
-    if (phase !== 'result' || localRecorded || !userKey || gameMode !== 'solo') return;
-    setLocalRecorded(true);
-    recordGame({ gameType: 'pictionary', playerEmail: userKey, result: result === 'correct' ? 'win' : 'loss', score, mode: 'solo' });
-  }, [phase]);
-
-  const nextRound = () => { setRound(r => r + 1); clearCanvas(); startSolo(); setLocalRecorded(false); };
-
-  const startOnline = useCallback(() => {
-    const newWord = [...WORDS].sort(() => Math.random() - 0.5)[0];
-    updateGameState({
-      ...initialOnline,
-      word:         newWord,
-      drawerEmail:  userKey ?? '',
-      guesserEmail: '',
-      status:       'active',
-      phase:        'drawing',
-    });
-    setTimeLeft(DRAW_TIME);
-  }, [userKey, safeSession]);
-
-  useEffect(() => {
-    if (!shouldHostStart || !activeRoomId || !isHost) return;
-    startOnline();
-    setShouldHostStart(false);
-  }, [shouldHostStart, activeRoomId, isHost, safeSession]);
-
-  const handleOnlineGuessSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!gameState) return;
-    // Fuzzy match: normalize whitespace, case-insen sitive
-    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-    const ok = normalize(guess) === normalize(gameState.word);
-    if (ok) {
-      updateGameState({
-        ...gameState,
-        result:   'correct',
-        phase:    'result',
-        p2Score:  isGuesser ? gameState.p2Score + timeLeft : gameState.p2Score,
-        p1Score:  isDrawer  ? gameState.p1Score + 10       : gameState.p1Score,
-      });
+      setSoloScore(s => s + pts);
+      setSoloResult('correct');
+      setSoloPhase('result');
       playCorrect();
     } else playWrong();
   };
 
-  const nextOnlineRound = () => {
-    if (!gameState) return;
-    const available = WORDS.filter(w => w !== gameState.word);
-    const newWord   = available[Math.floor(Math.random() * available.length)];
+  useEffect(() => {
+    if (soloPhase !== 'result' || localRecorded || !userKey || gameMode !== 'solo') return;
+    setLocalRecorded(true);
+    recordGame({
+      gameType: 'pictionary',
+      playerEmail: userKey,
+      result: soloResult === 'correct' ? 'win' : 'loss',
+      score: soloScore,
+      mode: 'solo',
+      metadata: { difficulty }
+    });
+  }, [soloPhase]);
+
+  const nextSoloRound = () => {
+    setSoloRound(r => r + 1);
+    clearCanvas();
+    startSolo();
+    setLocalRecorded(false);
+  };
+
+  const startOnlineRound = useCallback(() => {
+    if (!gameState || !userKey) return;
+
+    const wordPool = getWordPool(gameState.difficulty);
+    const newWord = selectRandomWord(wordPool, gameState.roundResults.map(r => r.word));
+
     updateGameState({
       ...gameState,
-      word:         newWord,
-      canvasData:   '',
-      drawerEmail:  gameState.guesserEmail,
-      guesserEmail: gameState.drawerEmail,
-      phase:        'drawing',
-      result:       null,
-      round:        gameState.round + 1,
+      word: newWord,
+      canvasData: '',
+      drawerEmail: gameState.currentRound % 2 === 1 ? gameState.player1Email : gameState.player2Email,
+      guesserEmail: gameState.currentRound % 2 === 1 ? gameState.player2Email : gameState.player1Email,
+      phase: 'drawing',
+      result: null,
+      guess: '',
     });
-    clearCanvas(); setTimeLeft(DRAW_TIME); setGuess('');
+    setTimeLeft(DRAW_TIME);
+  }, [gameState, userKey]);
+
+  const startSeriesHost = useCallback(() => {
+    if (!isHost || !activeRoomId || !userKey) return;
+
+    const totalRounds = {
+      'best-of-1': 1,
+      'best-of-3': 3,
+      'best-of-5': 5,
+    }[seriesFormat];
+
+    updateGameState({
+      ...initialOnline,
+      seriesFormat,
+      difficulty,
+      seriesPhase: 'series-active',
+      player1Email: userKey,
+      player2Email: '',
+      currentRound: 1,
+      totalRounds,
+      status: 'active',
+      phase: 'waiting',
+    });
+
+    setShouldHostStart(false);
+  }, [isHost, activeRoomId, userKey, seriesFormat, difficulty]);
+
+  useEffect(() => {
+    if (!shouldHostStart || !activeRoomId || !isHost) return;
+    startSeriesHost();
+  }, [shouldHostStart, activeRoomId, isHost]);
+
+  const handleOnlineGuessSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gameState) return;
+
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    const ok = normalize(gameState.guess) === normalize(gameState.word);
+
+    if (ok) {
+      const drawerScore = 10;
+      const guesserScore = timeLeft;
+
+      // Create round result
+      const roundResult: RoundResult = {
+        roundNumber: gameState.currentRound,
+        drawer: gameState.drawerEmail,
+        guesser: gameState.guesserEmail,
+        word: gameState.word,
+        result: 'correct',
+        drawerScore,
+        guesserScore,
+        timeRemaining: timeLeft,
+      };
+
+      const updatedRoundResults = [...gameState.roundResults, roundResult];
+      const p1Score = gameState.player1Email === gameState.drawerEmail
+        ? gameState.player1SeriesScore + drawerScore
+        : gameState.player1SeriesScore + guesserScore;
+      const p2Score = gameState.player2Email === gameState.guesserEmail
+        ? gameState.player2SeriesScore + guesserScore
+        : gameState.player2SeriesScore + drawerScore;
+
+      const isSeriesComplete = gameState.currentRound >= gameState.totalRounds;
+
+      updateGameState({
+        ...gameState,
+        result: 'correct',
+        phase: isSeriesComplete ? 'result' : 'result',
+        player1SeriesScore: p1Score,
+        player2SeriesScore: p2Score,
+        roundResults: updatedRoundResults,
+        seriesPhase: isSeriesComplete ? 'series-complete' : 'round-summary',
+        status: isSeriesComplete ? 'finished' : 'active',
+      });
+
+      playCorrect();
+    } else {
+      playWrong();
+    }
+  };
+
+  const nextOnlineRound = () => {
+    if (!gameState) return;
+
+    const isSeriesComplete = gameState.currentRound >= gameState.totalRounds;
+
+    if (isSeriesComplete) {
+      return; // Series is complete, show final results screen
+    }
+
+    // Move to next round
+    startOnlineRound();
+    updateGameState({
+      ...gameState,
+      currentRound: gameState.currentRound + 1,
+      seriesPhase: 'series-active',
+    });
   };
 
   // ── Draw helpers ──
@@ -294,7 +420,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   };
 
   const canDraw = gameMode === 'solo'
-    ? phase === 'drawing'
+    ? soloPhase === 'drawing'
     : (gameMode === 'vs-partner' && isDrawer && gameState?.phase === 'drawing');
 
   const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
@@ -328,96 +454,405 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const timerColor = timeLeft > 30 ? 'text-green-500' : timeLeft > 15 ? 'text-yellow-500' : 'text-red-500 animate-pulse';
 
   const resetToLobby = () => {
-    setGameMode(null); setPhase('idle');
-    setActiveRoomId(null); setIsHost(false);
+    setGameMode(null);
+    setSoloPhase('idle');
+    setSeriesPhase('lobby');
+    setActiveRoomId(null);
+    setIsHost(false);
+    setSoloScore(0);
+    setSoloRound(1);
+    setSoloUsedWords([]);
+    setPlayer1SeriesScore(0);
+    setPlayer2SeriesScore(0);
+    setRoundResults([]);
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen"><Loader2 className="animate-spin" size={32} /></div>;
 
-  // ── LOBBY ──
-  if (!gameMode || phase === 'idle') return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto p-4 pb-8">
-          <div className="flex items-center justify-between mb-4">
-            <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</Link>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
-            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{score}</span></div>
+  // ── MAIN VIEW LOGIC ──
+  const isSoloLobby = !gameMode || soloPhase === 'idle';
+  const isSeriesLobby = gameMode === 'vs-partner' && seriesPhase === 'lobby';
+  const isFormatSelect = gameMode === 'vs-partner' && seriesPhase === 'format-select';
+  const isDifficultySelect = gameMode === 'vs-partner' && seriesPhase === 'difficulty-select';
+  const isSeriesActive = gameMode === 'vs-partner' && (seriesPhase === 'series-active' || gameState?.seriesPhase === 'series-active');
+  const isRoundSummary = gameMode === 'vs-partner' && (seriesPhase === 'round-summary' || gameState?.seriesPhase === 'round-summary');
+  const isSeriesComplete = gameMode === 'vs-partner' && (seriesPhase === 'series-complete' || gameState?.seriesPhase === 'series-complete');
+
+  // ─── SOLO LOBBY VIEW ─────────────────────────────
+  if (isSoloLobby) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4 pb-8">
+            <div className="flex items-center justify-between mb-4">
+              <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</Link>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+              <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{soloScore}</span></div>
+            </div>
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <GameLobby
+                gameName="Pictionary"
+                gameIcon="🎨"
+                gradient="from-pink-500 to-rose-500"
+                description="Draw the word — your partner guesses!"
+                supportsSolo
+                supportsAI={false}
+                gameType="Pictionary"
+                onStartSolo={() => { setGameMode('solo'); startSolo(); }}
+                onStartVsPartner={(roomId, hostFlag) => {
+                  setGameMode('vs-partner');
+                  setActiveRoomId(roomId);
+                  setIsHost(hostFlag);
+                  setSeriesPhase('format-select');
+                }}
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <GameLobby
-              gameName="Pictionary"
-              gameIcon="🎨"
-              gradient="from-pink-500 to-rose-500"
-              description="Draw the word — your partner guesses!"
-              supportsSolo
-              supportsAI={false}
-              gameType="Pictionary"
-              onStartSolo={() => { setGameMode('solo'); startSolo(); }}
-              onStartVsPartner={(roomId, hostFlag) => {
-                setGameMode('vs-partner');
-                setActiveRoomId(roomId);
-                setIsHost(hostFlag);
-                if (hostFlag) setShouldHostStart(true);
+        </div>
+      </div>
+    );
+  }
+
+  // ─── SERIES FORMAT SELECT VIEW ──────────────────
+  if (isFormatSelect) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4 pb-8">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+              <div className="w-20"></div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Choose Series Format</h2>
+                <p className="text-gray-600 dark:text-gray-400">How many rounds will you play?</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(['best-of-1', 'best-of-3', 'best-of-5'] as const).map((format) => {
+                  const roundCount = format === 'best-of-1' ? 1 : format === 'best-of-3' ? 3 : 5;
+                  const isSelected = seriesFormat === format;
+                  return (
+                    <button
+                      key={format}
+                      onClick={() => {
+                        setSeriesFormat(format);
+                        setSeriesPhase('difficulty-select');
+                      }}
+                      className={`glass-card p-6 text-center transition duration-300 cursor-pointer transform ${
+                        isSelected ? 'scale-105 ring-2 ring-pink-500' : 'hover:scale-105'
+                      }`}
+                    >
+                      <div className="text-4xl mb-3 font-bold text-pink-600 dark:text-pink-400">{roundCount}</div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{format.replace('best-of-', 'Best of ')}</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {roundCount === 1 ? 'Quick match' : roundCount === 3 ? 'Standard competition' : 'Ultimate marathon'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {isHost && (
+                <div className="glass-card p-4 text-sm text-gray-600 dark:text-gray-400 text-center">
+                  💡 When your partner joins, you'll select difficulty together
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── DIFFICULTY SELECT VIEW ────────────────────
+  if (isDifficultySelect) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-4 pb-8">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={() => setSeriesPhase('format-select')} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+              <div className="w-20"></div>
+            </div>
+
+            <DifficultySelector
+              seriesFormat={seriesFormat}
+              onSelect={(selectedDifficulty) => {
+                setDifficulty(selectedDifficulty);
+                setSeriesPhase('series-active');
+                if (isHost) {
+                  setShouldHostStart(true);
+                }
               }}
             />
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  // ── ACTIVE GAME ──
-  const activePhase     = gameMode === 'vs-partner' ? gameState?.phase : phase;
-  const activeWord      = gameMode === 'vs-partner' ? gameState?.word  : word;
-  const activeResult    = gameMode === 'vs-partner' ? gameState?.result : result;
-  const activeRound     = gameMode === 'vs-partner' ? gameState?.round  : round;
-  const activeScore     = gameMode === 'vs-partner'
-    ? (gameState?.drawerEmail === userKey ? gameState?.p1Score : gameState?.p2Score)
-    : score;
-  const isOnlineWaiting = gameMode === 'vs-partner' && gameState?.phase === 'waiting';
+  // ─── SERIES ACTIVE / ROUND SUMMARY / COMPLETE ──
+  if (isSeriesActive || isRoundSummary || isSeriesComplete) {
+    // Show round summary between rounds
+    if (isRoundSummary && gameState && gameState.roundResults.length > 0) {
+      const lastResult = gameState.roundResults[gameState.roundResults.length - 1];
+      const player1Name = gameState.player1Email.split('@')[0];
+      const player2Name = gameState.player2Email.split('@')[0];
+
+      return (
+        <div className="h-screen flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-4 pb-8">
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+                <div className="w-20"></div>
+              </div>
+
+              <RoundSummary
+                round={lastResult}
+                player1Name={player1Name}
+                player2Name={player2Name}
+                player1SeriesScore={gameState.player1SeriesScore}
+                player2SeriesScore={gameState.player2SeriesScore}
+                isLastRound={gameState.currentRound >= gameState.totalRounds}
+                onContinue={() => {
+                  if (gameState.currentRound < gameState.totalRounds) {
+                    setSeriesPhase('series-active');
+                    nextOnlineRound();
+                  } else {
+                    setSeriesPhase('series-complete');
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Show final results
+    if (isSeriesComplete && gameState) {
+      const player1Name = gameState.player1Email.split('@')[0];
+      const player2Name = gameState.player2Email.split('@')[0];
+
+      return (
+        <div className="h-screen flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-4 pb-8">
+              <SeriesFinal
+                player1Name={player1Name}
+                player1Score={gameState.player1SeriesScore}
+                player2Name={player2Name}
+                player2Score={gameState.player2SeriesScore}
+                onPlayAgain={() => {
+                  resetToLobby();
+                  setGameMode('vs-partner');
+                  setSeriesPhase('format-select');
+                }}
+                onBack={resetToLobby}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Active round gameplay
+    if (isSeriesActive && gameState) {
+      const activePhase = gameState.phase;
+      const activeWord = gameState.word;
+      const activeResult = gameState.result;
+      const isOnlineWaiting = gameState.phase === 'waiting';
+
+      return (
+        <div className="h-screen flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-4 pb-8">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
+                <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
+                <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /></div>
+              </div>
+
+              <div className="flex justify-center gap-2 flex-wrap mb-3">
+                <GameModeBadge mode="vs-partner" />
+                {activeRoomId && (
+                  <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
+                    Room: {activeRoomId}
+                  </span>
+                )}
+                <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-pink-400">
+                  {gameState.seriesFormat.replace('best-of-', '')} Series
+                </span>
+              </div>
+
+              {/* Series Tracker */}
+              <SeriesTracker
+                seriesFormat={gameState.seriesFormat}
+                currentRound={gameState.currentRound}
+                player1Name={gameState.player1Email.split('@')[0]}
+                player1Score={gameState.player1SeriesScore}
+                player2Name={gameState.player2Email.split('@')[0]}
+                player2Score={gameState.player2SeriesScore}
+                difficulty={gameState.difficulty}
+              />
+
+              {isOnlineWaiting && (
+                <div className="glass-card p-8 text-center mt-4">
+                  <Loader2 size={32} className="animate-spin text-pink-500 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">Waiting for partner to connect…</p>
+                </div>
+              )}
+
+              {(activePhase === 'drawing' || activePhase === 'guessing') && !isOnlineWaiting && (
+                <div className="space-y-2 mt-4">
+                  {/* Info bar */}
+                  <div className="glass-card p-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-600 dark:text-gray-400 text-sm">
+                        {activePhase === 'drawing'
+                          ? (isDrawer ? ' 🎨 Draw!' : ' Waiting for drawer…')
+                          : (isGuesser ? ' 👀 Guess!' : ' Guesser is typing…')}
+                      </span>
+                      {isDrawer && activePhase === 'drawing' &&
+                        <span className="text-sm font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
+                      <span className={`font-bold ${timerColor}`}>{timeLeft}s</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+                      <div className="bg-gradient-to-r from-pink-500 to-rose-500 h-1.5 rounded-full transition-all"
+                        style={{ width: `${activePhase === 'drawing' ? (timeLeft / DRAW_TIME) * 100 : (timeLeft / GUESS_TIME) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Canvas */}
+                  <div ref={containerRef} className="glass-card overflow-hidden w-full">
+                    <canvas
+                      ref={canvasRef}
+                      width={CANVAS_W}
+                      height={CANVAS_H}
+                      className={`w-full touch-none block ${canDraw ? 'cursor-crosshair' : 'cursor-default'}`}
+                      style={{ background: '#ffffff', aspectRatio: '3/2' }}
+                      onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+                      onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+                    />
+                  </div>
+
+                  {/* Drawing toolbar */}
+                  {canDraw && (
+                    <div className="glass-card p-3">
+                      <div className="flex gap-1.5 mb-2 flex-wrap items-center">
+                        {COLORS.map(c => (
+                          <button key={c} onClick={() => { setColor(c); setErasing(false); }}
+                            className={`w-7 h-7 rounded-full border-2 transition hover:scale-110 ${
+                              color === c && !erasing ? 'border-gray-900 dark:border-white scale-110' : 'border-gray-300'
+                            }`} style={{ backgroundColor: c }} />
+                        ))}
+                        <button onClick={() => setErasing(e => !e)}
+                          className={`p-1.5 rounded-lg transition ${erasing ? 'bg-blue-500 text-white' : 'glass-btn text-gray-700 dark:text-gray-300'}`}>
+                          <Eraser size={15} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Size:</span>
+                        {BRUSH_SIZES.map(s => (
+                          <button key={s} onClick={() => setBrushSize(s)}
+                            className={`rounded-full bg-gray-800 dark:bg-white transition ${brushSize === s ? 'ring-2 ring-pink-500 ring-offset-2' : ''}`}
+                            style={{ width: s * 2 + 6, height: s * 2 + 6 }} />
+                        ))}
+                        <div className="flex-1" />
+                        <button onClick={clearCanvas} className="p-1.5 text-gray-500 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                        <button onClick={downloadDrawing} className="p-1.5 text-gray-500 hover:text-blue-500 transition"><Download size={16} /></button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Guess input */}
+                  {(activePhase === 'guessing' && isGuesser) && (
+                    <div className="glass-card p-3">
+                      <p className="text-gray-600 dark:text-gray-400 mb-2 text-center text-sm">What did they draw?</p>
+                      <form onSubmit={handleOnlineGuessSubmit} className="flex gap-2">
+                        <input type="text" value={gameState.guess} onChange={e => patchGameState({ guess: e.target.value } as any)}
+                          placeholder="Your guess…" autoFocus
+                          className="flex-1 glass border-0 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
+                        <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-5 py-2 rounded-xl transition">
+                          Guess!
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Result screen */}
+              {activePhase === 'result' && (
+                <div className="glass-card p-8 text-center mt-4">
+                  <div className="text-6xl mb-4">{activeResult === 'correct' ? '🎉' : '⏰'}</div>
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                    {activeResult === 'correct' ? 'Correct!' : "Time's Up!"}
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    The word was: <strong className="text-pink-600 dark:text-pink-400">{activeWord}</strong>
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (gameState.currentRound < gameState.totalRounds) {
+                        setSeriesPhase('round-summary');
+                      } else {
+                        setSeriesPhase('series-complete');
+                      }
+                    }}
+                    className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center justify-center gap-2 mx-auto">
+                    <RefreshCw size={18} />
+                    {gameState.currentRound >= gameState.totalRounds ? 'View Series Results' : 'See Round Summary'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // ─── SOLO MODE GAMEPLAY ─────────────────────────
+  const activePhase = soloPhase;
+  const activeWord = soloWord;
+  const activeResult = soloResult;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-4 pb-8">
-
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <button onClick={resetToLobby} className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-500 transition"><ArrowLeft size={20} /> Back</button>
             <h1 className="text-xl font-bold bg-gradient-to-r from-pink-500 to-rose-500 bg-clip-text text-transparent">🎨 Pictionary</h1>
-            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{activeScore}</span></div>
+            <div className="flex items-center gap-1 text-yellow-600"><Trophy size={18} /><span className="font-bold">{soloScore}</span></div>
           </div>
 
           <div className="flex justify-center gap-2 flex-wrap mb-3">
-            <GameModeBadge mode={gameMode} />
-            {activeRoomId && (
-              <span className="glass px-3 py-1 rounded-full text-xs font-mono font-bold text-purple-400 tracking-widest">
-                Room: {activeRoomId}
-              </span>
-            )}
+            <GameModeBadge mode="solo" />
+            <span className="glass px-3 py-1 rounded-full text-xs font-semibold text-blue-400">
+              {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} · Round {soloRound}
+            </span>
           </div>
 
-          {isOnlineWaiting && (
-            <div className="glass-card p-8 text-center">
-              <Loader2 size={32} className="animate-spin text-pink-500 mx-auto mb-4" />
-              <p className="text-gray-600 dark:text-gray-400">Waiting for partner to connect…</p>
-            </div>
-          )}
-
-          {(activePhase === 'drawing' || activePhase === 'guessing') && !isOnlineWaiting && (
+          {(activePhase === 'drawing' || activePhase === 'guessing') && (
             <div className="space-y-2">
               {/* Info bar */}
               <div className="glass-card p-3">
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-gray-600 dark:text-gray-400 text-sm">
-                    Round {activeRound} ·
-                    {activePhase === 'drawing'
-                      ? (isDrawer || gameMode === 'solo' ? ' 🎨 Draw!' : ' Waiting for drawer…')
-                      : (isGuesser || gameMode === 'solo' ? ' 👀 Guess!' : ' Guesser is typing…')}
+                    {activePhase === 'drawing' ? '🎨 Draw!' : '👀 Guess!'}
                   </span>
-                  {(isDrawer || gameMode === 'solo') && activePhase === 'drawing' &&
-                    <span className="text-sm font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
+                  {activePhase === 'drawing' && <span className="text-sm font-bold text-pink-600 dark:text-pink-400">{activeWord}</span>}
                   <span className={`font-bold ${timerColor}`}>{timeLeft}s</span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
@@ -426,15 +861,13 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 </div>
               </div>
 
-              {/* Canvas — responsive: full container width, internal resolution 600×400 */}
+              {/* Canvas */}
               <div ref={containerRef} className="glass-card overflow-hidden w-full">
                 <canvas
                   ref={canvasRef}
                   width={CANVAS_W}
                   height={CANVAS_H}
-                  className={`w-full touch-none block ${
-                    canDraw ? 'cursor-crosshair' : 'cursor-default'
-                  }`}
+                  className={`w-full touch-none block ${canDraw ? 'cursor-crosshair' : 'cursor-default'}`}
                   style={{ background: '#ffffff', aspectRatio: '3/2' }}
                   onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                   onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
@@ -464,18 +897,18 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                         style={{ width: s * 2 + 6, height: s * 2 + 6 }} />
                     ))}
                     <div className="flex-1" />
-                    <button onClick={clearCanvas}     className="p-1.5 text-gray-500 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                    <button onClick={clearCanvas} className="p-1.5 text-gray-500 hover:text-red-500 transition"><Trash2 size={16} /></button>
                     <button onClick={downloadDrawing} className="p-1.5 text-gray-500 hover:text-blue-500 transition"><Download size={16} /></button>
                   </div>
                 </div>
               )}
 
               {/* Guess input */}
-              {(activePhase === 'guessing' && (isGuesser || gameMode === 'solo')) && (
+              {(activePhase === 'guessing') && (
                 <div className="glass-card p-3">
-                  <p className="text-gray-600 dark:text-gray-400 mb-2 text-center text-sm">What did they draw?</p>
-                  <form onSubmit={gameMode === 'solo' ? handleSoloGuess : handleOnlineGuessSubmit} className="flex gap-2">
-                    <input type="text" value={guess} onChange={e => setGuess(e.target.value)}
+                  <p className="text-gray-600 dark:text-gray-400 mb-2 text-center text-sm">What did you draw?</p>
+                  <form onSubmit={handleSoloGuess} className="flex gap-2">
+                    <input type="text" value={soloGuess} onChange={e => setSoloGuess(e.target.value)}
                       placeholder="Your guess…" autoFocus
                       className="flex-1 glass border-0 rounded-xl px-3 py-2 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-400" />
                     <button type="submit" className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-5 py-2 rounded-xl transition">
@@ -499,7 +932,7 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               </p>
               <div className="flex gap-3 justify-center">
                 <button
-                  onClick={gameMode === 'solo' ? nextRound : nextOnlineRound}
+                  onClick={nextSoloRound}
                   className="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
                   <RefreshCw size={18} /> Next Round
                 </button>
@@ -510,7 +943,6 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               </div>
             </div>
           )}
-
         </div>
       </div>
     </div>

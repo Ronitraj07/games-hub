@@ -36,7 +36,7 @@ export const Navbar: React.FC = () => {
             {/* Sound toggle */}
             <button
               onClick={handleSoundToggle}
-              className="glass-btn p-2 rounded-xl text-gray-700 dark:text-gray-300"
+              className="glass-btn p-2 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-white/40 dark:hover:bg-white/15 transition-all duration-200 hover:scale-110 active:scale-95"
               title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
             >
               {soundEnabled
@@ -47,7 +47,7 @@ export const Navbar: React.FC = () => {
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              className="glass-btn p-2 rounded-xl text-gray-700 dark:text-gray-300"
+              className="glass-btn p-2 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-white/40 dark:hover:bg-white/15 transition-all duration-200 hover:scale-110 active:scale-95"
               title="Toggle theme"
             >
               {theme === 'light'
@@ -59,24 +59,24 @@ export const Navbar: React.FC = () => {
               <>
                 {/* Home */}
                 <Link to="/"
-                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
                     location.pathname === '/'
-                      ? 'text-pink-600 dark:text-pink-400 bg-pink-50/50 dark:bg-pink-900/20'
-                      : 'text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400'
+                      ? 'text-pink-600 dark:text-pink-400 bg-pink-50/50 dark:bg-pink-900/20 shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-white/30 dark:hover:bg-white/10'
                   }`}>
                   <Home size={18} />
-                  <span className="hidden sm:inline text-sm">Home</span>
+                  <span className="hidden sm:inline text-sm font-medium">Home</span>
                 </Link>
 
                 {/* Leaderboard */}
                 <Link to="/leaderboard"
-                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
                     isLeaderboard
-                      ? 'text-yellow-600 dark:text-yellow-400 bg-yellow-50/50 dark:bg-yellow-900/20'
-                      : 'text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400'
+                      ? 'text-yellow-600 dark:text-yellow-400 bg-yellow-50/50 dark:bg-yellow-900/20 shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400 hover:bg-white/30 dark:hover:bg-white/10'
                   }`}>
                   <Trophy size={18} />
-                  <span className="hidden sm:inline text-sm">Scores</span>
+                  <span className="hidden sm:inline text-sm font-medium">Scores</span>
                 </Link>
 
                 {/* Profile */}

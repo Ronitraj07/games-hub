@@ -99,22 +99,14 @@ CREATE INDEX idx_scrabble_games_player2 ON public.scrabble_games(player_2_email)
 CREATE INDEX idx_scrabble_games_series ON public.scrabble_games(series_id);
 CREATE INDEX idx_scrabble_games_created ON public.scrabble_games(created_at);
 
--- 6. Extend existing game_results table with new metadata columns
-ALTER TABLE public.game_results
-ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS game_duration_seconds INTEGER DEFAULT NULL;
-
--- Create index for faster metadata queries
-CREATE INDEX IF NOT EXISTS idx_game_results_metadata ON public.game_results USING GIN(metadata);
-
--- 7. Grant permissions
+-- 6. Grant permissions
 GRANT ALL ON public.detective_scenarios TO authenticated;
 GRANT ALL ON public.detective_results TO authenticated;
 GRANT ALL ON public.story_sessions TO authenticated;
 GRANT ALL ON public.user_wheel_customs TO authenticated;
 GRANT ALL ON public.scrabble_games TO authenticated;
 
--- 8. Enable Row Level Security (optional but recommended)
+-- 7. Enable Row Level Security (optional but recommended)
 ALTER TABLE public.detective_scenarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.detective_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.story_sessions ENABLE ROW LEVEL SECURITY;
@@ -122,6 +114,7 @@ ALTER TABLE public.user_wheel_customs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scrabble_games ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Allow users to see their own data
+DROP POLICY IF EXISTS "Users can view their own detective results" ON public.detective_results;
 CREATE POLICY "Users can view their own detective results"
   ON public.detective_results
   FOR SELECT USING (
@@ -129,6 +122,7 @@ CREATE POLICY "Users can view their own detective results"
     OR auth.jwt() ->> 'email' = player_2_email
   );
 
+DROP POLICY IF EXISTS "Users can view their own stories" ON public.story_sessions;
 CREATE POLICY "Users can view their own stories"
   ON public.story_sessions
   FOR SELECT USING (
@@ -136,6 +130,7 @@ CREATE POLICY "Users can view their own stories"
     OR auth.jwt() ->> 'email' = player_2_email
   );
 
+DROP POLICY IF EXISTS "Users can view their own scrabble games" ON public.scrabble_games;
 CREATE POLICY "Users can view their own scrabble games"
   ON public.scrabble_games
   FOR SELECT USING (
@@ -143,6 +138,7 @@ CREATE POLICY "Users can view their own scrabble games"
     OR auth.jwt() ->> 'email' = player_2_email
   );
 
+DROP POLICY IF EXISTS "Users can manage their own wheel customizations" ON public.user_wheel_customs;
 CREATE POLICY "Users can manage their own wheel customizations"
   ON public.user_wheel_customs
   FOR ALL USING (auth.jwt() ->> 'email' = user_email);
