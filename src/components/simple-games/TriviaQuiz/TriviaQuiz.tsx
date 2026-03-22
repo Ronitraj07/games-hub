@@ -22,6 +22,8 @@ export interface TriviaQuestion {
   category: string;
   custom?:  boolean;
   id?:      string;
+  forPartner?: boolean;
+  createdBy?: string;
 }
 
 // ───────────────── Built-in romantic bank ─────────────────
@@ -74,8 +76,8 @@ const CUSTOM_CATEGORY    = '✏️ Custom';
 const TIME_PER = 20;
 const TOTAL_Q  = 10;
 
-const BLANK_DRAFT = (): Omit<TriviaQuestion, 'id' | 'custom'> => ({
-  q: '', options: ['', '', '', ''], answer: 0, category: CUSTOM_CATEGORY,
+const BLANK_DRAFT = (): Omit<TriviaQuestion, 'id' | 'custom' | 'createdBy'> => ({
+  q: '', options: ['', '', '', ''], answer: 0, category: CUSTOM_CATEGORY, forPartner: false,
 });
 
 const seededShuffle = (arr: TriviaQuestion[], seed: string): TriviaQuestion[] => {
@@ -156,7 +158,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     if (!customDbPath)                      return setSaveError('You must be logged in.');
     setSaveError('');
     const id = editingId ?? `q-${Date.now()}`;
-    await set(ref(database, `${customDbPath}/${id}`), { ...draft, custom: true });
+    await set(ref(database, `${customDbPath}/${id}`), { ...draft, custom: true, createdBy: userKey });
     setDraft(BLANK_DRAFT()); setEditingId(null);
   };
 
@@ -352,6 +354,35 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
             {saveError && <p className="text-red-500 text-sm mb-3">{saveError}</p>}
 
+            <div className="mb-4 p-3 glass rounded-xl">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Who is this question for?
+              </label>
+              <div className="flex gap-2">
+                <button onClick={() => setDraft(d => ({ ...d, forPartner: false }))}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    !draft.forPartner
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white'
+                      : 'glass text-gray-600 dark:text-gray-400'
+                  }`}>
+                  👤 For Me
+                </button>
+                <button onClick={() => setDraft(d => ({ ...d, forPartner: true }))}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    draft.forPartner
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white'
+                      : 'glass text-gray-600 dark:text-gray-400'
+                  }`}>
+                  💕 For Partner
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {draft.forPartner ? 'Your partner will see & use this in quizzes for you to answer' : 'You created this for yourself'}
+              </p>
+            </div>
+
+            {saveError && <p className="text-red-500 text-sm mb-3">{saveError}</p>}
+
             <button onClick={saveCustomQ}
               className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-semibold py-3 rounded-xl transition hover:opacity-90 flex items-center justify-center gap-2">
               <Plus size={18}/> {editingId ? 'Update Question' : 'Add Question'}
@@ -364,6 +395,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {customQs.map(cq => (
                   <div key={cq.id} className="flex items-start gap-2 p-3 glass rounded-xl">
+                    {cq.forPartner && <span className="shrink-0 text-lg" title="Created for your partner">💕</span>}
                     <p className="flex-1 text-sm text-gray-800 dark:text:white line-clamp-2">{cq.q}</p>
                     <div className="flex gap-1 shrink-0">
                       <button onClick={() => startEditQ(cq)}
@@ -435,8 +467,8 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
                 <BookOpen size={16} className="text-white"/>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Add your own questions</p>
-                <p className="text-xs text-gray-500">Create couple-specific questions only you two can answer</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Create custom questions</p>
+                <p className="text-xs text-gray-500">Build quizzes for each other or yourself 💕</p>
               </div>
               <Plus size={18} className="ml-auto text-pink-500 shrink-0"/>
             </button>

@@ -222,10 +222,17 @@ export const TruthOrDare: React.FC = () => {
     const card: TodCard = { type: t, text, deck: gs.deck, drawnBy: userEmail };
     const newHistory = [card, ...(gs.history || [])].slice(0, 20);
     const nextTurn = amPlayer1 ? (gs.player2 ?? userEmail) : gs.player1;
-    updateGameState({ ...gs, flipping: true, currentCard: card, history: newHistory });
+
+    // Update state to show card with flip animation
+    const flippingState = { ...gs, flipping: true, currentCard: card, history: newHistory };
+    updateGameState(flippingState);
+
+    // After animation, update turn (without spreading gs to avoid stale state overwrite)
     setTimeout(() => {
       updateGameState({
-        ...gs, flipping: false, currentCard: card, currentTurn: nextTurn, history: newHistory,
+        ...flippingState,
+        flipping: false,
+        currentTurn: nextTurn,
       });
     }, 400);
   }, [gs, isMyTurn, amPlayer1, userEmail]);
