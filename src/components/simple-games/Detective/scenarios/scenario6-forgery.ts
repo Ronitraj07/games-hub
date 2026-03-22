@@ -190,21 +190,30 @@ export const scenario6_forgery: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '🎉',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_apprentice',
+      isCorrect: true,
       title: 'Forgery Exposed!',
       description: 'Elena Rossini confessed to creating the masterpiece forgery. Justice served!',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_auctioneer',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The investigation fell short. The real forger remains at large.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'You ran out of time. The case remains unsolved.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

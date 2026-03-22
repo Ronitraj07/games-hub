@@ -172,21 +172,30 @@ export const scenario11_heist: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '🎨',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_security_chief',
+      isCorrect: true,
       title: 'Heist Thwarted!',
       description: 'Victor Moralez\'s inside job was exposed. The paintings are recovered.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_museum_curator',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The paintings remain missing. The real thief is still out there.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The case could not be solved before the paintings reached the black market.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

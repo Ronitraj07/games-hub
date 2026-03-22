@@ -189,21 +189,30 @@ export const scenario13_diamond: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '💎',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_exhibition_manager',
+      isCorrect: true,
       title: 'Diamond Heist Solved!',
       description: 'Richard Sterling\'s elaborate scheme was exposed. The real diamond is recovered.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_security',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The real mastermind escaped with the diamond and $50M.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'Richard disappeared before you could tie all the evidence together.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

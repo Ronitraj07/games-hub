@@ -177,21 +177,30 @@ export const scenario8_poisoning: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '⚖️',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_ex_wife',
+      isCorrect: true,
       title: 'Poisoner Caught!',
       description: 'Isabella Moretti\'s revenge plot was exposed. Justice prevails.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_rival',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'You accused the wrong person. The real poisoner escaped.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The investigation could not be completed in time.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

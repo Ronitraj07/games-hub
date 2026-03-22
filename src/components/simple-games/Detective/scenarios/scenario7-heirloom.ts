@@ -124,21 +124,30 @@ export const scenario7_heirloom: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '🎉',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_cousin',
+      isCorrect: true,
       title: 'Heirloom Recovered!',
       description: 'Michael Sterling confessed. The family heirloom is safe.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_sister',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The real thief is still out there.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The case could not be solved in time.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

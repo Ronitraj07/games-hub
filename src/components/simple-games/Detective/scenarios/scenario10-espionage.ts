@@ -172,21 +172,30 @@ export const scenario10_espionage: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '🕵️',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_lead_engineer',
+      isCorrect: true,
       title: 'Spy Exposed!',
       description: 'Dr. Samuel Park\'s espionage plot was uncovered. The algorithm is recovered.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_angel_investor',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The real corporate spy remains undetected. The competitor now has the technology.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The investigation ran out of time. The spy escaped.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

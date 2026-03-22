@@ -164,21 +164,30 @@ export const scenario12_affair: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '🔒',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_lobbyist',
+      isCorrect: true,
       title: 'Blackmailer Exposed!',
       description: 'Margaret Hayes\'s scheme was uncovered. The politician is safe.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_journalist',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The photographs have been released. The politician\'s career is over.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The blackmailer obtained the payoff before you solved the case.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };

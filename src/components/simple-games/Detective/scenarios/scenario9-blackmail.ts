@@ -179,21 +179,30 @@ export const scenario9_blackmail: Scenario = {
     },
   },
 
-  endings: {
-    correct_suspect: {
-      portraitUrl: '✅',
+  endings: [
+    {
+      id: 'ending_correct',
+      accusedSuspectId: 'suspect_accountant',
+      isCorrect: true,
       title: 'Blackmailer Caught!',
       description: 'David Thompson\'s extortion plot was exposed. The victim is safe.',
+      scoreMultiplier: 1.0,
     },
-    wrong_suspect: {
-      portraitUrl: '❌',
+    {
+      id: 'ending_wrong',
+      accusedSuspectId: 'suspect_competitor',
+      isCorrect: false,
       title: 'Wrong Conclusion',
       description: 'The real blackmailer remains unidentified. The threats continue.',
+      scoreMultiplier: 0.5,
     },
-    timeout: {
-      portraitUrl: '⏰',
+    {
+      id: 'ending_timeout',
+      accusedSuspectId: 'none',
+      isCorrect: false,
       title: 'Time\'s Up',
       description: 'The secrets were revealed before you could solve the case.',
+      scoreMultiplier: 0.0,
     },
-  },
+  ],
 };
