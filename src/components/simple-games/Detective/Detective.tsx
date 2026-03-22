@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
-import { SceneRenderer } from '@/components/shared/SceneRenderer';
+import { ThreeScene } from '@/components/shared/ThreeScene';
 import { DetectiveGameState, Scenario, Scene, EvidenceItem } from './types';
 import { SCENARIOS } from './scenarios';
 import { ArrowLeft, CheckCircle, XCircle, Loader } from 'lucide-react';
@@ -17,6 +17,45 @@ const DETECTIVE_CONFIG = {
   supportsSolo: true,
   supportsAI: false,
 };
+
+// Helper function to map scenarios and scenes to 3D scene types
+function getSceneType(scenarioId: string, sceneId: string): 'office' | 'mansion' | 'street' | 'museum' | 'laboratory' {
+  // Map based on scenario themes
+  if (scenarioId.includes('pearl') || scenarioId.includes('theft')) return 'museum';
+  if (scenarioId.includes('mansion') || scenarioId.includes('locked')) return 'mansion';
+  if (scenarioId.includes('corporate') || scenarioId.includes('embezzlement')) return 'office';
+  if (scenarioId.includes('identity') || scenarioId.includes('espionage')) return 'laboratory';
+  if (scenarioId.includes('street') || scenarioId.includes('blackmail')) return 'street';
+
+  // Default fallback based on scene type
+  if (sceneId.includes('office')) return 'office';
+  if (sceneId.includes('museum')) return 'museum';
+  if (sceneId.includes('mansion') || sceneId.includes('house')) return 'mansion';
+  if (sceneId.includes('lab')) return 'laboratory';
+  if (sceneId.includes('street') || sceneId.includes('outdoor')) return 'street';
+
+  return 'office'; // Default
+}
+
+// Helper function to get lighting based on scenario
+function getLighting(scenarioId: string): 'day' | 'night' | 'dim' {
+  if (scenarioId.includes('night') || scenarioId.includes('locked')) return 'night';
+  if (scenarioId.includes('dim') || scenarioId.includes('mystery')) return 'dim';
+  return 'day';
+}
+
+// Helper function to assign colors to suspects
+function getSuspectColor(index: number): string {
+  const colors = [
+    '#e74c3c', // Red
+    '#3498db', // Blue
+    '#2ecc71', // Green
+    '#f39c12', // Orange
+    '#9b59b6', // Purple
+    '#1abc9c', // Teal
+  ];
+  return colors[index % colors.length];
+}
 
 export const Detective: React.FC = () => {
   const { user } = useAuth();
@@ -220,35 +259,49 @@ export const Detective: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Scene Display with 3D Rendering */}
           <div className="lg:col-span-3">
-            <SceneRenderer
-              title={currentScene.title}
-              description={currentScene.description}
-              backgroundImage={currentScene.backgroundUrl}
-              characters={selectedScenario.suspects.map((suspect, idx) => ({
-                id: suspect.id,
-                name: suspect.name,
-                emoji: suspect.portrait,
-                position: idx === 0 ? 'left' : idx === 1 ? 'center' : 'right',
-                emotion: gameState.suspectSuspicionLevels[suspect.id] ?
-                  (gameState.suspectSuspicionLevels[suspect.id] > 70 ? 'suspicious' :
-                   gameState.suspectSuspicionLevels[suspect.id] > 50 ? 'angry' : 'neutral')
-                  : 'neutral',
-              }))}
-              hotspots={currentScene.hotspots.map(hotspot => ({
-                id: hotspot.id,
-                label: hotspot.tooltip,
-                x: 50,
-                y: 60,
-                width: 20,
-                height: 20,
-              }))}
-              onHotspotClick={(hotspotId) => {
-                const hotspot = currentScene.hotspots.find(h => h.id === hotspotId);
-                if (hotspot?.evidenceId) {
-                  handleDiscoverEvidence(hotspot.evidenceId);
+            {/* Scene title & description */}
+            <div className="glass-card p-4 rounded-2xl mb-4 bg-gradient-to-r from-purple-800/40 to-indigo-800/40 border border-purple-500/30">
+              <h2 className="text-xl font-bold text-white mb-2">{currentScene.title}</h2>
+              <p className="text-sm text-purple-200">{currentScene.description}</p>
+            </div>
+
+            {/* 3D Scene with Three.js */}
+            <ThreeScene
+              sceneType={getSceneType(selectedScenario.id, currentScene.id)}
+              characters={selectedScenario.suspects.map((suspect, idx) => {
+                const suspicion = gameState.suspectSuspicionLevels[suspect.id] || 0;
+                const emotion: 'neutral' | 'happy' | 'sad' | 'angry' | 'suspicious' =
+                  suspicion > 70 ? 'suspicious' :
+                  suspicion > 50 ? 'angry' :
+                  'neutral';
+
+                // Position characters in 3D space (spread them out)
+                const positions = [
+                  { x: -4, y: 0, z: 2 },   // Left
+                  { x: 0, y: 0, z: 0 },    // Center
+                  { x: 4, y: 0, z: 2 },    // Right
+                  { x: -2, y: 0, z: 5 },   // Back left
+                  { x: 2, y: 0, z: 5 },    // Back right
+                ];
+
+                return {
+                  name: suspect.name,
+                  position: positions[idx] || positions[0],
+                  color: getSuspectColor(idx),
+                  emotion,
+                };
+              })}
+              lighting={getLighting(selectedScenario.id)}
+              onCharacterClick={(characterName) => {
+                const suspect = selectedScenario.suspects.find(s => s.name === characterName);
+                if (suspect && gameState.status !== 'finished') {
+                  setGameState({
+                    ...gameState,
+                    currentlySelectedSuspect: suspect.id,
+                  });
                 }
               }}
-              className="mb-6"
+              className="mb-6 h-96"
             />
 
             {/* Investigation hotspots */}
