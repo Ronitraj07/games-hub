@@ -150,8 +150,8 @@ body {
 }
 
 .dark .glass-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.2);
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.25);
 }
 
 /* === ROMANTIC BACKGROUND BLOBS === */
@@ -592,7 +592,21 @@ button:disabled {
 }
 
 button:focus-visible {
-  outline: 2px solid rgba(236, 72, 153, 0.5);
+  outline: 2px solid rgba(236, 72, 153, 0.7);
+  outline-offset: 2px;
+}
+
+/* Enhanced focus for dark mode */
+.dark button:focus-visible {
+  outline: 2px solid rgba(236, 72, 153, 0.9);
+  outline-offset: 2px;
+}
+
+/* Focus for all interactive elements */
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid rgba(236, 72, 153, 0.7);
   outline-offset: 2px;
 }
 
@@ -694,9 +708,9 @@ button:focus-visible {
 }
 
 .dark .glass-btn-refined {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .dark .glass-btn-refined:hover:not(:disabled) {

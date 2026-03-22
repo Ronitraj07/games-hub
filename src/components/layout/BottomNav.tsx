@@ -44,7 +44,9 @@ export const BottomNav: React.FC = () => {
       style={{
         background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.4) 100%)',
         backdropFilter: 'blur(24px) saturate(180%)',
-      }}>
+      }}
+      aria-label="Mobile navigation"
+    >
       {/* Shine overlay */}
       <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50 pointer-events-none" />
 
@@ -59,11 +61,13 @@ export const BottomNav: React.FC = () => {
         {/* Home */}
         <Link
           to="/"
-          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden ${
+          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden focus:outline-pink-500 focus:outline-offset-2 ${
             isActive('/')
               ? 'bg-gradient-to-br from-pink-400/50 to-pink-500/30 text-pink-600 dark:text-pink-300 shadow-lg shadow-pink-400/40 scale-105'
               : 'text-gray-700 dark:text-gray-300 hover:bg-pink-400/20 hover:text-pink-600 dark:hover:text-pink-400 hover:scale-105'
           }`}
+          aria-label="Go to Home"
+          aria-current={isActive('/') ? 'page' : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-full" />
           <Home size={22} className="relative z-10" />
@@ -73,11 +77,13 @@ export const BottomNav: React.FC = () => {
         {/* Leaderboard */}
         <Link
           to="/leaderboard"
-          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden ${
+          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden focus:outline-yellow-500 focus:outline-offset-2 ${
             isActive('/leaderboard')
               ? 'bg-gradient-to-br from-yellow-400/50 to-yellow-500/30 text-yellow-600 dark:text-yellow-300 shadow-lg shadow-yellow-400/40 scale-105'
               : 'text-gray-700 dark:text-gray-300 hover:bg-yellow-400/20 hover:text-yellow-600 dark:hover:text-yellow-400 hover:scale-105'
           }`}
+          aria-label="View Leaderboard"
+          aria-current={isActive('/leaderboard') ? 'page' : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-full" />
           <Trophy size={22} className="relative z-10" />
@@ -87,8 +93,9 @@ export const BottomNav: React.FC = () => {
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full text-gray-700 dark:text-gray-300 hover:bg-purple-400/20 hover:text-purple-600 dark:hover:text-purple-400 transition-all duration-200 hover:scale-105 group relative overflow-hidden"
-          title="Toggle theme"
+          className="flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full text-gray-700 dark:text-gray-300 hover:bg-purple-400/20 hover:text-purple-600 dark:hover:text-purple-400 transition-all duration-200 hover:scale-105 group relative overflow-hidden focus:outline-purple-500 focus:outline-offset-2"
+          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-full" />
           {theme === 'light' ? <Moon size={22} className="relative z-10" /> : <Sun size={22} className="relative z-10" />}
@@ -98,11 +105,13 @@ export const BottomNav: React.FC = () => {
         {/* Profile */}
         <Link
           to="/profile"
-          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden ${
+          className={`flex flex-col items-center justify-center gap-1 py-2.5 px-4 rounded-full transition-all duration-200 group relative overflow-hidden focus:outline-purple-500 focus:outline-offset-2 ${
             isActive('/profile')
               ? 'bg-gradient-to-br from-purple-400/50 to-purple-500/30 text-purple-600 dark:text-purple-300 shadow-lg shadow-purple-400/40 scale-105'
               : 'text-gray-700 dark:text-gray-300 hover:bg-purple-400/20 hover:text-purple-600 dark:hover:text-purple-400 hover:scale-105'
           }`}
+          aria-label="View My Profile"
+          aria-current={isActive('/profile') ? 'page' : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-full" />
           {user.photoURL ? (

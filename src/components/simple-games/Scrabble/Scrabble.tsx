@@ -29,7 +29,7 @@ const ScrabbleBoardDisplay: React.FC<{ gameState: ScrabbleGameState | null }> = 
       col,
       type: getPremiumType(row, col) as any,
       content: gameState.board?.[row]?.[col]?.letter ? (
-        <div className="w-8 h-8 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded flex items-center justify-center font-bold text-yellow-900 shadow-lg text-sm">
+        <div className="w-7 h-7 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded flex items-center justify-center font-bold text-yellow-900 shadow-lg text-xs">
           {gameState.board[row][col].letter}
         </div>
       ) : undefined,

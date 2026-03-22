@@ -7,7 +7,7 @@ export const Board: React.FC<BoardProps> = ({ board, onCellClick, disabled, winn
 
   return (
     <div className="flex justify-center">
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-4 glass-card w-full max-w-[min(100%,340px)]">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-4 glass-card w-full max-w-[min(100%,340px)]" role="grid" aria-label="Tic Tac Toe game board">
         {safeBoard.map((cell, index) => (
           <Cell
             key={index}
@@ -15,6 +15,7 @@ export const Board: React.FC<BoardProps> = ({ board, onCellClick, disabled, winn
             onClick={() => onCellClick(index)}
             disabled={disabled || cell !== null}
             winning={winningCells.includes(index)}
+            index={index}
           />
         ))}
       </div>

@@ -64,17 +64,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
   }, []);
 
+  // Calculate responsive cell size with clamp
+  // For 15x15 board: min 24px, ideal 40px, max 60px
+  const responsiveCellSize = Math.max(24, Math.min(cellSize, Math.floor((Math.min(window.innerWidth, 800) - 48) / cols)));
+
   return (
     <div
-      className={`inline-block rounded-xl overflow-hidden shadow-xl ${className}`}
+      className={`inline-block rounded-xl overflow-auto shadow-xl max-w-full ${className}`}
       style={{
         border: '2px solid rgba(100, 100, 100, 0.3)',
       }}>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
-          gridTemplateRows: `repeat(${rows}, ${cellSize}px)`,
+          gridTemplateColumns: `repeat(${cols}, minmax(${responsiveCellSize}px, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, ${responsiveCellSize}px)`,
           gap: showGridLines ? '1px' : '0px',
           backgroundColor: 'rgba(0, 0, 0, 0.05)',
           padding: showGridLines ? '1px' : '0px',
@@ -92,9 +96,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   : 'hover:ring-2 hover:ring-pink-300 hover:shadow-md'
               } ${cell.isClickable ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
               style={{
-                width: cellSize,
-                height: cellSize,
-                fontSize: cellSize > 40 ? '14px' : '12px',
+                width: responsiveCellSize,
+                height: responsiveCellSize,
+                fontSize: responsiveCellSize > 40 ? '14px' : responsiveCellSize > 32 ? '12px' : '10px',
                 fontWeight: 'bold',
                 userSelect: 'none',
               }}>

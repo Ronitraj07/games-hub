@@ -340,18 +340,20 @@ export const MemoryMatch: React.FC<{ sessionId?: string }> = ({ sessionId }) => 
                 </p>
               )}
 
-              <div className={`grid gap-3 ${gameState.gridSize === 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
+              <div className={`grid gap-2 sm:gap-3 ${gameState.gridSize === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6'}`}>
                 {safeCards.map((card: Card) => (
                   <button key={card.id} onClick={() => handleCardClick(card.id)}
                     disabled={card.isFlipped || card.isMatched}
-                    className={`aspect-square rounded-xl transition-all duration-300 flex items-center justify-center text-3xl ${
+                    className={`aspect-square rounded-xl transition-all duration-300 flex items-center justify-center text-lg sm:text-2xl md:text-3xl ${
                       card.isMatched
                         ? 'bg-green-100 dark:bg-green-900/30 scale-90 opacity-60'
                         : card.isFlipped
                         ? 'glass scale-105 ring-2 ring-pink-400'
                         : 'bg-gradient-to-br from-pink-400 to-purple-500 hover:scale-105 hover:shadow-lg'
-                    }`}>
-                    {(card.isFlipped || card.isMatched) ? card.symbol : <span className="text-2xl text-white font-bold">?</span>}
+                    }`}
+                    aria-label={`Memory card ${card.id}`}
+                  >
+                    {(card.isFlipped || card.isMatched) ? card.symbol : <span className="text-base sm:text-lg md:text-xl font-bold text-white">?</span>}
                   </button>
                 ))}
               </div>
