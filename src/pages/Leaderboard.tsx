@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Trophy, RefreshCw, Loader2, Swords, Brain, Grid3x3, Hash, Gamepad2, HelpCircle, Flame, Zap, Image, Calculator, Dices } from 'lucide-react';
+import { ArrowLeft, Trophy, RefreshCw, Loader2, Swords, Brain, Grid3x3, Hash, Gamepad2, HelpCircle, Flame, Zap, Image, Calculator, Dices, TrendingUp, Zap as Lightning, Rocket } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ALLOWED_EMAILS, getDisplayNameFromEmail, getPlayerEmoji } from '@/lib/auth-config';
 
@@ -97,6 +97,25 @@ const getWinStreak = (rows: Row[], email: string): number => {
   return streak;
 };
 
+// ─── calculate interesting stats ─────────────────────────────────────────────────────────────
+const getHotStreakPlayer = (rows: Row[]): { name: string; streak: number } | null => {
+  const streaks: Record<string, number> = {};
+  rows.forEach(r => {
+    if (!streaks[r.player_email]) streaks[r.player_email] = getWinStreak(rows, r.player_email);
+  });
+  const best = Object.entries(streaks).reduce((a, b) => (b[1] > a[1] ? b : a), ['', 0]);
+  if (best[1] < 3) return null;
+  return { name: getDisplayNameFromEmail(best[0]), streak: best[1] };
+};
+
+const getMostPlayedGame = (rows: Row[]): { label: string; count: number } | null => {
+  const counts: Record<GameType, number> = {} as any;
+  GAME_TYPES.forEach(g => counts[g] = 0);
+  rows.forEach(r => counts[r.game_type]++);
+  const best = Object.entries(counts).reduce((a: any, b: any) => (b[1] > a[1] ? b : a));
+  return { label: GAME_META[best[0] as GameType].label, count: best[1] };
+};
+
 // ─── component ─────────────────────────────────────────────────────────────────────────────
 export const Leaderboard: React.FC = () => {
   const [stats,   setStats]   = useState<PlayerStat[]>([]);
@@ -104,6 +123,7 @@ export const Leaderboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [tab,     setTab]     = useState<'overall' | GameType>('overall');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'month' | 'week'>('all');
 
   const fetchStats = async () => {
     setLoading(true); setError('');
@@ -124,9 +144,22 @@ export const Leaderboard: React.FC = () => {
     setLoading(false);
   };
 
+  // Filter rows by time period
+  const filterRowsByTime = (rows: Row[]): Row[] => {
+    if (timeFilter === 'all') return rows;
+    const now = new Date();
+    const filterDate = new Date(now);
+    if (timeFilter === 'month') filterDate.setMonth(filterDate.getMonth() - 1);
+    if (timeFilter === 'week') filterDate.setDate(filterDate.getDate() - 7);
+    return rows.filter(r => new Date(r.created_at ?? 0) >= filterDate);
+  };
+
   useEffect(() => { fetchStats(); }, []);
 
-  const displayed = stats.map(p => ({
+  const filteredRows = filterRowsByTime(rawRows);
+  const filteredStats = buildStats(filteredRows);
+
+  const displayed = filteredStats.map(p => ({
     ...p,
     w: tab === 'overall' ? p.wins   : p.byGame[tab as GameType].wins,
     l: tab === 'overall' ? p.losses : p.byGame[tab as GameType].losses,
@@ -188,6 +221,20 @@ export const Leaderboard: React.FC = () => {
           ))}
         </div>
 
+        {/* Time filter tabs */}
+        <div className="flex gap-2 mb-4">
+          {(['all', 'month', 'week'] as const).map(t => (
+            <button key={t} onClick={() => setTimeFilter(t)}
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                timeFilter === t
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                  : 'glass text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}>
+              {t === 'all' ? '⭐ All Time' : t === 'month' ? '📅 Month' : '📆 Week'}
+            </button>
+          ))}
+        </div>
+
         {loading && (
           <div className="flex items-center justify-center py-20">
             <Loader2 size={32} className="animate-spin text-yellow-500"/>
@@ -198,7 +245,35 @@ export const Leaderboard: React.FC = () => {
         {!loading && !error && (
           <div className="space-y-3">
 
-            {/* Player ranking cards */}
+            {/* ─── Interesting Stats Cards ─── */}
+            {timeFilter === 'all' && (
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {(() => {
+                  const hotStreak = getHotStreakPlayer(rawRows);
+                  const mostPlayed = getMostPlayedGame(rawRows);
+                  return (
+                    <>
+                      {hotStreak && (
+                        <div className="glass-card p-3 text-center">
+                          <p className="text-2xl mb-1">🔥</p>
+                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Hot Streak</p>
+                          <p className="text-lg font-bold text-orange-500">{hotStreak.streak} wins</p>
+                          <p className="text-xs text-gray-400">{hotStreak.name}</p>
+                        </div>
+                      )}
+                      {mostPlayed && (
+                        <div className="glass-card p-3 text-center">
+                          <p className="text-2xl mb-1">🎮</p>
+                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Most Played</p>
+                          <p className="text-lg font-bold text-blue-500">{mostPlayed.count}</p>
+                          <p className="text-xs text-gray-400">{mostPlayed.label}</p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
             {displayed.map((p, i) => (
               <div key={p.email} className={`glass-card p-4 flex items-center gap-4 ${
                 i === 0 && p.w > 0 ? 'ring-2 ring-yellow-400/60' : ''
