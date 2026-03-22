@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Trophy, RefreshCw, Loader2, Swords, Brain, Grid3x3, Hash, Gamepad2, HelpCircle, Flame, Zap, Image, Calculator, Dices, TrendingUp, Zap as Lightning, Rocket } from 'lucide-react';
+import { ArrowLeft, Trophy, RefreshCw, Loader2, Swords, Brain, Grid3x3, Hash, Gamepad2, HelpCircle, Flame, Zap, Image, Calculator, Dices, TrendingUp, Zap as Lightning, Rocket, Heart } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ALLOWED_EMAILS, getDisplayNameFromEmail, getPlayerEmoji } from '@/lib/auth-config';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 type GameType =
   | 'tictactoe' | 'wordscramble' | 'memorymatch' | 'connect4'
-  | 'trivia'    | 'rps'          | 'pictionary'  | 'mathduel' | 'truthordare';
+  | 'trivia'    | 'rps'          | 'pictionary'  | 'mathduel' | 'truthordare'
+  | 'detective' | 'scrabble'     | 'storybuilder' | 'kissingwheel';
 
 interface PlayerStat {
   email:       string;
@@ -34,15 +35,19 @@ interface Row {
 
 // ─── game metadata ─────────────────────────────────────────────────────────────────
 const GAME_META: Record<GameType, { label: string; icon: React.ReactNode; color: string }> = {
-  tictactoe:   { label: 'Tic Tac Toe',        icon: <Hash size={16}/>,       color: 'text-green-500'  },
-  wordscramble:{ label: 'Word Scramble',        icon: <Gamepad2 size={16}/>,   color: 'text-purple-500' },
-  memorymatch: { label: 'Memory Match',         icon: <Brain size={16}/>,      color: 'text-blue-500'   },
-  connect4:    { label: 'Connect 4',            icon: <Grid3x3 size={16}/>,    color: 'text-yellow-500' },
-  trivia:      { label: 'Trivia Quiz',          icon: <HelpCircle size={16}/>, color: 'text-pink-500'   },
-  rps:         { label: 'Rock Paper Scissors',  icon: <Swords size={16}/>,     color: 'text-orange-500' },
-  pictionary:  { label: 'Pictionary',           icon: <Image size={16}/>,      color: 'text-rose-500'   },
-  mathduel:    { label: 'Math Duel',            icon: <Calculator size={16}/>, color: 'text-lime-500'   },
-  truthordare: { label: 'Truth or Dare',        icon: <Flame size={16}/>,      color: 'text-red-500'    },
+  tictactoe:    { label: 'Tic Tac Toe',        icon: <Hash size={16}/>,       color: 'text-green-500'  },
+  wordscramble: { label: 'Word Scramble',      icon: <Gamepad2 size={16}/>,   color: 'text-purple-500' },
+  memorymatch:  { label: 'Memory Match',       icon: <Brain size={16}/>,      color: 'text-blue-500'   },
+  connect4:     { label: 'Connect 4',          icon: <Grid3x3 size={16}/>,    color: 'text-yellow-500' },
+  trivia:       { label: 'Trivia Quiz',        icon: <HelpCircle size={16}/>, color: 'text-pink-500'   },
+  rps:          { label: 'Rock Paper Scissors',icon: <Swords size={16}/>,     color: 'text-orange-500' },
+  pictionary:   { label: 'Pictionary',         icon: <Image size={16}/>,      color: 'text-rose-500'   },
+  mathduel:     { label: 'Math Duel',          icon: <Calculator size={16}/>, color: 'text-lime-500'   },
+  truthordare:  { label: 'Truth or Dare',      icon: <Flame size={16}/>,      color: 'text-red-500'    },
+  detective:    { label: 'Detective',          icon: <Brain size={16}/>,      color: 'text-purple-600' },
+  scrabble:     { label: 'Scrabble',           icon: <Gamepad2 size={16}/>,   color: 'text-blue-600'   },
+  storybuilder: { label: 'Story Builder',      icon: <Rocket size={16}/>,     color: 'text-pink-600'   },
+  kissingwheel: { label: 'Kissing Wheel',      icon: <Heart size={16}/>,      color: 'text-red-600'    },
 };
 
 const GAME_TYPES = Object.keys(GAME_META) as GameType[];
