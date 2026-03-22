@@ -3,8 +3,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
+import { VisualNovelDisplay, VisualNovelEntry } from '@/components/shared/VisualNovelDisplay';
 import { ArrowLeft, Send, Save, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getPlayerEmoji } from '@/lib/auth-config';
 
 interface StoryTurn {
   playerEmail: string;
@@ -229,12 +231,17 @@ export const StoryBuilder: React.FC = () => {
           </div>
         </div>
 
-        {/* Story Display */}
-        <div className="glass-card p-8 rounded-2xl mb-6 min-h-96">
-          <div className="prose prose-invert max-w-none">
-            <p className="text-pink-100 text-lg leading-relaxed whitespace-pre-wrap">{fullStory}</p>
-          </div>
-        </div>
+        {/* Story Display with Visual Novel */}
+        <VisualNovelDisplay
+          storyStarter={gameState.storyStarter}
+          entries={gameState.turns.map(turn => ({
+            playerName: turn.playerName,
+            playerEmoji: getPlayerEmoji(turn.playerEmail),
+            text: turn.contribution,
+            timestamp: turn.timestamp,
+          }))}
+          enableTypeAnimation={true}
+        />
 
         {/* Contribution Area */}
         {!isFinished && (
