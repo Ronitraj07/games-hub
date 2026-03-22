@@ -3,58 +3,59 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGameStats } from '@/hooks/useGameStats';
 import { useRealtimeGame } from '@/hooks/firebase/useRealtimeGame';
 import { GameLobby } from '@/components/shared/GameLobby';
-import { ThreeScene } from '@/components/shared/ThreeScene';
-import { DetectiveGameState, Scenario, Scene, EvidenceItem } from './types';
-import { SCENARIOS } from './scenarios';
-import { ArrowLeft, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { IsometricScene, PlayerAvatar, InteractiveObject } from '@/components/shared/IsometricScene';
+import { EnhancedScenario, Room, LOCKED_ROOM_ENHANCED } from './enhanced-scenarios';
+import { ArrowLeft, Backpack, MapPin, User, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getPlayerEmoji } from '@/lib/auth-config';
 
 const DETECTIVE_CONFIG = {
   gameType: 'detective' as const,
   icon: '🔍',
   gradient: 'from-purple-600 to-indigo-700',
-  description: 'Solve mysteries through investigation, evidence collection, and logical deduction.',
+  description: 'Explore detailed crime scenes, collect clues, interrogate suspects, and solve mysteries. 30-40 minutes per case.',
   supportsSolo: true,
   supportsAI: false,
 };
 
-// Helper function to map scenarios and scenes to 3D scene types
-function getSceneType(scenarioId: string, sceneId: string): 'office' | 'mansion' | 'street' | 'museum' | 'laboratory' {
-  // Map based on scenario themes
-  if (scenarioId.includes('pearl') || scenarioId.includes('theft')) return 'museum';
-  if (scenarioId.includes('mansion') || scenarioId.includes('locked')) return 'mansion';
-  if (scenarioId.includes('corporate') || scenarioId.includes('embezzlement')) return 'office';
-  if (scenarioId.includes('identity') || scenarioId.includes('espionage')) return 'laboratory';
-  if (scenarioId.includes('street') || scenarioId.includes('blackmail')) return 'street';
+interface EnhancedDetectiveGameState {
+  scenarioId: string;
+  currentRoomId: string;
+  phase: 'exploration' | 'interrogation' | 'conclusion';
 
-  // Default fallback based on scene type
-  if (sceneId.includes('office')) return 'office';
-  if (sceneId.includes('museum')) return 'museum';
-  if (sceneId.includes('mansion') || sceneId.includes('house')) return 'mansion';
-  if (sceneId.includes('lab')) return 'laboratory';
-  if (sceneId.includes('street') || sceneId.includes('outdoor')) return 'street';
+  // Multiplayer emails
+  player1Email?: string;
+  player2Email?: string;
 
-  return 'office'; // Default
-}
+  // Multiplayer avatars
+  player1Position: { x: number; y: number };
+  player2Position: { x: number; y: number };
 
-// Helper function to get lighting based on scenario
-function getLighting(scenarioId: string): 'day' | 'night' | 'dim' {
-  if (scenarioId.includes('night') || scenarioId.includes('locked')) return 'night';
-  if (scenarioId.includes('dim') || scenarioId.includes('mystery')) return 'dim';
-  return 'day';
-}
+  // Evidence & Progression
+  discoveredEvidenceIds: string[];
+  discoveredClues: string[];
+  solvedPuzzles: string[];
+  visitedRooms: string[];
 
-// Helper function to assign colors to suspects
-function getSuspectColor(index: number): string {
-  const colors = [
-    '#e74c3c', // Red
-    '#3498db', // Blue
-    '#2ecc71', // Green
-    '#f39c12', // Orange
-    '#9b59b6', // Purple
-    '#1abc9c', // Teal
-  ];
-  return colors[index % colors.length];
+  // NPC interactions
+  npcDialogueProgress: Record<string, string>; // npcId -> currentNodeId
+
+  // Investigation
+  suspectSuspicionLevels: Record<string, number>;
+  currentlySelectedSuspect?: string;
+  accusedSuspectId?: string;
+
+  // Game meta
+  startTime: number;
+  endTime?: number;
+  timeSpent: number;
+  investigationAccuracy: number;
+  status: 'active' | 'finished';
+  mode: 'solo' | 'vs-partner';
+  recorded?: boolean;
+
+  // Room state
+  interactedObjects: string[]; // objectIds that have been clicked
 }
 
 export const Detective: React.FC = () => {
@@ -65,13 +66,13 @@ export const Detective: React.FC = () => {
   const [mode, setMode] = useState<'lobby' | 'game'>('lobby');
   const [isHost, setIsHost] = useState(false);
   const [roomId, setRoomId] = useState<string>('');
-  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
-  const [gameState, setGameState] = useState<DetectiveGameState | null>(null);
-  const [currentScene, setCurrentScene] = useState<Scene | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [selectedScenario] = useState<EnhancedScenario>(LOCKED_ROOM_ENHANCED);
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [showInventory, setShowInventory] = useState(false);
+  const [gameState, setGameState] = useState<EnhancedDetectiveGameState | null>(null);
 
   // Firebase sync for multiplayer
-  const { gameState: fbGameState, updateGameState, loading: fbLoading } = useRealtimeGame<DetectiveGameState>(
+  const { gameState: fbGameState, updateGameState } = useRealtimeGame<EnhancedDetectiveGameState>(
     roomId,
     DETECTIVE_CONFIG.gameType,
     null
@@ -83,55 +84,63 @@ export const Detective: React.FC = () => {
     }
   }, [fbGameState, mode]);
 
-  // Update current scene when scenario or game state changes
+  // Update current room when room ID changes
   useEffect(() => {
     if (selectedScenario && gameState) {
-      const scene = selectedScenario.scenes[gameState.currentSceneId];
-      if (scene) {
-        setCurrentScene(scene);
+      const room = selectedScenario.rooms.find(r => r.id === gameState.currentRoomId);
+      if (room) {
+        setCurrentRoom(room);
+
+        // Mark room as visited
+        if (!gameState.visitedRooms.includes(room.id)) {
+          updateGameStateLocal({
+            ...gameState,
+            visitedRooms: [...gameState.visitedRooms, room.id],
+          });
+        }
       }
     }
-  }, [selectedScenario, gameState?.currentSceneId]);
+  }, [gameState?.currentRoomId, selectedScenario]);
 
   const handleStartSolo = () => {
     setIsHost(true);
     setMode('game');
-    const scenario = SCENARIOS[Object.keys(SCENARIOS)[0]];
-    if (scenario) {
-      setSelectedScenario(scenario);
-      initializeGame(scenario, 'solo');
-    }
+    initializeGame('solo');
   };
 
   const handleStartVsPartner = () => {
     setIsHost(true);
     setMode('game');
-    // In a real app, this would create a room code
     setRoomId('DETECTIVE_' + Math.random().toString(36).substr(2, 6));
-    const scenario = SCENARIOS[Object.keys(SCENARIOS)[0]];
-    if (scenario) {
-      setSelectedScenario(scenario);
-      initializeGame(scenario, 'vs-partner');
-    }
+    initializeGame('vs-partner');
   };
 
-  const initializeGame = (scenario: Scenario, gameMode: 'solo' | 'vs-partner') => {
-    const initialState: DetectiveGameState = {
-      scenarioId: scenario.id,
-      currentSceneId: scenario.startSceneId,
-      phase: 'investigation',
-      visitedLocations: [],
-      evidence: scenario.evidence,
+  const initializeGame = (gameMode: 'solo' | 'vs-partner') => {
+    const initialState: EnhancedDetectiveGameState = {
+      scenarioId: selectedScenario.id,
+      currentRoomId: selectedScenario.startRoomId,
+      phase: 'exploration',
+
+      player1Email: user?.email || '',
+      player2Email: undefined,
+
+      player1Position: { x: 50, y: 70 },
+      player2Position: { x: 55, y: 70 },
+
       discoveredEvidenceIds: [],
-      interviewedSuspects: {},
+      discoveredClues: [],
+      solvedPuzzles: [],
+      visitedRooms: [selectedScenario.startRoomId],
+
+      npcDialogueProgress: {},
       suspectSuspicionLevels: {},
-      choicesMade: [],
-      investigationAccuracy: 0,
+      interactedObjects: [],
+
+      startTime: Date.now(),
       timeSpent: 0,
-      cluesCollected: 0,
+      investigationAccuracy: 0,
       status: 'active',
       mode: gameMode,
-      startTime: Date.now(),
       recorded: false,
     };
 
@@ -141,69 +150,123 @@ export const Detective: React.FC = () => {
     }
   };
 
-  const handleDiscoverEvidence = (evidenceId: string) => {
-    if (!gameState || !selectedScenario) return;
-
-    const evidence = selectedScenario.evidence.find(e => e.id === evidenceId);
-    if (!evidence || gameState.discoveredEvidenceIds.includes(evidenceId)) return;
-
-    const updatedState = {
-      ...gameState,
-      discoveredEvidenceIds: [...gameState.discoveredEvidenceIds, evidenceId],
-      cluesCollected: gameState.cluesCollected + 1,
-    };
-
-    setGameState(updatedState);
-    if (gameState.mode === 'vs-partner' && roomId) {
-      updateGameState(updatedState);
+  const updateGameStateLocal = (newState: EnhancedDetectiveGameState) => {
+    setGameState(newState);
+    if (newState.mode === 'vs-partner' && roomId) {
+      updateGameState(newState);
     }
   };
 
-  const handleMakeChoice = (choiceId: string, nextSceneId?: string) => {
-    if (!gameState || !selectedScenario) return;
+  const handlePlayerMove = (x: number, y: number) => {
+    if (!gameState || !user) return;
 
+    const isPlayer1 = user.email === gameState.player1Email;
     const updatedState = {
       ...gameState,
-      choicesMade: [
-        ...gameState.choicesMade,
-        { sceneId: gameState.currentSceneId, choiceId, timestamp: Date.now() },
-      ],
-      currentSceneId: nextSceneId || gameState.currentSceneId,
+      [isPlayer1 ? 'player1Position' : 'player2Position']: { x, y },
     };
 
-    if (nextSceneId === 'scene_conclusion') {
-      updatedState.phase = 'conclusion';
+    updateGameStateLocal(updatedState);
+  };
+
+  const handleObjectClick = (objectId: string) => {
+    if (!gameState || !currentRoom) return;
+
+    const obj = currentRoom.objects.find(o => o.id === objectId);
+    if (!obj) return;
+
+    // Mark as interacted
+    if (!gameState.interactedObjects.includes(objectId)) {
+      gameState.interactedObjects.push(objectId);
     }
 
-    setGameState(updatedState);
-    if (gameState.mode === 'vs-partner' && roomId) {
-      updateGameState(updatedState);
+    switch (obj.interactionType) {
+      case 'examine':
+      case 'pickup':
+        if (obj.clueId && !gameState.discoveredEvidenceIds.includes(obj.clueId)) {
+          updateGameStateLocal({
+            ...gameState,
+            discoveredEvidenceIds: [...gameState.discoveredEvidenceIds, obj.clueId],
+            discoveredClues: [...gameState.discoveredClues, obj.description || 'New clue discovered!'],
+            interactedObjects: gameState.interactedObjects,
+          });
+
+          // Show notification
+          alert(`🔍 Clue Found: ${obj.name}\n\n${obj.description}`);
+        } else if (obj.description) {
+          alert(`🔎 ${obj.name}\n\n${obj.description}`);
+        }
+        break;
+
+      case 'navigate':
+        if (obj.navigationTarget) {
+          updateGameStateLocal({
+            ...gameState,
+            currentRoomId: obj.navigationTarget,
+            player1Position: { x: 50, y: 70 }, // Reset positions
+            player2Position: { x: 55, y: 70 },
+          });
+        }
+        break;
+
+      case 'puzzle':
+        if (obj.puzzleId) {
+          const puzzle = selectedScenario.puzzles.find(p => p.id === obj.puzzleId);
+          if (puzzle && !gameState.solvedPuzzles.includes(obj.puzzleId)) {
+            // Simple puzzle prompt (you can expand this with modals)
+            const answer = prompt(`🧩 ${obj.name}\n\n${obj.description}\n\nHints:\n${puzzle.hints.join('\n')}\n\nEnter solution:`);
+
+            if (answer && answer.toLowerCase() === puzzle.solution.toString().toLowerCase()) {
+              const updatedState = {
+                ...gameState,
+                solvedPuzzles: [...gameState.solvedPuzzles, obj.puzzleId],
+              };
+
+              if (puzzle.rewardClueId && !gameState.discoveredEvidenceIds.includes(puzzle.rewardClueId)) {
+                updatedState.discoveredEvidenceIds = [...gameState.discoveredEvidenceIds, puzzle.rewardClueId];
+                const evidence = selectedScenario.evidence.find(e => e.id === puzzle.rewardClueId);
+                alert(`✅ Puzzle Solved!\n\n🎁 ${evidence?.name}\n${evidence?.description}`);
+              } else {
+                alert('✅ Puzzle Solved!');
+              }
+
+              updateGameStateLocal(updatedState);
+            } else {
+              alert('❌ Incorrect. Try again later.');
+            }
+          } else {
+            alert('✅ You already solved this puzzle.');
+          }
+        }
+        break;
+
+      case 'talk':
+        // NPC dialogue (simplified - you can expand with dialogue tree UI)
+        alert(`💬 Talking to NPC at ${obj.name}`);
+        break;
     }
   };
 
   const handleAccuseSuspect = (suspectId: string) => {
-    if (!gameState || !selectedScenario) return;
+    if (!gameState) return;
 
     const isCorrect = suspectId === selectedScenario.correctSuspectId;
-    const endingId = isCorrect ? 'ending_correct' : 'ending_wrong';
-
-    const accuracy = isCorrect ? 100 : Math.max(0, 100 - gameState.choicesMade.length * 10);
     const timeSpent = Math.floor((Date.now() - gameState.startTime) / 1000);
+    const accuracy = isCorrect ? 100 : Math.max(0, 50 - gameState.visitedRooms.length * 5);
 
-    const finalState = {
+    const finalState: EnhancedDetectiveGameState = {
       ...gameState,
       accusedSuspectId: suspectId,
-      endingId,
       investigationAccuracy: accuracy,
       timeSpent,
-      status: 'finished' as const,
+      status: 'finished',
       endTime: Date.now(),
     };
 
-    setGameState(finalState);
+    updateGameStateLocal(finalState);
 
     // Record result
-    const score = Math.round(accuracy * (100 / timeSpent) * (gameState.cluesCollected * 5));
+    const score = Math.round(accuracy + (gameState.discoveredEvidenceIds.length * 10));
     recordGame({
       gameType: DETECTIVE_CONFIG.gameType,
       playerEmail: user?.email || '',
@@ -216,7 +279,7 @@ export const Detective: React.FC = () => {
   if (mode === 'lobby') {
     return (
       <GameLobby
-        gameName="Detective"
+        gameName="Detective (2.5D Exploration)"
         gameIcon={DETECTIVE_CONFIG.icon}
         gradient={DETECTIVE_CONFIG.gradient}
         description={DETECTIVE_CONFIG.description}
@@ -229,219 +292,195 @@ export const Detective: React.FC = () => {
     );
   }
 
-  if (!gameState || !currentScene || !selectedScenario) {
+  if (!gameState || !currentRoom) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 to-indigo-900">
-        <Loader className="w-8 h-8 text-purple-300 animate-spin" />
+        <div className="text-white text-xl">Loading scene...</div>
       </div>
     );
   }
 
+  // Generate player avatars
+  const players: PlayerAvatar[] = [
+    {
+      id: 'player1',
+      name: user?.displayName || 'Detective 1',
+      x: gameState.player1Position.x,
+      y: gameState.player1Position.y,
+      color: '#FF6B6B',
+      emoji: getPlayerEmoji(user?.email || ''),
+    },
+  ];
+
+  if (gameState.mode === 'vs-partner') {
+    players.push({
+      id: 'player2',
+      name: 'Detective 2',
+      x: gameState.player2Position.x,
+      y: gameState.player2Position.y,
+      color: '#4ECDC4',
+      emoji: '👤',
+    });
+  }
+
+  // Convert room objects to interactive objects
+  const interactiveObjects: InteractiveObject[] = currentRoom.objects.map(obj => ({
+    id: obj.id,
+    name: obj.name,
+    x: obj.x,
+    y: obj.y,
+    width: obj.width,
+    height: obj.height,
+    sprite: obj.sprite,
+    isDiscovered: obj.clueId ? gameState.interactedObjects.includes(obj.id) : false,
+    onClick: () => handleObjectClick(obj.id),
+  }));
+
+  const progressPercent = Math.round((gameState.discoveredEvidenceIds.length / selectedScenario.evidence.length) * 100);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 py-10 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 py-6 px-4">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-purple-200 hover:text-white transition"
+            className="flex items-center gap-2 text-purple-200 hover:text-white transition glass-btn px-4 py-2 rounded-lg"
           >
             <ArrowLeft size={20} /> Back
           </button>
-          <h1 className="text-3xl font-bold text-white">{selectedScenario.title}</h1>
-          <div className="text-right">
-            <p className="text-sm text-purple-300">Phase: {gameState.phase}</p>
-            <p className="text-sm text-purple-300">Clues: {gameState.cluesCollected}</p>
+
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white">{selectedScenario.title}</h1>
+            <p className="text-sm text-purple-300">Room: {currentRoom.name}</p>
+          </div>
+
+          <button
+            onClick={() => setShowInventory(!showInventory)}
+            className="flex items-center gap-2 glass-btn px-4 py-2 rounded-lg text-white hover:bg-white/20 transition"
+          >
+            <Backpack size={20} />
+            <span className="hidden sm:inline">Evidence ({gameState.discoveredEvidenceIds.length})</span>
+          </button>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mb-4 glass-card p-3 rounded-xl">
+          <div className="flex items-center justify-between mb-2 text-sm">
+            <span className="text-purple-200">Investigation Progress</span>
+            <span className="text-purple-100 font-bold">{progressPercent}%</span>
+          </div>
+          <div className="w-full h-3 bg-purple-950/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Scene Display with 3D Rendering */}
+          {/* Main Scene */}
           <div className="lg:col-span-3">
-            {/* Scene title & description */}
-            <div className="glass-card p-4 rounded-2xl mb-4 bg-gradient-to-r from-purple-800/40 to-indigo-800/40 border border-purple-500/30">
-              <h2 className="text-xl font-bold text-white mb-2">{currentScene.title}</h2>
-              <p className="text-sm text-purple-200">{currentScene.description}</p>
-            </div>
-
-            {/* 3D Scene with Three.js */}
-            <ThreeScene
-              sceneType={getSceneType(selectedScenario.id, currentScene.id)}
-              characters={selectedScenario.suspects.map((suspect, idx) => {
-                const suspicion = gameState.suspectSuspicionLevels[suspect.id] || 0;
-                const emotion: 'neutral' | 'happy' | 'sad' | 'angry' | 'suspicious' =
-                  suspicion > 70 ? 'suspicious' :
-                  suspicion > 50 ? 'angry' :
-                  'neutral';
-
-                // Position characters in 3D space (spread them out)
-                const positions = [
-                  { x: -4, y: 0, z: 2 },   // Left
-                  { x: 0, y: 0, z: 0 },    // Center
-                  { x: 4, y: 0, z: 2 },    // Right
-                  { x: -2, y: 0, z: 5 },   // Back left
-                  { x: 2, y: 0, z: 5 },    // Back right
-                ];
-
-                return {
-                  name: suspect.name,
-                  position: positions[idx] || positions[0],
-                  color: getSuspectColor(idx),
-                  emotion,
-                };
-              })}
-              lighting={getLighting(selectedScenario.id)}
-              onCharacterClick={(characterName) => {
-                const suspect = selectedScenario.suspects.find(s => s.name === characterName);
-                if (suspect && gameState.status !== 'finished') {
-                  setGameState({
-                    ...gameState,
-                    currentlySelectedSuspect: suspect.id,
-                  });
-                }
-              }}
-              className="mb-6 h-96"
+            <IsometricScene
+              title={currentRoom.name}
+              description={currentRoom.description}
+              layers={currentRoom.backgroundLayers}
+              objects={interactiveObjects}
+              players={players}
+              onPlayerMove={handlePlayerMove}
+              onObjectClick={handleObjectClick}
+              allowMovement={gameState.status === 'active'}
             />
 
-            {/* Investigation hotspots */}
-            {gameState.phase === 'investigation' && currentScene.hotspots.length > 0 && (
-              <div className="glass-card p-6 rounded-2xl mb-6">
-                <h3 className="text-lg font-semibold text-purple-200 mb-4">🔍 Investigation Points</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {currentScene.hotspots.map(hotspot => (
-                    <button
-                      key={hotspot.id}
-                      onClick={() => hotspot.evidenceId && handleDiscoverEvidence(hotspot.evidenceId)}
-                      className={`p-3 rounded-lg transition text-sm font-medium ${
-                        hotspot.evidenceId && gameState.discoveredEvidenceIds.includes(hotspot.evidenceId)
-                          ? 'bg-green-600/30 border border-green-500 text-green-200'
-                          : 'bg-purple-700/40 hover:bg-purple-600/50 border border-purple-500/50 text-purple-100'
-                      }`}
-                    >
-                      {hotspot.tooltip}
-                      {hotspot.evidenceId && gameState.discoveredEvidenceIds.includes(hotspot.evidenceId) && (
-                        <CheckCircle className="inline ml-2 w-3 h-3" />
-                      )}
-                    </button>
-                  ))}
+            {/* Room Info */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="glass-card p-3 rounded-lg">
+                <div className="flex items-center gap-2 text-purple-200 text-sm">
+                  <MapPin size={16} />
+                  <span>Rooms Visited: {gameState.visitedRooms.length}/{selectedScenario.rooms.length}</span>
                 </div>
               </div>
-            )}
-
-            {/* Choices */}
-            {currentScene.dialogueOptions && currentScene.dialogueOptions.length > 0 && (
-              <div className="glass-card p-6 rounded-2xl">
-                <h3 className="text-lg font-semibold text-purple-200 mb-4">💭 What will you do?</h3>
-                <div className="space-y-3">
-                  {currentScene.dialogueOptions.map(option => (
-                    <button
-                      key={option.id}
-                      onClick={() => handleMakeChoice(option.id, option.nextSceneId)}
-                      className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-600/50 to-indigo-600/50 hover:from-purple-500 hover:to-indigo-500 text-white font-medium transition transform hover:scale-102 border border-purple-400/30"
-                    >
-                      {option.prompt}
-                    </button>
-                  ))}
+              <div className="glass-card p-3 rounded-lg">
+                <div className="flex items-center gap-2 text-purple-200 text-sm">
+                  <User size={16} />
+                  <span>Players: {gameState.mode === 'solo' ? '1' : '2'}</span>
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Sidebar: Evidence & Suspects */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Game Status */}
-            <div className="glass-card p-4 rounded-2xl bg-gradient-to-br from-purple-700/30 to-indigo-700/30 border border-purple-500/30">
-              <h3 className="font-bold text-white mb-3">📊 Status</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-purple-200">Phase:</span>
-                  <span className="font-semibold text-purple-100 capitalize">{gameState.phase}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-purple-200">Clues Found:</span>
-                  <span className="font-semibold text-yellow-300">{gameState.cluesCollected}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-purple-200">Suspicion:</span>
-                  <span className="font-semibold text-red-300">{Object.keys(gameState.suspectSuspicionLevels).length}</span>
-                </div>
-              </div>
-            </div>
-
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-4">
             {/* Evidence Inventory */}
-            <div className="glass-card p-4 rounded-2xl">
-              <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-                📋 Evidence
-                <span className="text-xs bg-purple-600/50 px-2 py-1 rounded-full">
-                  {gameState.discoveredEvidenceIds.length}/{selectedScenario.evidence.length}
-                </span>
-              </h3>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {selectedScenario.evidence.map(evidence => (
-                  <div
-                    key={evidence.id}
-                    className={`p-3 rounded-lg text-sm transition ${
-                      gameState.discoveredEvidenceIds.includes(evidence.id)
-                        ? 'bg-green-600/20 border border-green-500/30 text-green-100'
-                        : 'bg-purple-700/20 border border-purple-500/20 text-purple-300'
-                    }`}
-                  >
-                    <div className="font-medium">{gameState.discoveredEvidenceIds.includes(evidence.id) ? '✓' : '?'} {evidence.name}</div>
-                    {gameState.discoveredEvidenceIds.includes(evidence.id) && (
-                      <p className="text-xs text-green-200 mt-1">{evidence.description.substring(0, 50)}...</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Suspects */}
-            {(gameState.phase === 'interrogation' || gameState.phase === 'conclusion') && (
-              <div className="glass-card p-4 rounded-2xl">
-                <h3 className="font-bold text-white mb-3">🕵️ Suspects</h3>
-                <div className="space-y-2">
-                  {selectedScenario.suspects.map(suspect => {
-                    const isGuilty = suspect.id === selectedScenario.correctSuspectId;
-                    const suspicion = gameState.suspectSuspicionLevels[suspect.id] || 0;
-                    return (
-                      <button
-                        key={suspect.id}
-                        onClick={() => {
-                          if (gameState.phase === 'conclusion' && gameState.status !== 'finished') {
-                            handleAccuseSuspect(suspect.id);
-                          } else {
-                            setGameState({
-                              ...gameState,
-                              currentlySelectedSuspect: suspect.id,
-                            });
-                          }
-                        }}
-                        disabled={gameState.status === 'finished' && gameState.phase === 'conclusion'}
-                        className={`w-full text-left p-3 rounded-lg text-sm transition ${
-                          gameState.currentlySelectedSuspect === suspect.id
-                            ? 'bg-orange-600/40 border-2 border-orange-400 text-orange-100'
-                            : 'bg-purple-700/30 hover:bg-purple-600/40 border border-purple-500/30 text-purple-100'
-                        } ${gameState.status === 'finished' && gameState.phase === 'conclusion' ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}
+            {(showInventory || gameState.discoveredEvidenceIds.length > 0) && (
+              <div className="glass-card p-4 rounded-xl">
+                <h3 className="font-bold text-white mb-3 flex items-center justify-between">
+                  📋 Evidence
+                  <span className="text-xs bg-purple-600/50 px-2 py-1 rounded-full">
+                    {gameState.discoveredEvidenceIds.length}
+                  </span>
+                </h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {selectedScenario.evidence
+                    .filter(e => gameState.discoveredEvidenceIds.includes(e.id))
+                    .map(evidence => (
+                      <div
+                        key={evidence.id}
+                        className="p-3 rounded-lg bg-green-600/20 border border-green-500/30 text-green-100 text-sm"
                       >
-                        <div className="flex items-center justify-between">
-                          <span>{suspect.portrait} {suspect.name}</span>
-                          {suspicion > 0 && (
-                            <span className="text-xs bg-red-600/50 px-2 py-0.5 rounded text-red-100">
-                              {suspicion}%
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+                        <div className="font-medium">✓ {evidence.name}</div>
+                        <p className="text-xs text-green-200 mt-1">{evidence.description}</p>
+                      </div>
+                    ))}
+                  {gameState.discoveredEvidenceIds.length === 0 && (
+                    <p className="text-purple-300 text-sm text-center py-4">No evidence collected yet</p>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Result (if game finished) */}
+            {/* Suspects */}
+            {gameState.phase === 'conclusion' || gameState.discoveredEvidenceIds.length >= 5 && (
+              <div className="glass-card p-4 rounded-xl">
+                <h3 className="font-bold text-white mb-3">🕵️ Make Accusation</h3>
+                <div className="space-y-2">
+                  {selectedScenario.suspects.map(suspect => (
+                    <button
+                      key={suspect.id}
+                      onClick={() => {
+                        if (gameState.status === 'active') {
+                          if (confirm(`Accuse ${suspect.name}?\n\nThis will end the investigation!`)) {
+                            handleAccuseSuspect(suspect.id);
+                          }
+                        }
+                      }}
+                      disabled={gameState.status === 'finished'}
+                      className={`w-full text-left p-3 rounded-lg text-sm transition ${
+                        gameState.accusedSuspectId === suspect.id
+                          ? suspect.id === selectedScenario.correctSuspectId
+                            ? 'bg-green-600/40 border-2 border-green-400'
+                            : 'bg-red-600/40 border-2 border-red-400'
+                          : 'bg-purple-700/30 hover:bg-purple-600/40 border border-purple-500/30'
+                      } ${gameState.status === 'finished' ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-white">{suspect.portrait} {suspect.name}</span>
+                      </div>
+                      <p className="text-xs text-purple-200 mt-1">{suspect.bio}</p>
+                    </button>
+                  ))}
+                </div>
+                {gameState.discoveredEvidenceIds.length < 5 && (
+                  <p className="text-xs text-yellow-300 mt-3">
+                    Collect at least 5 pieces of evidence before making an accusation.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Result */}
             {gameState.status === 'finished' && (
-              <div className={`glass-card p-4 rounded-2xl border-2 ${
+              <div className={`glass-card p-4 rounded-xl border-2 ${
                 gameState.accusedSuspectId === selectedScenario.correctSuspectId
                   ? 'border-green-500 bg-green-600/10'
                   : 'border-red-500 bg-red-600/10'
@@ -449,29 +488,29 @@ export const Detective: React.FC = () => {
                 <div className="text-center space-y-3">
                   {gameState.accusedSuspectId === selectedScenario.correctSuspectId ? (
                     <>
-                      <CheckCircle className="w-8 h-8 text-green-400 mx-auto" />
+                      <CheckCircle className="w-10 h-10 text-green-400 mx-auto" />
                       <div>
-                        <h4 className="font-bold text-green-300">Case Solved! 🎉</h4>
-                        <p className="text-xs text-green-200 mt-1">
-                          You correctly identified the suspect!
+                        <h4 className="font-bold text-green-300 text-lg">Case Solved! 🎉</h4>
+                        <p className="text-sm text-green-200 mt-2">
+                          {selectedScenario.endings.find(e => e.condition === 'correct')?.description}
                         </p>
                       </div>
                     </>
                   ) : (
                     <>
-                      <XCircle className="w-8 h-8 text-red-400 mx-auto" />
+                      <XCircle className="w-10 h-10 text-red-400 mx-auto" />
                       <div>
-                        <h4 className="font-bold text-red-300">Wrong Suspect!</h4>
-                        <p className="text-xs text-red-200 mt-1">
-                          The real culprit was: {selectedScenario.suspects.find(s => s.id === selectedScenario.correctSuspectId)?.name}
+                        <h4 className="font-bold text-red-300 text-lg">Wrong Suspect!</h4>
+                        <p className="text-sm text-red-200 mt-2">
+                          {selectedScenario.endings.find(e => e.condition === 'wrong')?.description}
                         </p>
                       </div>
                     </>
                   )}
-                  <div className="pt-2 border-t border-white/10 space-y-1 text-xs">
-                    <p className="text-gray-300">Accuracy: <span className="text-yellow-300 font-semibold">{Math.round(gameState.investigationAccuracy)}%</span></p>
-                    <p className="text-gray-300">Time: <span className="text-blue-300 font-semibold">{gameState.timeSpent}s</span></p>
-                    <p className="text-gray-300">Clues: <span className="text-purple-300 font-semibold">{gameState.cluesCollected}</span></p>
+                  <div className="pt-3 border-t border-white/10 space-y-1 text-xs">
+                    <p className="text-gray-300">Time: <span className="text-blue-300 font-semibold">{Math.floor(gameState.timeSpent / 60)} min {gameState.timeSpent % 60}s</span></p>
+                    <p className="text-gray-300">Evidence: <span className="text-purple-300 font-semibold">{gameState.discoveredEvidenceIds.length}/{selectedScenario.evidence.length}</span></p>
+                    <p className="text-gray-300">Rooms: <span className="text-pink-300 font-semibold">{gameState.visitedRooms.length}/{selectedScenario.rooms.length}</span></p>
                   </div>
                 </div>
               </div>
