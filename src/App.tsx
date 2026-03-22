@@ -24,6 +24,8 @@ import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
 import { TruthOrDare } from './components/simple-games/TruthOrDare/TruthOrDare';
 import { Detective } from './components/simple-games/Detective/Detective';
 import { Scrabble } from './components/simple-games/Scrabble/Scrabble';
+import { StoryBuilder } from './components/simple-games/StoryBuilder/StoryBuilder';
+import { KissingWheel } from './components/simple-games/KissingWheel/KissingWheel';
 import './App.css';
 
 function App() {
@@ -98,6 +100,12 @@ function App() {
                     } />
                     <Route path="/games/scrabble" element={
                       <ProtectedRoute><Scrabble /></ProtectedRoute>
+                    } />
+                    <Route path="/games/storybuilder" element={
+                      <ProtectedRoute><StoryBuilder /></ProtectedRoute>
+                    } />
+                    <Route path="/games/kissingwheel" element={
+                      <ProtectedRoute><KissingWheel /></ProtectedRoute>
                     } />
 
                     {/* ── 404 catch-all ───────────────────────── */}
