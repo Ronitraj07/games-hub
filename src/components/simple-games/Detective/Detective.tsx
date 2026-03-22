@@ -218,97 +218,170 @@ export const Detective: React.FC = () => {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Scene Display */}
+          {/* Scene Display with 3D Rendering */}
           <div className="lg:col-span-3">
-            <div className="glass-card p-8 rounded-2xl min-h-96 flex flex-col justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-4">{currentScene.title}</h2>
-                <p className="text-gray-300 mb-6">{currentScene.description}</p>
+            <SceneRenderer
+              title={currentScene.title}
+              description={currentScene.description}
+              backgroundImage={currentScene.backgroundUrl}
+              characters={selectedScenario.suspects.map((suspect, idx) => ({
+                id: suspect.id,
+                name: suspect.name,
+                emoji: suspect.portrait,
+                position: idx === 0 ? 'left' : idx === 1 ? 'center' : 'right',
+                emotion: gameState.suspectSuspicionLevels[suspect.id] ?
+                  (gameState.suspectSuspicionLevels[suspect.id] > 70 ? 'suspicious' :
+                   gameState.suspectSuspicionLevels[suspect.id] > 50 ? 'angry' : 'neutral')
+                  : 'neutral',
+              }))}
+              hotspots={currentScene.hotspots.map(hotspot => ({
+                id: hotspot.id,
+                label: hotspot.tooltip,
+                x: 50,
+                y: 60,
+                width: 20,
+                height: 20,
+              }))}
+              onHotspotClick={(hotspotId) => {
+                const hotspot = currentScene.hotspots.find(h => h.id === hotspotId);
+                if (hotspot?.evidenceId) {
+                  handleDiscoverEvidence(hotspot.evidenceId);
+                }
+              }}
+              className="mb-6"
+            />
 
-                {/* Hotspots for investigation */}
-                {gameState.phase === 'investigation' && currentScene.hotspots.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-purple-200 mb-3">Things to investigate:</h3>
-                    <div className="space-y-2">
-                      {currentScene.hotspots.map(hotspot => (
-                        <button
-                          key={hotspot.id}
-                          onClick={() => hotspot.evidenceId && handleDiscoverEvidence(hotspot.evidenceId)}
-                          className="w-full text-left p-3 rounded-lg bg-purple-700/30 hover:bg-purple-600/50 border border-purple-500/30 transition text-purple-100"
-                        >
-                          🔍 {hotspot.tooltip}
-                          {hotspot.evidenceId && gameState.discoveredEvidenceIds.includes(hotspot.evidenceId) && (
-                            <CheckCircle className="inline ml-2 w-4 h-4 text-green-400" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            {/* Investigation hotspots */}
+            {gameState.phase === 'investigation' && currentScene.hotspots.length > 0 && (
+              <div className="glass-card p-6 rounded-2xl mb-6">
+                <h3 className="text-lg font-semibold text-purple-200 mb-4">🔍 Investigation Points</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {currentScene.hotspots.map(hotspot => (
+                    <button
+                      key={hotspot.id}
+                      onClick={() => hotspot.evidenceId && handleDiscoverEvidence(hotspot.evidenceId)}
+                      className={`p-3 rounded-lg transition text-sm font-medium ${
+                        hotspot.evidenceId && gameState.discoveredEvidenceIds.includes(hotspot.evidenceId)
+                          ? 'bg-green-600/30 border border-green-500 text-green-200'
+                          : 'bg-purple-700/40 hover:bg-purple-600/50 border border-purple-500/50 text-purple-100'
+                      }`}
+                    >
+                      {hotspot.tooltip}
+                      {hotspot.evidenceId && gameState.discoveredEvidenceIds.includes(hotspot.evidenceId) && (
+                        <CheckCircle className="inline ml-2 w-3 h-3" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
 
-              {/* Choices */}
-              {currentScene.dialogueOptions && currentScene.dialogueOptions.length > 0 && (
-                <div className="space-y-2">
+            {/* Choices */}
+            {currentScene.dialogueOptions && currentScene.dialogueOptions.length > 0 && (
+              <div className="glass-card p-6 rounded-2xl">
+                <h3 className="text-lg font-semibold text-purple-200 mb-4">💭 What will you do?</h3>
+                <div className="space-y-3">
                   {currentScene.dialogueOptions.map(option => (
                     <button
                       key={option.id}
                       onClick={() => handleMakeChoice(option.id, option.nextSceneId)}
-                      className="w-full p-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium transition"
+                      className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-600/50 to-indigo-600/50 hover:from-purple-500 hover:to-indigo-500 text-white font-medium transition transform hover:scale-102 border border-purple-400/30"
                     >
                       {option.prompt}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar: Evidence & Suspects */}
           <div className="lg:col-span-1 space-y-6">
+            {/* Game Status */}
+            <div className="glass-card p-4 rounded-2xl bg-gradient-to-br from-purple-700/30 to-indigo-700/30 border border-purple-500/30">
+              <h3 className="font-bold text-white mb-3">📊 Status</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-purple-200">Phase:</span>
+                  <span className="font-semibold text-purple-100 capitalize">{gameState.phase}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-purple-200">Clues Found:</span>
+                  <span className="font-semibold text-yellow-300">{gameState.cluesCollected}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-purple-200">Suspicion:</span>
+                  <span className="font-semibold text-red-300">{Object.keys(gameState.suspectSuspicionLevels).length}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Evidence Inventory */}
             <div className="glass-card p-4 rounded-2xl">
               <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-                📋 Evidence ({gameState.cluesCollected})
+                📋 Evidence
+                <span className="text-xs bg-purple-600/50 px-2 py-1 rounded-full">
+                  {gameState.discoveredEvidenceIds.length}/{selectedScenario.evidence.length}
+                </span>
               </h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {selectedScenario.evidence
-                  .filter(e => gameState.discoveredEvidenceIds.includes(e.id))
-                  .map(evidence => (
-                    <div key={evidence.id} className="p-2 bg-purple-700/30 rounded text-xs text-purple-100">
-                      📌 {evidence.name}
-                    </div>
-                  ))}
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {selectedScenario.evidence.map(evidence => (
+                  <div
+                    key={evidence.id}
+                    className={`p-3 rounded-lg text-sm transition ${
+                      gameState.discoveredEvidenceIds.includes(evidence.id)
+                        ? 'bg-green-600/20 border border-green-500/30 text-green-100'
+                        : 'bg-purple-700/20 border border-purple-500/20 text-purple-300'
+                    }`}
+                  >
+                    <div className="font-medium">{gameState.discoveredEvidenceIds.includes(evidence.id) ? '✓' : '?'} {evidence.name}</div>
+                    {gameState.discoveredEvidenceIds.includes(evidence.id) && (
+                      <p className="text-xs text-green-200 mt-1">{evidence.description.substring(0, 50)}...</p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Suspects */}
-            {gameState.phase === 'interrogation' || gameState.phase === 'conclusion' && (
+            {(gameState.phase === 'interrogation' || gameState.phase === 'conclusion') && (
               <div className="glass-card p-4 rounded-2xl">
                 <h3 className="font-bold text-white mb-3">🕵️ Suspects</h3>
                 <div className="space-y-2">
-                  {selectedScenario.suspects.map(suspect => (
-                    <button
-                      key={suspect.id}
-                      onClick={() => {
-                        if (gameState.phase === 'conclusion') {
-                          handleAccuseSuspect(suspect.id);
-                        } else {
-                          setGameState({
-                            ...gameState,
-                            currentlySelectedSuspect: suspect.id,
-                          });
-                        }
-                      }}
-                      className={`w-full text-left p-2 rounded text-sm transition ${
-                        gameState.currentlySelectedSuspect === suspect.id
-                          ? 'bg-orange-600/50 border border-orange-400'
-                          : 'bg-purple-700/30 hover:bg-purple-600/50'
-                      } text-purple-100`}
-                    >
-                      {suspect.portrait} {suspect.name}
-                    </button>
-                  ))}
+                  {selectedScenario.suspects.map(suspect => {
+                    const isGuilty = suspect.id === selectedScenario.correctSuspectId;
+                    const suspicion = gameState.suspectSuspicionLevels[suspect.id] || 0;
+                    return (
+                      <button
+                        key={suspect.id}
+                        onClick={() => {
+                          if (gameState.phase === 'conclusion' && gameState.status !== 'finished') {
+                            handleAccuseSuspect(suspect.id);
+                          } else {
+                            setGameState({
+                              ...gameState,
+                              currentlySelectedSuspect: suspect.id,
+                            });
+                          }
+                        }}
+                        disabled={gameState.status === 'finished' && gameState.phase === 'conclusion'}
+                        className={`w-full text-left p-3 rounded-lg text-sm transition ${
+                          gameState.currentlySelectedSuspect === suspect.id
+                            ? 'bg-orange-600/40 border-2 border-orange-400 text-orange-100'
+                            : 'bg-purple-700/30 hover:bg-purple-600/40 border border-purple-500/30 text-purple-100'
+                        } ${gameState.status === 'finished' && gameState.phase === 'conclusion' ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>{suspect.portrait} {suspect.name}</span>
+                          {suspicion > 0 && (
+                            <span className="text-xs bg-red-600/50 px-2 py-0.5 rounded text-red-100">
+                              {suspicion}%
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -317,24 +390,36 @@ export const Detective: React.FC = () => {
             {gameState.status === 'finished' && (
               <div className={`glass-card p-4 rounded-2xl border-2 ${
                 gameState.accusedSuspectId === selectedScenario.correctSuspectId
-                  ? 'border-green-500'
-                  : 'border-red-500'
+                  ? 'border-green-500 bg-green-600/10'
+                  : 'border-red-500 bg-red-600/10'
               }`}>
-                <div className="text-center">
+                <div className="text-center space-y-3">
                   {gameState.accusedSuspectId === selectedScenario.correctSuspectId ? (
                     <>
-                      <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                      <h4 className="font-bold text-green-300">Correct!</h4>
+                      <CheckCircle className="w-8 h-8 text-green-400 mx-auto" />
+                      <div>
+                        <h4 className="font-bold text-green-300">Case Solved! 🎉</h4>
+                        <p className="text-xs text-green-200 mt-1">
+                          You correctly identified the suspect!
+                        </p>
+                      </div>
                     </>
                   ) : (
                     <>
-                      <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
-                      <h4 className="font-bold text-red-300">Wrong Suspect!</h4>
+                      <XCircle className="w-8 h-8 text-red-400 mx-auto" />
+                      <div>
+                        <h4 className="font-bold text-red-300">Wrong Suspect!</h4>
+                        <p className="text-xs text-red-200 mt-1">
+                          The real culprit was: {selectedScenario.suspects.find(s => s.id === selectedScenario.correctSuspectId)?.name}
+                        </p>
+                      </div>
                     </>
                   )}
-                  <p className="text-xs text-gray-300 mt-2">
-                    Accuracy: {Math.round(gameState.investigationAccuracy)}%
-                  </p>
+                  <div className="pt-2 border-t border-white/10 space-y-1 text-xs">
+                    <p className="text-gray-300">Accuracy: <span className="text-yellow-300 font-semibold">{Math.round(gameState.investigationAccuracy)}%</span></p>
+                    <p className="text-gray-300">Time: <span className="text-blue-300 font-semibold">{gameState.timeSpent}s</span></p>
+                    <p className="text-gray-300">Clues: <span className="text-purple-300 font-semibold">{gameState.cluesCollected}</span></p>
+                  </div>
                 </div>
               </div>
             )}
