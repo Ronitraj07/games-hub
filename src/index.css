@@ -1187,6 +1187,7 @@ html {
   animation: roundTransition 1s ease-in-out;
 }
 
+
 /* === PERFORMANCE OPTIMIZED ANIMATIONS === */
 /* Use GPU acceleration for transform animations */
 .gpu-accelerated {

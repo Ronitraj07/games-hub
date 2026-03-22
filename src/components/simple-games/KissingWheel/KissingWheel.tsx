@@ -140,7 +140,7 @@ export const KissingWheel: React.FC = () => {
   };
 
   const handleSpin = () => {
-    if (isSpinning || !gameState) return;
+    if (isSpinning || !gameState || !gameState.wheelSections || gameState.wheelSections.length === 0) return;
 
     setIsSpinning(true);
     setTimeout(() => {
@@ -167,7 +167,7 @@ export const KissingWheel: React.FC = () => {
 
     const updatedState = {
       ...gameState,
-      completedDares: [...gameState.completedDares, gameState.currentSection],
+      completedDares: gameState.completedDares ? [...gameState.completedDares, gameState.currentSection] : [gameState.currentSection],
       currentSection: null,
       status: 'spinning' as const,
     };
@@ -181,7 +181,7 @@ export const KissingWheel: React.FC = () => {
       gameType: WHEEL_BUILDER_CONFIG.gameType,
       playerEmail: user?.email || '',
       result: 'win',
-      score: gameState.completedDares.length + 1,
+      score: (updatedState.completedDares?.length || 0) + 1,
       mode: gameState.mode,
     });
   };
@@ -272,8 +272,8 @@ export const KissingWheel: React.FC = () => {
           </button>
           <h1 className="text-3xl font-bold text-white">🎡 Kissing Wheel</h1>
           <div className="text-right">
-            <p className="text-sm text-orange-300">Spins: {gameState.totalSpins}</p>
-            <p className="text-sm text-orange-300">Completed: {gameState.completedDares.length}</p>
+            <p className="text-sm text-orange-300">Spins: {gameState.totalSpins || 0}</p>
+            <p className="text-sm text-orange-300">Completed: {gameState.completedDares ? gameState.completedDares.length : 0}</p>
           </div>
         </div>
 
@@ -339,7 +339,7 @@ export const KissingWheel: React.FC = () => {
         <div className="glass-card p-6 rounded-2xl">
           <h3 className="text-lg font-bold text-white mb-3">Completed Dares</h3>
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {gameState.completedDares.map((dare, i) => (
+            {(gameState.completedDares || []).map((dare, i) => (
               <div key={i} className="p-2 bg-orange-700/30 rounded text-orange-100 text-sm">
                 ✓ {dare.text}
               </div>
