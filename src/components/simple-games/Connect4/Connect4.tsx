@@ -344,6 +344,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
                       onMouseLeave={() => setHovered(null)}
                       disabled={gameState.status !== 'active' || !isMyTurn}
                       className="aspect-square rounded-full transition-all duration-300 hover:scale-105 disabled:cursor-not-allowed"
+                      aria-label={`Row ${r + 1}, Column ${c + 1}${cell ? ', ' + (isWinCell(r, c) ? 'winning cell' : cell === gameState.players.player1 ? 'your piece' : 'opponent piece') : ''}`}
                       style={{
                         background: cell
                           ? isWinCell(r, c)
