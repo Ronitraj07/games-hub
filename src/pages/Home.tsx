@@ -147,7 +147,7 @@ export const Home: React.FC = () => {
     totalGames,
     winRate:      `${winRate}%`,
     wins:         stats.wins,
-    favoriteGame: stats.favoriteGame || ‘—‘,
+    favoriteGame: stats.favoriteGame || 'N/A',
   };
 
   return (

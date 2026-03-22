@@ -188,7 +188,7 @@ export const MathDuel: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     const updated=isP1
       ?{...gameState,p1Score:gameState.p1Score+pts,p1Answered:true}
       :{...gameState,p2Score:gameState.p2Score+pts,p2Answered:true};
-    const bothDone=(isP1?gameState.p2Answered:gameState.p1Answered)||true;
+    const bothDone=myAnswered&&(isP1?gameState.p2Answered:gameState.p1Answered);
     if(bothDone&&gameState.current+1>=TOTAL_Q){
       updateGameState({...updated,status:'finished',recorded:false});
     } else if(bothDone){

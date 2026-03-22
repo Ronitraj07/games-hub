@@ -205,7 +205,9 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
 
   const handleSoloGuess = (e: React.FormEvent) => {
     e.preventDefault();
-    if (guess.trim().toLowerCase() === word.toLowerCase()) {
+    // Fuzzy match: normalize whitespace, case-insensitive
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (normalize(guess) === normalize(word)) {
       const pts = timeLeft > 20 ? 20 : timeLeft > 10 ? 15 : 10;
       setScore(s => s + pts); setResult('correct'); setPhase('result'); playCorrect();
     } else playWrong();
@@ -241,7 +243,9 @@ export const Pictionary: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   const handleOnlineGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!gameState) return;
-    const ok = guess.trim().toLowerCase() === gameState.word.toLowerCase();
+    // Fuzzy match: normalize whitespace, case-insen sitive
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    const ok = normalize(guess) === normalize(gameState.word);
     if (ok) {
       updateGameState({
         ...gameState,

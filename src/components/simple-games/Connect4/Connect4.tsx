@@ -21,6 +21,7 @@ interface Connect4State {
   isDraw: boolean;
   mode: GameMode;
   aiDifficulty: AIDifficulty;
+  moveCount?: number;
   recorded?: boolean;
 }
 
@@ -91,7 +92,7 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     board: emptyBoard(), currentPlayer: p1,
     players: { player1: p1, player2: null },
     winner: null, winningCells: null, status: 'active',
-    isDraw: false, mode, aiDifficulty: diff, recorded: false,
+    isDraw: false, mode, aiDifficulty: diff, moveCount: 0, recorded: false,
   });
 
   const { gameState, updateGameState, patchGameState, loading } =
@@ -162,9 +163,9 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
       b[row][col] = AI_TOKEN;
       const cells = checkWinner(b, row, col, AI_TOKEN);
       const full  = b[0].every(c => c !== null);
-      if (cells)     updateGameState({ ...gameState, board: b, winner: AI_TOKEN, winningCells: cells, status: 'finished', recorded: false });
-      else if (full) updateGameState({ ...gameState, board: b, isDraw: true, status: 'finished', recorded: false });
-      else           updateGameState({ ...gameState, board: b, currentPlayer: gameState.players.player1 });
+      if (cells)     updateGameState({ ...gameState, board: b, winner: AI_TOKEN, winningCells: cells, status: 'finished', moveCount: (gameState.moveCount ?? 0) + 1, recorded: false });
+      else if (full) updateGameState({ ...gameState, board: b, isDraw: true, status: 'finished', moveCount: (gameState.moveCount ?? 0) + 1, recorded: false });
+      else           updateGameState({ ...gameState, board: b, currentPlayer: gameState.players.player1, moveCount: (gameState.moveCount ?? 0) + 1 });
     }, 500);
     return () => { if (aiTimer.current) clearTimeout(aiTimer.current); };
   }, [gameState?.currentPlayer, gameState?.status, gameState?.mode]);
@@ -175,19 +176,19 @@ export const Connect4: React.FC<{ sessionId?: string }> = ({ sessionId: propSess
     if (!isAIMode && !isMyTurn) return;
     let row = -1;
     for (let r = ROWS - 1; r >= 0; r--) { if (!board[r][col]) { row = r; break; } }
-    if (row === -1) return;
+    if (row === -1) return; // Column full
     const newBoard = board.map(r => [...r]);
     newBoard[row][col] = userKey ?? '';
     const cells = checkWinner(newBoard, row, col, userKey ?? '');
     const full  = newBoard[0].every(c => c !== null);
-    if (cells)  { updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', recorded: false }); return; }
-    if (full)   { updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', recorded: false }); return; }
+    if (cells)  { updateGameState({ ...gameState, board: newBoard, winner: userKey ?? '', winningCells: cells, status: 'finished', moveCount: (gameState.moveCount ?? 0) + 1, recorded: false }); return; }
+    if (full)   { updateGameState({ ...gameState, board: newBoard, isDraw: true, status: 'finished', moveCount: (gameState.moveCount ?? 0) + 1, recorded: false }); return; }
     const next = isAIMode
       ? AI_TOKEN
       : (gameState.currentPlayer === gameState.players.player1
           ? (gameState.players.player2 ?? '')
           : gameState.players.player1);
-    updateGameState({ ...gameState, board: newBoard, currentPlayer: next });
+    updateGameState({ ...gameState, board: newBoard, currentPlayer: next, moveCount: (gameState.moveCount ?? 0) + 1 });
   };
 
   const startVsAI = (diff: AIDifficulty) => {

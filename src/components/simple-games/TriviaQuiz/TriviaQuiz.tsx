@@ -78,6 +78,12 @@ const BLANK_DRAFT = (): Omit<TriviaQuestion, 'id' | 'custom'> => ({
   q: '', options: ['', '', '', ''], answer: 0, category: CUSTOM_CATEGORY,
 });
 
+const seededShuffle = (arr: TriviaQuestion[], seed: string): TriviaQuestion[] => {
+  let s = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  return [...arr].sort(() => rng() - .5).slice(0, TOTAL_Q);
+};
+
 interface OnlineState {
   questions:   TriviaQuestion[];
   current:     number;
@@ -89,6 +95,7 @@ interface OnlineState {
   p2Answered:  boolean;
   status:      'waiting' | 'active' | 'finished';
   mode:        GameMode;
+  seed:        string;
   recorded?:   boolean;
 }
 
@@ -194,7 +201,7 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
     : `trivia-${userKey ? sanitizeFirebasePath(userKey) : 'guest'}`;
 
   const initialOnline: OnlineState = {
-    questions: [], current: 0,
+    questions: [], current: 0, seed: '',
     p1Email: userKey ?? '', p2Email: '',
     p1Score: 0, p2Score: 0,
     p1Answered: false, p2Answered: false,
@@ -263,8 +270,14 @@ export const TriviaQuiz: React.FC<{ sessionId?: string }> = ({ sessionId }) => {
   };
 
   const startOnline = () => {
-    const qs = filteredQ();
-    updateGameState({ ...initialOnline, questions: qs, p2Email: 'opponent', status: 'active', mode: 'vs-partner' });
+    let pool: TriviaQuestion[];
+    if (category === CUSTOM_CATEGORY) pool = customQs;
+    else if (category === '⭐ All')    pool = [...ALL_QUESTIONS, ...customQs];
+    else                              pool = ALL_QUESTIONS.filter(q => q.category === category);
+    if (pool.length === 0) pool = ALL_QUESTIONS;
+    const seed    = Math.random().toString(36).slice(2, 8);
+    const qs = seededShuffle(pool, seed);
+    updateGameState({ ...initialOnline, questions: qs, seed, p2Email: 'opponent', status: 'active', mode: 'vs-partner' });
     setView('game');
   };
 

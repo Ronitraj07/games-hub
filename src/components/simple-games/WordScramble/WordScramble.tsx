@@ -189,6 +189,9 @@ export const WordScramble: React.FC<{ sessionId?: string }> = ({ sessionId }) =>
   const handleOnlineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!gameState || gameState.status !== 'active' || !curOnlineWord) return;
+    // Prevent double submission
+    const myDone = isP1 ? gameState.p1Done : gameState.p2Done;
+    if (myDone) return;
     const ok  = input.trim().toUpperCase() === curOnlineWord.word;
     const pts = ok ? 10 : 0;
     const updated = isP1
