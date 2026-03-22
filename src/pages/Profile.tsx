@@ -3,10 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { getPlayerRole, getPlayerEmoji, getPartnerEmail, getPartnerName, getPartnerEmoji } from '@/lib/auth-config';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2, Palette } from 'lucide-react';
+import { LogOut, Trophy, Target, Swords, Clock, Shield, Mail, User, Gamepad2, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAvatarStore } from '../stores/avatarStore';
-import { ACCESSORIES } from '../types/accessories';
 
 type GameType = string;
 
@@ -36,9 +34,6 @@ export const Profile: React.FC = () => {
   const [signingOut, setSigningOut]       = useState(false);
   const [byGame, setByGame]               = useState<ByGame[]>([]);
   const [byGameLoading, setByGameLoading] = useState(true);
-
-  // New avatar store — VRM-based
-  const { equippedAccessories, unlockedAccessories, bondLevel, vrmUrl } = useAvatarStore();
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -79,10 +74,6 @@ export const Profile: React.FC = () => {
   const getGameByGame = (id: string) => byGame.find(b => b.game_type === id);
   const maxWins = Math.max(1, ...byGame.map(b => b.wins + b.losses + b.draws));
 
-  // Accessory display helpers
-  const equippedConfigs = ACCESSORIES.filter(a => equippedAccessories.includes(a.id));
-  const inGameName = user.email === 'sinharonitraj@gmail.com' ? 'Sparkles' : 'Shizzy';
-
   return (
     <div className="min-h-screen py-10 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -105,7 +96,6 @@ export const Profile: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
             {user.displayName || user.email?.split('@')[0]}
           </h1>
-          <p className="text-pink-500 font-semibold text-sm mb-1">✨ {inGameName} ✨</p>
           <div className="flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-2">
             <Mail size={14} /><span>{user.email}</span>
           </div>
@@ -138,42 +128,6 @@ export const Profile: React.FC = () => {
             ))}
           </div>
         )}
-
-        {/* Avatar Section */}
-        <div className="glass-card p-6">
-          <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Palette size={18} className="text-purple-500" /> My Avatar
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Character</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">🎭 VRM — {inGameName}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Bond Level</p>
-                <p className="text-sm font-bold text-pink-500">❤️ Level {bondLevel}</p>
-              </div>
-            </div>
-            {/* Equipped accessories */}
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Equipped Accessories ({equippedConfigs.length})</p>
-              <div className="flex flex-wrap gap-2">
-                {equippedConfigs.length > 0 ? equippedConfigs.map(a => (
-                  <span key={a.id} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium">
-                    {a.emoji} {a.label}
-                  </span>
-                )) : (
-                  <span className="text-xs text-gray-400">None equipped</span>
-                )}
-              </div>
-            </div>
-            {/* Unlocked count */}
-            <p className="text-xs text-gray-400">
-              {unlockedAccessories.length} / {ACCESSORIES.length} accessories unlocked
-            </p>
-          </div>
-        </div>
 
         {/* Per-game breakdown */}
         {!byGameLoading && (
@@ -220,7 +174,6 @@ export const Profile: React.FC = () => {
           <div className="space-y-3">
             {[
               { label: 'Name',          value: user.displayName || '—' },
-              { label: 'In-game name',  value: inGameName },
               { label: 'Email',         value: user.email || '—' },
               { label: 'Partner',       value: partnerName ? `${partnerEmoji} ${partnerName}` : '—' },
               { label: 'Role',          value: role },

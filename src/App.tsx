@@ -10,11 +10,8 @@ import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
-import { RPGHub } from './pages/RPGHub';
 import { GameLobby } from './pages/GameLobby';
 import { Leaderboard } from './pages/Leaderboard';
-import { HeartboundAdventures } from './pages/rpg/HeartboundAdventures';
-import { MysteryPartners } from './pages/rpg/MysteryPartners';
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
 import { WordScramble } from './components/simple-games/WordScramble/WordScramble';
 import { MemoryMatch } from './components/simple-games/MemoryMatch/MemoryMatch';
@@ -62,17 +59,6 @@ function App() {
                     } />
                     <Route path="/leaderboard" element={
                       <ProtectedRoute><Leaderboard /></ProtectedRoute>
-                    } />
-
-                    {/* RPG */}
-                    <Route path="/rpg" element={
-                      <ProtectedRoute><RPGHub /></ProtectedRoute>
-                    } />
-                    <Route path="/rpg/heartbound" element={
-                      <ProtectedRoute><HeartboundAdventures /></ProtectedRoute>
-                    } />
-                    <Route path="/rpg/mystery" element={
-                      <ProtectedRoute><MysteryPartners /></ProtectedRoute>
                     } />
 
                     {/* Simple Games */}

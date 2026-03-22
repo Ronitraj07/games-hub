@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getPlayerEmoji } from '@/lib/auth-config';
-import { Home, Sun, Moon, Volume2, VolumeX, Sword, Trophy } from 'lucide-react';
+import { Home, Sun, Moon, Volume2, VolumeX, Trophy } from 'lucide-react';
 import { toggleSound, isSoundEnabled } from '@/utils/sounds';
 import { GamesHubLogo } from '@/components/shared/GamesHubLogo';
 
@@ -18,7 +18,6 @@ export const Navbar: React.FC = () => {
     setSoundEnabled(newState);
   };
 
-  const isRPG         = location.pathname.startsWith('/rpg');
   const isLeaderboard = location.pathname === '/leaderboard';
 
   return (
@@ -78,17 +77,6 @@ export const Navbar: React.FC = () => {
                   }`}>
                   <Trophy size={18} />
                   <span className="hidden sm:inline text-sm">Scores</span>
-                </Link>
-
-                {/* RPG */}
-                <Link to="/rpg"
-                  className={`glass-btn flex items-center gap-2 px-3 py-2 rounded-xl transition ${
-                    isRPG
-                      ? 'text-purple-600 dark:text-purple-400 bg-purple-50/50 dark:bg-purple-900/20'
-                      : 'text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400'
-                  }`}>
-                  <Sword size={18} />
-                  <span className="hidden sm:inline text-sm">RPG</span>
                 </Link>
 
                 {/* Profile */}

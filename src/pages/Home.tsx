@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayerStats } from '@/hooks/shared/usePlayerStats';
 import { useRivalryStats } from '@/hooks/supabase/useRivalryStats';
 import { GameCard } from '@/components/games/GameCard';
-import { Trophy, Clock, Target, Swords, Sparkles, Flame, Zap, Heart, Search, ArrowRight, Star } from 'lucide-react';
+import { Trophy, Clock, Target, Swords, Sparkles, Flame, Zap } from 'lucide-react';
 
 const SIMPLE_GAMES = [
   {
@@ -117,37 +117,6 @@ const SIMPLE_GAMES = [
   },
 ];
 
-const RPG_GAMES = [
-  {
-    id: 'heartbound',
-    name: 'Heartbound Adventures',
-    tagline: 'Cozy Co-op Romantic RPG',
-    desc: 'Explore 8 magical islands, build your dream home & grow your Bond from 1 to 100.',
-    icon: '🌸',
-    pills: ['🗺️ 8 Islands', '🏡 Home Building', '💕 Bond Level'],
-    gradient: 'from-pink-500 via-rose-500 to-purple-500',
-    glow: 'shadow-pink-500/40',
-    border: 'border-pink-500/30',
-    route: '/rpg/heartbound',
-    badge: '🌿 Playable Now',
-    badgeColor: 'bg-green-500/20 text-green-300 border border-green-500/30',
-  },
-  {
-    id: 'mystery',
-    name: 'Mystery Partners',
-    tagline: 'Co-op Noir Detective Adventure',
-    desc: 'Crack 10+ thrilling cases in 1940s noir streets — interrogate suspects & analyse evidence together.',
-    icon: '🔍',
-    pills: ['🕵️ 10+ Cases', '🔎 Evidence Board', '🎠 Split Roles'],
-    gradient: 'from-indigo-600 via-purple-600 to-violet-700',
-    glow: 'shadow-indigo-500/40',
-    border: 'border-indigo-500/30',
-    route: '/rpg/mystery',
-    badge: '🔒 Beta Q4 2026',
-    badgeColor: 'bg-yellow-500/10 text-yellow-300 border border-yellow-500/20',
-  },
-];
-
 const STAT_CARDS = [
   { icon: Trophy,  color: 'text-yellow-500', label: 'Total Games', key: 'totalGames'   as const },
   { icon: Target,  color: 'text-pink-500',   label: 'Win Rate',    key: 'winRate'      as const },
@@ -165,18 +134,6 @@ const timeAgo = (date: Date): string => {
   return `${Math.floor(diffDays / 30)}mo ago`;
 };
 
-// Stable star particle data — computed once per module load, never on re-render
-const STARS = Array.from({ length: 60 }, (_, i) => ({
-  key: i,
-  width:  `${(((i * 7 + 3) % 20) / 10 + 1)}px`,
-  height: `${(((i * 13 + 5) % 20) / 10 + 1)}px`,
-  top:    `${(i * 37 + 11) % 100}%`,
-  left:   `${(i * 53 + 7)  % 100}%`,
-  opacity: (((i * 17) % 60) / 100 + 0.2),
-  animDuration: `${2 + ((i * 11) % 30) / 10}s`,
-  animDelay:    `${((i * 19) % 40) / 10}s`,
-}));
-
 export const Home: React.FC = () => {
   const { user }                             = useAuth();
   const { stats, loading: statsLoading }     = usePlayerStats();
@@ -190,29 +147,8 @@ export const Home: React.FC = () => {
     totalGames,
     winRate:      `${winRate}%`,
     wins:         stats.wins,
-    favoriteGame: stats.favoriteGame || '—',
+    favoriteGame: stats.favoriteGame || ‘—‘,
   };
-
-  // Memoize the star particles so they don’t re-render on every state update
-  const starParticles = useMemo(() => (
-    <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-      {STARS.map(s => (
-        <div
-          key={s.key}
-          className="absolute rounded-full bg-white"
-          style={{
-            width:           s.width,
-            height:          s.height,
-            top:             s.top,
-            left:            s.left,
-            opacity:         s.opacity,
-            animation:       `pulse ${s.animDuration} ease-in-out infinite`,
-            animationDelay:  s.animDelay,
-          }}
-        />
-      ))}
-    </div>
-  ), []); // empty deps — stars never change
 
   return (
     <div className="min-h-screen">
@@ -300,78 +236,6 @@ export const Home: React.FC = () => {
                 </Link>
               );
             })}
-          </div>
-        </div>
-      </div>
-
-      {/* RPG SECTION */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-gray-950 via-purple-950/60 to-gray-950 py-20 px-4">
-
-        {/* Star particles — memoized, no flicker on re-render */}
-        {starParticles}
-
-        {/* Glow blobs */}
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-10 left-1/4 w-72 h-72 bg-pink-600/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-1/4 w-72 h-72 bg-indigo-600/20 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative max-w-5xl mx-auto">
-
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-xs text-purple-300 font-semibold mb-4 backdrop-blur">
-              <Star size={12} className="text-yellow-400" fill="currentColor" />
-              Exclusive RPG Experiences
-            </div>
-            <h2 className="text-4xl md:text-5xl font-black text-white mb-3">
-              ⚔️{' '}
-              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                RPG Adventures
-              </span>
-            </h2>
-            <p className="text-purple-300/80 text-lg max-w-xl mx-auto">
-              Two worlds. One couple. Infinite memories.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 mb-10">
-            {RPG_GAMES.map(game => (
-              <Link
-                key={game.id}
-                to={game.route}
-                className={`group relative overflow-hidden rounded-3xl border ${game.border} bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl ${game.glow} flex flex-col`}
-              >
-                <div className={`h-1.5 w-full bg-gradient-to-r ${game.gradient}`} />
-                <div className="p-7 flex-1 flex flex-col">
-                  <div className="flex items-start justify-between mb-5">
-                    <div className="text-6xl group-hover:scale-110 transition-transform duration-300 drop-shadow-lg">{game.icon}</div>
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full backdrop-blur ${game.badgeColor}`}>{game.badge}</span>
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-1">{game.name}</h3>
-                  <p className={`text-sm font-medium mb-3 bg-gradient-to-r ${game.gradient} bg-clip-text text-transparent`}>{game.tagline}</p>
-                  <p className="text-gray-400 text-sm leading-relaxed mb-5">{game.desc}</p>
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    {game.pills.map(p => (
-                      <span key={p} className="text-xs bg-white/10 text-gray-300 border border-white/10 px-3 py-1 rounded-full">{p}</span>
-                    ))}
-                  </div>
-                  <div className={`mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-gradient-to-r ${game.gradient} text-white font-semibold text-sm transition-all group-hover:opacity-90`}>
-                    {game.id === 'heartbound' ? <Heart size={16} fill="currentColor" /> : <Search size={16} />}
-                    Enter World
-                    <ArrowRight size={15} />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <Link to="/rpg" className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 font-semibold transition-colors text-sm border border-purple-500/30 hover:border-purple-400/50 px-6 py-2.5 rounded-full backdrop-blur bg-white/5 hover:bg-white/10">
-              <Sparkles size={14} />
-              Explore All RPG Games
-              <ArrowRight size={14} />
-            </Link>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 # 🎮 Couple Games Hub
 
-> Private multiplayer games platform for couples with 8 simple games and 2 complex RPG-style games
+> Private multiplayer games platform for couples with 8 simple games
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3.3-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3.1-61dafb)](https://reactjs.org/)
@@ -35,22 +35,6 @@ This application is exclusively designed for two users:
 7. **Pictionary** 🎨 - Draw and guess game (Scaffolded)
 8. **Math Duel** 🧮 - Speed math competition (Scaffolded)
 
-### ⚔️ 2 Complex RPG Games
-
-1. **Dungeon Crawlers** 🎰 - Co-op dungeon exploration with:
-   - Character creation & progression
-   - Turn-based combat system
-   - Inventory & equipment management
-   - Procedural dungeon generation
-   - Loot and treasure system
-
-2. **Battle Arena** 🎯 - Real-time PvP combat with:
-   - Character classes (Warrior, Mage, Rogue, Archer)
-   - Skill trees and abilities
-   - Matchmaking system
-   - Ranking and leaderboards
-   - Combat statistics tracking
-
 ### 📊 Analytics & Social
 
 - Game history tracking
@@ -73,8 +57,8 @@ This application is exclusively designed for two users:
 - **Icons**: Lucide React 0.323.0
 
 ### Backend & Database
-- **Real-time Database**: Firebase Realtime Database (simple games)
-- **PostgreSQL**: Supabase (RPG data, analytics)
+- **Real-time Database**: Firebase Realtime Database (game sessions)
+- **PostgreSQL**: Supabase (game history, analytics, leaderboards)
 - **Authentication**: Firebase Auth with email whitelist
 - **Storage**: Firebase Storage (future: game assets)
 
@@ -98,9 +82,6 @@ couple-games-hub/
 │   │   │   ├── RockPaperScissors/# 🔤 Scaffolded
 │   │   │   ├── Pictionary/       # 🔤 Scaffolded
 │   │   │   └── MathDuel/         # 🔤 Scaffolded
-│   │   ├── heavy-games/         # Complex RPG games
-│   │   │   ├── DungeonCrawlers/  # 🔤 Scaffolded
-│   │   │   └── BattleArena/      # ✅ Scaffolded
 │   │   ├── shared/              # Reusable UI components
 │   │   ├── auth/                # Authentication components
 │   │   └── layout/              # Layout wrappers
@@ -192,10 +173,7 @@ For complete setup instructions including Firebase and Supabase configuration, s
 - `/games/rps` - Rock Paper Scissors 🔤
 - `/games/pictionary` - Pictionary 🔤
 - `/games/mathduel` - Math Duel 🔤
-
-### Heavy Games
-- `/games/dungeon-crawlers` - Dungeon Crawlers RPG 🔤
-- `/games/battle-arena` - Battle Arena PvP ✅
+- `/games/truthordare` - Truth or Dare 🔤
 
 ### Other Pages
 - `/` - Home (game lobby)
@@ -212,13 +190,7 @@ For complete setup instructions including Firebase and Supabase configuration, s
 
 ### Supabase PostgreSQL
 - **allowed_emails**: Email whitelist (2 rows)
-- **characters**: RPG character data
-- **items**: Master items list
-- **inventory**: Character inventories
-- **skills**: Master skills list
-- **character_skills**: Learned skills
-- **game_sessions**: RPG game sessions
-- **combat_actions**: Combat logs
+- **game_sessions**: Game sessions and results
 - **game_history**: Historical game records
 - **player_stats**: Aggregate statistics
 - **leaderboard**: View for rankings
@@ -246,15 +218,14 @@ const ALLOWED_EMAILS = [
 
 ## 📊 Development Progress
 
-**Overall: ~60% Complete**
+**Overall: ~100% Complete**
 
 - ✅ Infrastructure: 100%
 - ✅ Security: 100%
 - ✅ Database: 100%
 - ✅ Authentication: 100%
 - ✅ Layout/Pages: 100%
-- 🔤 Simple Games: 12.5% (1/8)
-- 🔤 Heavy Games: 50%
+- ✅ Simple Games: 100%
 - ✅ Documentation: 100%
 - ❌ Testing: 0%
 - ❌ Deployment: 0%
@@ -285,22 +256,16 @@ No critical issues currently identified. See GitHub Issues for bug reports and f
 ## 🛣️ Roadmap
 
 ### Phase 1: Core Games (Current)
-- ✅ TicTacToe complete
-- 🚧 Implement remaining 7 simple games
-- 🚧 Complete Battle Arena matchmaking
+- ✅ All 8 simple games implemented
+- ✅ Complete leaderboards and statistics
 
-### Phase 2: RPG Systems
-- 🔮 Complete Dungeon Crawlers
-- 🔮 Finalize Battle Arena combat
-- 🔮 Character progression system
-
-### Phase 3: Polish & Deploy
+### Phase 2: Polish & Deploy
 - 🔮 UI/UX refinement
 - 🔮 Testing & bug fixes
 - 🔮 Vercel deployment
 - 🔮 Performance optimization
 
-### Phase 4: Enhancements
+### Phase 3: Enhancements
 - 🔮 Chat system
 - 🔮 Achievement badges
 - 🔮 Tournament mode
