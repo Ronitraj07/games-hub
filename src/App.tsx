@@ -23,6 +23,7 @@ import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
 import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
 import { TruthOrDare } from './components/simple-games/TruthOrDare/TruthOrDare';
 import { Detective } from './components/simple-games/Detective/Detective';
+import { Scrabble } from './components/simple-games/Scrabble/Scrabble';
 import './App.css';
 
 function App() {
@@ -94,6 +95,9 @@ function App() {
                     } />
                     <Route path="/games/detective" element={
                       <ProtectedRoute><Detective /></ProtectedRoute>
+                    } />
+                    <Route path="/games/scrabble" element={
+                      <ProtectedRoute><Scrabble /></ProtectedRoute>
                     } />
 
                     {/* ── 404 catch-all ───────────────────────── */}
