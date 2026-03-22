@@ -126,6 +126,121 @@ export const ACHIEVEMENTS: Achievement[] = [
     icon: '⚖️',
     category: 'special',
   },
+
+  // Scrabble
+  {
+    id: 'scrabble-master',
+    name: 'Word Master',
+    description: 'Win 5 Scrabble games',
+    icon: '📝',
+    category: 'mastery',
+  },
+  {
+    id: 'high-scorer',
+    name: 'High Scorer',
+    description: 'Score over 500 points in Scrabble',
+    icon: '🔥',
+    category: 'special',
+  },
+  {
+    id: 'couples-collaborator',
+    name: 'Team Effort',
+    description: 'Get 3+ couple bonuses in a Scrabble series',
+    icon: '🤝',
+    category: 'special',
+  },
+
+  // Pictionary Series
+  {
+    id: 'pictionary-perfectionist',
+    name: 'Perfect Series',
+    description: 'Win a perfect Pictionary series',
+    icon: '🎨',
+    category: 'mastery',
+  },
+  {
+    id: 'quick-guesser',
+    name: 'Speed Reader',
+    description: 'Guess all Pictionary drawings in under 10 seconds each',
+    icon: '👀',
+    category: 'special',
+  },
+  {
+    id: 'artist-streak',
+    name: "Artist's Streak",
+    description: 'Win 3+ rounds as the drawer in a series',
+    icon: '✏️',
+    category: 'streak',
+  },
+
+  // Story Builder
+  {
+    id: 'storyteller',
+    name: 'First Tale',
+    description: 'Complete your first collaborative story',
+    icon: '📖',
+    category: 'milestone',
+  },
+  {
+    id: 'prolific-writer',
+    name: 'Prolific Author',
+    description: 'Complete 10 collaborative stories',
+    icon: '📚',
+    category: 'mastery',
+  },
+  {
+    id: 'category-collector',
+    name: 'Genre Master',
+    description: 'Complete 1 story in each category (Romantic, Adventure, Mystery, Comedy)',
+    icon: '🌈',
+    category: 'special',
+  },
+
+  // Detective
+  {
+    id: 'detective',
+    name: 'Case Detective',
+    description: 'Solve your first mystery',
+    icon: '🔎',
+    category: 'milestone',
+  },
+  {
+    id: 'case-closed',
+    name: 'Master Detective',
+    description: 'Solve 5 mysteries',
+    icon: '🕵️',
+    category: 'mastery',
+  },
+  {
+    id: 'perfect-investigator',
+    name: 'Flawless Investigation',
+    description: 'Achieve 100% accuracy on a hard difficulty mystery',
+    icon: '💎',
+    category: 'special',
+  },
+
+  // Kissing Wheel
+  {
+    id: 'daredevil',
+    name: 'Daredevil',
+    description: 'Complete 10 dares from the wheel',
+    icon: '😈',
+    category: 'mastery',
+  },
+  {
+    id: 'spice-lover',
+    name: 'Adventure Seeker',
+    description: 'Opt-in to spicy content and complete 5 spicy dares',
+    icon: '🌶️',
+    category: 'special',
+  },
+  {
+    id: 'daily-player',
+    name: 'Daily Devotion',
+    description: 'Complete 7 daily challenges',
+    icon: '🎯',
+    category: 'streak',
+  },
 ];
 
 export const ACHIEVEMENT_BY_ID = ACHIEVEMENTS.reduce((acc, a) => {
