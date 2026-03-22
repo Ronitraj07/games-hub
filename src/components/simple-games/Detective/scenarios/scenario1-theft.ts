@@ -20,7 +20,7 @@ export const scenario1_theft: Scenario = {
     {
       id: 'suspect_butler',
       name: 'Thomas Butler',
-      role: 'Butler (GUILTY)',
+      role: 'suspect',
       portrait: '🧑‍💼',
       alibi: 'I was polishing silver in the pantry when the theft occurred.',
       motivation: 'Needed money for gambling debts',
@@ -30,7 +30,7 @@ export const scenario1_theft: Scenario = {
     {
       id: 'suspect_gardener',
       name: 'Marcus Gardener',
-      role: 'Gardener (Innocent)',
+      role: 'suspect',
       portrait: '👨‍🌾',
       alibi: 'I was trimming hedges outside the study windows.',
       motivation: 'None (disgruntled but loyal)',
@@ -40,7 +40,7 @@ export const scenario1_theft: Scenario = {
     {
       id: 'suspect_maid',
       name: 'Clara Maid',
-      role: 'Housemaid (Innocent)',
+      role: 'suspect',
       portrait: '👩‍🍳',
       alibi: 'I was cleaning upstairs, heard nothing unusual.',
       motivation: 'None (reliable employee)',
@@ -50,7 +50,7 @@ export const scenario1_theft: Scenario = {
     {
       id: 'suspect_guest',
       name: 'Robert Guest',
-      role: 'House Guest (Innocent)',
+      role: 'suspect',
       portrait: '🎩',
       alibi: 'I was in the reading room the entire time.',
       motivation: 'Visiting family friend',
@@ -250,5 +250,5 @@ export const scenario1_theft: Scenario = {
     },
   ],
 
-  estimatedTime: 20,
+  
 };

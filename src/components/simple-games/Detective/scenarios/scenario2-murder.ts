@@ -17,7 +17,7 @@ export const scenario2_murder: Scenario = {
     {
       id: 'suspect_doctor',
       name: 'Dr. Elizabeth',
-      role: 'Doctor (GUILTY)',
+      role: 'suspect',
       portrait: '👨‍⚕️',
       alibi: 'I was in my office making notes.',
       motivation: 'Business rival owed me money',
@@ -27,7 +27,7 @@ export const scenario2_murder: Scenario = {
     {
       id: 'suspect_lawyer',
       name: 'James Lawyer',
-      role: 'Lawyer (Innocent)',
+      role: 'suspect',
       portrait: '👨‍⚖️',
       alibi: 'I was reviewing contracts downstairs.',
       motivation: 'None (professional acquaintance)',
@@ -37,7 +37,7 @@ export const scenario2_murder: Scenario = {
     {
       id: 'suspect_assistant',
       name: 'Sarah Assistant',
-      role: 'Assistant (Innocent)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I was organizing files in the archive.',
       motivation: 'Recently promoted',
@@ -185,5 +185,5 @@ export const scenario2_murder: Scenario = {
     },
   ],
 
-  estimatedTime: 22,
+  
 };

@@ -17,7 +17,7 @@ export const scenario8_poisoning: Scenario = {
     {
       id: 'suspect_ex_wife',
       name: 'Isabella Moretti',
-      role: 'Ex-Wife (GUILTY)',
+      role: 'suspect',
       portrait: '👩‍🦱',
       alibi: 'I was mingling with guests all evening.',
       motivation: 'Revenge over custody battle and lost fortune',
@@ -27,7 +27,7 @@ export const scenario8_poisoning: Scenario = {
     {
       id: 'suspect_rival',
       name: 'Gregory Stone',
-      role: 'Business Rival (Innocent)',
+      role: 'suspect',
       portrait: '🧑‍💼',
       alibi: 'I was discussing contracts in the VIP lounge.',
       motivation: 'Competition in business, but no personal vendetta',
@@ -37,7 +37,7 @@ export const scenario8_poisoning: Scenario = {
     {
       id: 'suspect_daughter',
       name: 'Victoria Sinclair',
-      role: 'Daughter (Innocent)',
+      role: 'suspect',
       portrait: '👩‍🎓',
       alibi: 'I was with my father most of the evening.',
       motivation: 'Loves her father',
@@ -47,7 +47,7 @@ export const scenario8_poisoning: Scenario = {
     {
       id: 'suspect_server',
       name: 'Marcus Williams',
-      role: 'Catering Staff (Innocent)',
+      role: 'suspect',
       portrait: '🧑‍🍳',
       alibi: 'I was serving food at the buffet table.',
       motivation: 'Just working',
@@ -57,7 +57,7 @@ export const scenario8_poisoning: Scenario = {
     {
       id: 'suspect_secretary',
       name: 'Amanda Foster',
-      role: 'Executive Secretary (Innocent)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I attended the gala as a guest of the company.',
       motivation: 'None, loyal employee',
@@ -158,7 +158,7 @@ export const scenario8_poisoning: Scenario = {
           id: 'choice_isabella_home',
           prompt: 'Search Isabella\'s residence',
           response: 'You find chemical equipment and letters discussing the poisoning plan in detail.',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_love_letters', 'evidence_insurance_policy'],
           nextSceneId: 'scene_resolution',
         },
@@ -170,7 +170,7 @@ export const scenario8_poisoning: Scenario = {
       title: 'Justice Served',
       description: 'The poisoner has been identified and apprehended.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -179,17 +179,17 @@ export const scenario8_poisoning: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '⚖️',
+      portraitUrl: '⚖️',
       title: 'Poisoner Caught!',
       description: 'Isabella Moretti\'s revenge plot was exposed. Justice prevails.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'You accused the wrong person. The real poisoner escaped.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The investigation could not be completed in time.',
     },

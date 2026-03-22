@@ -17,7 +17,7 @@ export const scenario3_missing: Scenario = {
     {
       id: 'suspect_accomplice',
       name: 'Mark Collins',
-      role: 'Accomplice (GUILTY)',
+      role: 'suspect',
       portrait: '🧑‍🤝',
       alibi: 'I was at home all day.',
       motivation: 'Financial dispute with the victim',
@@ -27,7 +27,7 @@ export const scenario3_missing: Scenario = {
     {
       id: 'suspect_friend',
       name: 'Alex Friend',
-      role: 'Close Friend (Innocent)',
+      role: 'suspect',
       portrait: '👫',
       alibi: 'I was with them that morning.',
       motivation: 'None (loyal friend)',
@@ -37,7 +37,7 @@ export const scenario3_missing: Scenario = {
     {
       id: 'suspect_employer',
       name: 'Mr. Boss',
-      role: 'Employer (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💼',
       alibi: 'I was at the office.',
       motivation: 'Recent promotion given',
@@ -186,5 +186,5 @@ export const scenario3_missing: Scenario = {
     },
   ],
 
-  estimatedTime: 20,
+  
 };

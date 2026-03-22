@@ -17,7 +17,7 @@ export const scenario11_heist: Scenario = {
     {
       id: 'suspect_security_chief',
       name: 'Victor Moralez',
-      role: 'Head of Security (GUILTY)',
+      role: 'suspect',
       portrait: '👮',
       alibi: 'I was monitoring camera feeds in the control room.',
       motivation: 'Paid $1M by art smuggling ring',
@@ -27,7 +27,7 @@ export const scenario11_heist: Scenario = {
     {
       id: 'suspect_curator',
       name: 'Dr. Katherine Wells',
-      role: 'Museum Curator (Innocent)',
+      role: 'suspect',
       portrait: '🎨',
       alibi: 'I was cataloging new acquisitions in my office.',
       motivation: 'Dedicated to protecting the collection',
@@ -37,7 +37,7 @@ export const scenario11_heist: Scenario = {
     {
       id: 'suspect_conservator',
       name: 'Antonio Silva',
-      role: 'Art Conservator (Innocent)',
+      role: 'suspect',
       portrait: '👨‍🎨',
       alibi: 'I was restoring a sculpture on the second floor.',
       motivation: 'Professional conservator, no criminal intent',
@@ -47,7 +47,7 @@ export const scenario11_heist: Scenario = {
     {
       id: 'suspect_delivery_driver',
       name: 'Brian Foster',
-      role: 'Delivery Driver (Innocent)',
+      role: 'suspect',
       portrait: '🚚',
       alibi: 'I was loading donation items in the loading dock.',
       motivation: 'Normal job duties',
@@ -153,7 +153,7 @@ export const scenario11_heist: Scenario = {
           id: 'choice_phone_records',
           prompt: 'Subpoena Victor\'s phone records',
           response: 'Text exchanges with art smugglers discussing the paintings and payment. Case solved!',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_smuggler_contact'],
           nextSceneId: 'scene_resolution',
         },
@@ -165,7 +165,7 @@ export const scenario11_heist: Scenario = {
       title: 'Heist Solved',
       description: 'The inside man has been caught.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -174,17 +174,17 @@ export const scenario11_heist: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '🎨',
+      portraitUrl: '🎨',
       title: 'Heist Thwarted!',
       description: 'Victor Moralez\'s inside job was exposed. The paintings are recovered.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The paintings remain missing. The real thief is still out there.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The case could not be solved before the paintings reached the black market.',
     },

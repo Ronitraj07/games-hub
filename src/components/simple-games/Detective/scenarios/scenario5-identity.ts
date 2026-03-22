@@ -17,7 +17,7 @@ export const scenario5_identity: Scenario = {
     {
       id: 'suspect_businessman',
       name: 'Victor Sterling',
-      role: 'Businessman (CRIMINAL)',
+      role: 'suspect',
       portrait: '🎩',
       alibi: 'I run legitimate import/export business.',
       motivation: 'Hiding from Interpol after art theft',
@@ -27,7 +27,7 @@ export const scenario5_identity: Scenario = {
     {
       id: 'suspect_colleague',
       name: 'Andrew Colleague',
-      role: 'Business Colleague (Innocent)',
+      role: 'suspect',
       portrait: '👔',
       alibi: 'I work at the same company.',
       motivation: 'None (standard employee)',
@@ -37,7 +37,7 @@ export const scenario5_identity: Scenario = {
     {
       id: 'suspect_landlord',
       name: 'Mrs. Landlord',
-      role: 'Landlord (Innocent)',
+      role: 'suspect',
       portrait: '👵',
       alibi: 'I manage the office building.',
       motivation: 'Collects rent from Victor',
@@ -186,5 +186,5 @@ export const scenario5_identity: Scenario = {
     },
   ],
 
-  estimatedTime: 24,
+  
 };

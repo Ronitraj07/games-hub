@@ -17,7 +17,7 @@ export const scenario9_blackmail: Scenario = {
     {
       id: 'suspect_accountant',
       name: 'David Thompson',
-      role: 'Company Accountant (GUILTY)',
+      role: 'suspect',
       portrait: '🧮',
       alibi: 'I was reviewing financial records in my office.',
       motivation: 'Discovered embezzlement secret, using it as leverage',
@@ -27,7 +27,7 @@ export const scenario9_blackmail: Scenario = {
     {
       id: 'suspect_competitor',
       name: 'Patricia Gonzalez',
-      role: 'Business Competitor (Innocent)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I was in Los Angeles at a trade conference.',
       motivation: 'Strong business competition',
@@ -37,7 +37,7 @@ export const scenario9_blackmail: Scenario = {
     {
       id: 'suspect_assistant',
       name: 'James O\'Connor',
-      role: 'Executive Assistant (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💻',
       alibi: 'I was organizing files in the records room.',
       motivation: 'None, loyal employee',
@@ -47,7 +47,7 @@ export const scenario9_blackmail: Scenario = {
     {
       id: 'suspect_journalist',
       name: 'Rachel Mills',
-      role: 'Investigative Journalist (Innocent)',
+      role: 'suspect',
       portrait: '📰',
       alibi: 'I was following leads on a different story.',
       motivation: 'Professional curiosity, no malice',
@@ -160,7 +160,7 @@ export const scenario9_blackmail: Scenario = {
           id: 'choice_email_trace',
           prompt: 'Trace the threatening emails to their source',
           response: 'The emails originate from David Thompson\'s workstation. He\'s the extortionist!',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_threatening_emails'],
           nextSceneId: 'scene_resolution',
         },
@@ -172,7 +172,7 @@ export const scenario9_blackmail: Scenario = {
       title: 'Case Closed',
       description: 'The blackmailer has been caught.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -181,17 +181,17 @@ export const scenario9_blackmail: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '✅',
+      portraitUrl: '✅',
       title: 'Blackmailer Caught!',
       description: 'David Thompson\'s extortion plot was exposed. The victim is safe.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The real blackmailer remains unidentified. The threats continue.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The secrets were revealed before you could solve the case.',
     },

@@ -17,7 +17,7 @@ export const scenario7_heirloom: Scenario = {
     {
       id: 'suspect_cousin',
       name: 'Michael Sterling',
-      role: 'Cousin (GUILTY)',
+      role: 'suspect',
       portrait: '👨‍💼',
       alibi: 'I was in the garden getting fresh air.',
       motivation: 'Deep gambling debts, desperate for money',
@@ -27,7 +27,7 @@ export const scenario7_heirloom: Scenario = {
     {
       id: 'suspect_sister',
       name: 'Sophie Anderson',
-      role: 'Sister (Innocent)',
+      role: 'suspect',
       portrait: '👩‍🦰',
       alibi: 'I was helping mom in the kitchen.',
       motivation: 'None (family)',
@@ -37,7 +37,7 @@ export const scenario7_heirloom: Scenario = {
     {
       id: 'suspect_boyfriend',
       name: 'James Mitchell',
-      role: 'Boyfriend (Innocent)',
+      role: 'suspect',
       portrait: '🧔',
       alibi: 'I was watching the game on TV in the living room.',
       motivation: 'Dating Sophie, no reason to steal',
@@ -47,7 +47,7 @@ export const scenario7_heirloom: Scenario = {
     {
       id: 'suspect_hired_help',
       name: 'Lisa Brown',
-      role: 'Hired Help (Innocent)',
+      role: 'suspect',
       portrait: '👩‍🍳',
       alibi: 'I was serving drinks the entire evening.',
       motivation: 'Just doing her job',
@@ -105,7 +105,7 @@ export const scenario7_heirloom: Scenario = {
           id: 'choice_search_guests',
           prompt: 'Search all the guests\' belongings',
           response: 'You find the ring in Michael\'s jacket pocket! Case solved.',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_ring_in_pocket'],
           nextSceneId: 'scene_resolution',
         },
@@ -117,7 +117,7 @@ export const scenario7_heirloom: Scenario = {
       title: 'Case Closed',
       description: 'The thief has been caught!',
       backgroundUrl: 'url-to-resolution',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -126,17 +126,17 @@ export const scenario7_heirloom: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '🎉',
+      portraitUrl: '🎉',
       title: 'Heirloom Recovered!',
       description: 'Michael Sterling confessed. The family heirloom is safe.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The real thief is still out there.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The case could not be solved in time.',
     },

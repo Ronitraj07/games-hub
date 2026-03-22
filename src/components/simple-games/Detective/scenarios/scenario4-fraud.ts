@@ -17,7 +17,7 @@ export const scenario4_fraud: Scenario = {
     {
       id: 'suspect_cfo',
       name: 'Victoria CFO',
-      role: 'CFO (GUILTY)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I was in financial meetings all week.',
       motivation: 'Building secret retirement account',
@@ -27,7 +27,7 @@ export const scenario4_fraud: Scenario = {
     {
       id: 'suspect_accountant',
       name: 'Robert Accountant',
-      role: 'Senior Accountant (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💻',
       alibi: 'I was processing normal transactions.',
       motivation: 'Recently passed promotion to someone else',
@@ -37,7 +37,7 @@ export const scenario4_fraud: Scenario = {
     {
       id: 'suspect_it_director',
       name: 'David IT',
-      role: 'IT Director (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💻',
       alibi: 'I was managing server infrastructure.',
       motivation: 'None (good record)',
@@ -186,5 +186,5 @@ export const scenario4_fraud: Scenario = {
     },
   ],
 
-  estimatedTime: 25,
+  
 };

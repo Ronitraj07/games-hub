@@ -17,7 +17,7 @@ export const scenario13_diamond: Scenario = {
     {
       id: 'suspect_exhibition_manager',
       name: 'Richard Sterling',
-      role: 'Exhibition Manager (GUILTY)',
+      role: 'suspect',
       portrait: '🎩',
       alibi: 'I was coordinating the opening ceremony in the main hall.',
       motivation: 'Replaced diamond with fake to sell the real one for $50M',
@@ -27,7 +27,7 @@ export const scenario13_diamond: Scenario = {
     {
       id: 'suspect_security',
       name: 'Patricia Williams',
-      role: 'Head of Security (Innocent)',
+      role: 'suspect',
       portrait: '👮‍♀️',
       alibi: 'I was monitoring all security systems throughout the evening.',
       motivation: 'Professional duty',
@@ -37,7 +37,7 @@ export const scenario13_diamond: Scenario = {
     {
       id: 'suspect_jeweler',
       name: 'Antoine Dupree',
-      role: 'Master Jeweler (Innocent)',
+      role: 'suspect',
       portrait: '💎',
       alibi: 'I was in the back room inspecting restoration work.',
       motivation: 'Passionate about preserving gems',
@@ -47,7 +47,7 @@ export const scenario13_diamond: Scenario = {
     {
       id: 'suspect_insurance',
       name: 'Christopher Hall',
-      role: 'Insurance Adjuster (Innocent)',
+      role: 'suspect',
       portrait: '📋',
       alibi: 'I was completing final documentation for the exhibition',
       motivation: 'Professional responsibility',
@@ -57,7 +57,7 @@ export const scenario13_diamond: Scenario = {
     {
       id: 'suspect_intern',
       name: 'Sophia Mills',
-      role: 'Exhibition Intern (Innocent)',
+      role: 'suspect',
       portrait: '👩‍🎓',
       alibi: 'I was assisting with guest registration.',
       motivation: 'Just learning the business',
@@ -170,7 +170,7 @@ export const scenario13_diamond: Scenario = {
           id: 'choice_phone_analysis',
           prompt: 'Analyze Richard\'s encrypted communications',
           response: 'Messages with a master gem forger confirm he commissioned the fake diamond and arranged the switch.',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_gemologist_contact'],
           nextSceneId: 'scene_resolution',
         },
@@ -182,7 +182,7 @@ export const scenario13_diamond: Scenario = {
       title: 'Heist Mastermind Caught',
       description: 'The elaborate scheme has been unmasked.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -191,17 +191,17 @@ export const scenario13_diamond: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '💎',
+      portraitUrl: '💎',
       title: 'Diamond Heist Solved!',
       description: 'Richard Sterling\'s elaborate scheme was exposed. The real diamond is recovered.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The real mastermind escaped with the diamond and $50M.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'Richard disappeared before you could tie all the evidence together.',
     },

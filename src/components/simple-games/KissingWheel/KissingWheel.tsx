@@ -29,30 +29,30 @@ interface KissingWheelGameState {
 
 const WHEEL_SECTIONS = {
   romantic: [
-    { id: 'r1', text: '💋 Kiss for 10 seconds', category: 'romantic', icon: '💋' },
-    { id: 'r2', text: '💕 Give a loving compliment', category: 'romantic', icon: '❤️' },
-    { id: 'r3', text: '💑 Hold hands and slow dance', category: 'romantic', icon: '💃' },
-    { id: 'r4', text: '💌 Write a love note', category: 'romantic', icon: '💌' },
-    { id: 'r5', text: '🌅 Watch sunrise together', category: 'romantic', icon: '🌅' },
-    { id: 'r6', text: '💆 Give a massage', category: 'romantic', icon: '💆' },
+    { id: 'r1', text: '💋 Kiss for 10 seconds', category: 'romantic' as const, icon: '💋' },
+    { id: 'r2', text: '💕 Give a loving compliment', category: 'romantic' as const, icon: '❤️' },
+    { id: 'r3', text: '💑 Hold hands and slow dance', category: 'romantic' as const, icon: '💃' },
+    { id: 'r4', text: '💌 Write a love note', category: 'romantic' as const, icon: '💌' },
+    { id: 'r5', text: '🌅 Watch sunrise together', category: 'romantic' as const, icon: '🌅' },
+    { id: 'r6', text: '💆 Give a massage', category: 'romantic' as const, icon: '💆' },
   ],
   silly: [
-    { id: 's1', text: '😂 Tell your best joke', category: 'silly', icon: '😂' },
-    { id: 's2', text: '💃 Funny dance challenge', category: 'silly', icon: '💃' },
-    { id: 's3', text: '🎭 Do funny impressions', category: 'silly', icon: '🎭' },
-    { id: 's4', text: '🤣 Remake a funny memory', category: 'silly', icon: '🤣' },
-    { id: 's5', text: '🎤 Sing karaoke together', category: 'silly', icon: '🎤' },
-    { id: 's6', text: '👯 Match outfit day', category: 'silly', icon: '👯' },
+    { id: 's1', text: '😂 Tell your best joke', category: 'silly' as const, icon: '😂' },
+    { id: 's2', text: '💃 Funny dance challenge', category: 'silly' as const, icon: '💃' },
+    { id: 's3', text: '🎭 Do funny impressions', category: 'silly' as const, icon: '🎭' },
+    { id: 's4', text: '🤣 Remake a funny memory', category: 'silly' as const, icon: '🤣' },
+    { id: 's5', text: '🎤 Sing karaoke together', category: 'silly' as const, icon: '🎤' },
+    { id: 's6', text: '👯 Match outfit day', category: 'silly' as const, icon: '👯' },
   ],
   bonding: [
-    { id: 'b1', text: '🗺️ Plan an adventure', category: 'bonding', icon: '🗺️' },
-    { id: 'b2', text: '❓ 20 Questions game', category: 'bonding', icon: '❓' },
-    { id: 'b3', text: '🎵 Create playlist together', category: 'bonding', icon: '🎵' },
-    { id: 'b4', text: '✨ Share bucket list item', category: 'bonding', icon: '✨' },
-    { id: 'b5', text: '👨‍🍳 Cook a recipe together', category: 'bonding', icon: '👨‍🍳' },
-    { id: 'b6', text: '📸 Photo memory session', category: 'bonding', icon: '📸' },
+    { id: 'b1', text: '🗺️ Plan an adventure', category: 'bonding' as const, icon: '🗺️' },
+    { id: 'b2', text: '❓ 20 Questions game', category: 'bonding' as const, icon: '❓' },
+    { id: 'b3', text: '🎵 Create playlist together', category: 'bonding' as const, icon: '🎵' },
+    { id: 'b4', text: '✨ Share bucket list item', category: 'bonding' as const, icon: '✨' },
+    { id: 'b5', text: '👨‍🍳 Cook a recipe together', category: 'bonding' as const, icon: '👨‍🍳' },
+    { id: 'b6', text: '📸 Photo memory session', category: 'bonding' as const, icon: '📸' },
   ],
-};
+} as const;
 
 const WHEEL_BUILDER_CONFIG = {
   gameType: 'kissingwheel' as const,

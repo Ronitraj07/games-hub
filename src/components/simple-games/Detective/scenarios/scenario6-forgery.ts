@@ -17,7 +17,7 @@ export const scenario6_forgery: Scenario = {
     {
       id: 'suspect_apprentice',
       name: 'Elena Rossini',
-      role: 'Artist\'s Apprentice (GUILTY)',
+      role: 'suspect',
       portrait: '🎨',
       alibi: 'I was helping prepare paintings in the studio.',
       motivation: 'Needed money after losing her job',
@@ -27,7 +27,7 @@ export const scenario6_forgery: Scenario = {
     {
       id: 'suspect_auctioneer',
       name: 'David Ashworth',
-      role: 'Head Auctioneer (Innocent)',
+      role: 'suspect',
       portrait: '🎩',
       alibi: 'I was cataloging items in the back office.',
       motivation: 'None (professional duty)',
@@ -37,7 +37,7 @@ export const scenario6_forgery: Scenario = {
     {
       id: 'suspect_restorer',
       name: 'Marcus Chen',
-      role: 'Art Restorer (Innocent)',
+      role: 'suspect',
       portrait: '👨‍🔬',
       alibi: 'I was restoring another client\'s artwork.',
       motivation: 'None (honest craftsman)',
@@ -47,7 +47,7 @@ export const scenario6_forgery: Scenario = {
     {
       id: 'suspect_collector',
       name: 'Victoria Blackwell',
-      role: 'Art Collector (Innocent)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I arrived just before the auction started.',
       motivation: 'Wanted to own the famous painting',
@@ -144,8 +144,8 @@ export const scenario6_forgery: Scenario = {
         {
           id: 'char_apprentice',
           name: 'Elena Rossini',
-          emoji: '🎨',
-          role: 'Artist\'s Apprentice',
+          portraitUrl: '🎨',
+          role: 'suspect',
         },
       ],
       hotspots: [],
@@ -154,7 +154,7 @@ export const scenario6_forgery: Scenario = {
           id: 'choice_accuse_apprentice',
           prompt: 'Confront Elena with the paint evidence',
           response: 'She confesses! Desperate for money, she created the forgery.',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_paint_samples'],
           nextSceneId: 'scene_resolution',
         },
@@ -162,7 +162,7 @@ export const scenario6_forgery: Scenario = {
           id: 'choice_ask_collaborators',
           prompt: 'Ask about who helped her execute the plan',
           response: 'She hesitates, suggesting involvement of the auctioneer.',
-          consequence: 'red-herring',
+          consequence: 'suspect',
           revealedClues: ['evidence_auction_catalog'],
           nextSceneId: 'scene_interrogation_start',
         },
@@ -174,7 +174,7 @@ export const scenario6_forgery: Scenario = {
       title: 'Case Closed',
       description: 'You\'ve successfully identified the forger!',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [
@@ -182,7 +182,7 @@ export const scenario6_forgery: Scenario = {
           id: 'choice_end_game',
           prompt: 'Return to headquarters',
           response: 'Another case closed. The art world is safer now.',
-          consequence: 'end',
+          consequence: 'phase',
           revealedClues: [],
           nextSceneId: 'scene_resolution',
         },
@@ -192,17 +192,17 @@ export const scenario6_forgery: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '🎉',
+      portraitUrl: '🎉',
       title: 'Forgery Exposed!',
       description: 'Elena Rossini confessed to creating the masterpiece forgery. Justice served!',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The investigation fell short. The real forger remains at large.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'You ran out of time. The case remains unsolved.',
     },

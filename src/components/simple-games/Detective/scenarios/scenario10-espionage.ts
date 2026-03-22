@@ -17,7 +17,7 @@ export const scenario10_espionage: Scenario = {
     {
       id: 'suspect_lead_engineer',
       name: 'Dr. Samuel Park',
-      role: 'Lead Engineer (GUILTY)',
+      role: 'suspect',
       portrait: '👨‍💼',
       alibi: 'I was working late in my lab on the algorithm.',
       motivation: 'Offered $2M by competitor to steal the code',
@@ -27,7 +27,7 @@ export const scenario10_espionage: Scenario = {
     {
       id: 'suspect_investor',
       name: 'Thomas Richardson',
-      role: 'Angel Investor (Innocent)',
+      role: 'suspect',
       portrait: '💰',
       alibi: 'I was attending a board dinner downtown.',
       motivation: 'Wants company to succeed, invested $5M',
@@ -37,7 +37,7 @@ export const scenario10_espionage: Scenario = {
     {
       id: 'suspect_intern',
       name: 'Lisa Chen',
-      role: 'Summer Intern (Innocent)',
+      role: 'suspect',
       portrait: '📚',
       alibi: 'I was working on documentation tasks.',
       motivation: 'Just an intern, no access to secure files',
@@ -47,7 +47,7 @@ export const scenario10_espionage: Scenario = {
     {
       id: 'suspect_cto',
       name: 'Michael Zhang',
-      role: 'CTO (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💻',
       alibi: 'I was in meetings with the executive team.',
       motivation: 'Company\'s founder, very invested in success',
@@ -153,7 +153,7 @@ export const scenario10_espionage: Scenario = {
           id: 'choice_decrypt_emails',
           prompt: 'Decrypt Samuel\'s encrypted messages',
           response: 'Messages to a competitor discuss the algorithm delivery and payment. Case solved!',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_suspicious_emails'],
           nextSceneId: 'scene_resolution',
         },
@@ -165,7 +165,7 @@ export const scenario10_espionage: Scenario = {
       title: 'Corporate Criminal Caught',
       description: 'The spy has been apprehended.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -174,17 +174,17 @@ export const scenario10_espionage: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '🕵️',
+      portraitUrl: '🕵️',
       title: 'Spy Exposed!',
       description: 'Dr. Samuel Park\'s espionage plot was uncovered. The algorithm is recovered.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The real corporate spy remains undetected. The competitor now has the technology.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The investigation ran out of time. The spy escaped.',
     },

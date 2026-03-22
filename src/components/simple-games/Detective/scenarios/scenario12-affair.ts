@@ -17,7 +17,7 @@ export const scenario12_affair: Scenario = {
     {
       id: 'suspect_lobbyist',
       name: 'Margaret Hayes',
-      role: 'Rival Lobbyist (GUILTY)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I was at a conference in New York.',
       motivation: 'Political rivalry, trying to force policy changes',
@@ -27,7 +27,7 @@ export const scenario12_affair: Scenario = {
     {
       id: 'suspect_journalist',
       name: 'Daniel Press',
-      role: 'Journalist (Innocent)',
+      role: 'suspect',
       portrait: '👨‍💻',
       alibi: 'I was investigating a different corruption story.',
       motivation: 'Professional journalism, not blackmail',
@@ -37,7 +37,7 @@ export const scenario12_affair: Scenario = {
     {
       id: 'suspect_chief_of_staff',
       name: 'Ellen Murphy',
-      role: 'Chief of Staff (Innocent)',
+      role: 'suspect',
       portrait: '👩‍💼',
       alibi: 'I was organizing the political campaign.',
       motivation: 'Loyalty to the politician',
@@ -47,7 +47,7 @@ export const scenario12_affair: Scenario = {
     {
       id: 'suspect_bodyguard',
       name: 'Thomas Bradley',
-      role: 'Personal Bodyguard (Innocent)',
+      role: 'suspect',
       portrait: '🕵️',
       alibi: 'I was providing security detail.',
       motivation: 'Job responsibility',
@@ -145,7 +145,7 @@ export const scenario12_affair: Scenario = {
           id: 'choice_confront_margaret',
           prompt: 'Confront Margaret with the evidence',
           response: 'She breaks down and confesses to the blackmail scheme.',
-          consequence: 'solved',
+          consequence: 'phase',
           revealedClues: ['evidence_photos_found'],
           nextSceneId: 'scene_resolution',
         },
@@ -157,7 +157,7 @@ export const scenario12_affair: Scenario = {
       title: 'Case Resolved',
       description: 'The blackmailer has been caught.',
       backgroundUrl: 'url-to-police-station',
-      phase: 'resolution',
+      phase: 'conclusion',
       characters: [],
       hotspots: [],
       dialogueOptions: [],
@@ -166,17 +166,17 @@ export const scenario12_affair: Scenario = {
 
   endings: {
     correct_suspect: {
-      emoji: '🔒',
+      portraitUrl: '🔒',
       title: 'Blackmailer Exposed!',
       description: 'Margaret Hayes\'s scheme was uncovered. The politician is safe.',
     },
     wrong_suspect: {
-      emoji: '❌',
+      portraitUrl: '❌',
       title: 'Wrong Conclusion',
       description: 'The photographs have been released. The politician\'s career is over.',
     },
     timeout: {
-      emoji: '⏰',
+      portraitUrl: '⏰',
       title: 'Time\'s Up',
       description: 'The blackmailer obtained the payoff before you solved the case.',
     },
