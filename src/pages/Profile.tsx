@@ -136,15 +136,18 @@ export const Profile: React.FC = () => {
               { icon: Flame,  color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20', label: 'Best Streak', value: bestStreak },
               { icon: Star,   color: 'text-blue-500',   bg: 'bg-blue-50 dark:bg-blue-900/20',     label: 'Favourite',   value: stats.favoriteGame || '—' },
               { icon: Award,  color: 'text-red-500',    bg: 'bg-red-50 dark:bg-red-900/20',       label: 'Achievements', value: achievements.length },
-            ].map(({ icon: Icon, color, bg, label, value }) => (
-              <div key={label} className="glass-card p-5 flex items-center gap-4 hover:scale-[1.02] transition-transform">
-                <div className={`p-3 rounded-2xl ${bg}`}><Icon className={`w-6 h-6 ${color}`} /></div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{value}</p>
+            ].map(({ icon: Icon, color, bg, label, value }, i) => {
+              const staggerClass = ['stagger-item-0', 'stagger-item-1', 'stagger-item-2', 'stagger-item-3', 'stagger-item-4', 'stagger-item-5'][i] || '';
+              return (
+                <div key={label} className={`glass-card p-5 flex items-center gap-4 hover:scale-[1.02] transition-transform animate-slide-in-up ${staggerClass}`}>
+                  <div className={`p-3 rounded-2xl ${bg}`}><Icon className={`w-6 h-6 ${color}`} /></div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{value}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
