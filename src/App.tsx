@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { GameProvider } from './contexts/GameContext';
@@ -116,6 +117,7 @@ function App() {
               <BottomNav />
             </div>
             <Analytics />
+            <SpeedInsights />
           </Router>
         </GameProvider>
       </AuthProvider>
