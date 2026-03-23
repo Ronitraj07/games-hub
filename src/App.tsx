@@ -12,6 +12,8 @@ import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { GameLobby } from './pages/GameLobby';
 import { Leaderboard } from './pages/Leaderboard';
+import { Terms } from './pages/Terms';
+import { Privacy } from './pages/Privacy';
 import { TicTacToe } from './components/simple-games/TicTacToe/TicTacToe';
 import { WordScramble } from './components/simple-games/WordScramble/WordScramble';
 import { MemoryMatch } from './components/simple-games/MemoryMatch/MemoryMatch';
@@ -49,6 +51,8 @@ function App() {
                     {/* ── Public routes ───────────────────────── */}
                     <Route path="/login"  element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/privacy" element={<Privacy />} />
 
                     {/* ── Protected routes ────────────────────── */}
                     <Route path="/" element={
