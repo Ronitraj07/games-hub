@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded background -->
+  <rect width="200" height="200" rx="45" fill="url(#bgGradient)"/>
+
+  <!-- Gloss effect overlay -->
+  <ellipse cx="100" cy="60" rx="70" ry="50" fill="white" opacity="0.25" filter="url(#glow)"/>
+
+  <!-- Two interlocking hearts (couple) -->
+  <!-- Left heart -->
+  <g transform="translate(70, 85)">
+    <path d="M 0,-5 C -8,-12 -18,-12 -18,-2 C -18,8 -5,18 0,23 C 0,18 8,8 8,-2 C 8,-12 -2,-12 0,-5 Z"
+          fill="white" opacity="0.95"/>
+  </g>
+
+  <!-- Right heart -->
+  <g transform="translate(130, 85)">
+    <path d="M 0,-5 C -8,-12 -18,-12 -18,-2 C -18,8 -5,18 0,23 C 0,18 8,8 8,-2 C 8,-12 -2,-12 0,-5 Z"
+          fill="white" opacity="0.95" transform="scaleX(-1) translateX(0)"/>
+  </g>
+
+  <!-- Gaming controller symbol (cross or plus) in center -->
+  <g transform="translate(100, 130)">
+    <rect x="-3" y="-18" width="6" height="36" fill="white" opacity="0.9" rx="2"/>
+    <rect x="-18" y="-3" width="36" height="6" fill="white" opacity="0.9" rx="2"/>
+  </g>
+
+  <!-- Sparkle accent (top right) -->
+  <circle cx="155" cy="45" r="3" fill="white" opacity="0.8"/>
+  <circle cx="160" cy="52" r="2" fill="white" opacity="0.6"/>
+  <circle cx="150" cy="52" r="2" fill="white" opacity="0.6"/>
+
+  <!-- Bottom highlight shine -->
+  <ellipse cx="100" cy="180" rx="60" ry="25" fill="white" opacity="0.12"/>
+</svg>
