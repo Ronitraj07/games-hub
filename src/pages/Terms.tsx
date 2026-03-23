@@ -25,10 +25,19 @@ export const Terms: React.FC = () => {
           <div className="prose dark:prose-invert max-w-none space-y-6">
             <section>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+                About This Service
+              </h2>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                Couple Games Hub (<strong>https://games.shizzandsparkles.fun/</strong>) is a private multiplayer gaming platform designed specifically for couples. Our service offers 13 different interactive games including Tic-Tac-Toe, Word Scramble, Pictionary, Scrabble, Story Builder, and more. Players create personal accounts, compete on leaderboards, and track their gaming history.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
                 1. Acceptance of Terms
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                By accessing and using Couple Games Hub ("the Service"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
+                By accessing and using Couple Games Hub located at <strong>https://games.shizzandsparkles.fun/</strong> ("the Service"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by these terms, please do not use this service. These Terms of Service were last updated on March 2026.
               </p>
             </section>
 
@@ -90,7 +99,7 @@ export const Terms: React.FC = () => {
                 7. User Accounts
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                If you create an account on Couple Games Hub, you are responsible for maintaining the confidentiality of your account information and password and for restricting access to your computer. You agree to accept responsibility for all activities that occur under your account or password. Couple Games Hub reserves the right to refuse service or access to the Service to anyone at any time.
+                When you create an account on Couple Games Hub (https://games.shizzandsparkles.fun/), you are responsible for maintaining the confidentiality of your account information and password and for restricting access to your device. You agree to accept responsibility for all activities that occur under your account or password. You must provide accurate information during registration. Couple Games Hub reserves the right to refuse service or access to the Service to anyone at any time for any reason.
               </p>
             </section>
 
@@ -126,7 +135,7 @@ export const Terms: React.FC = () => {
                 11. Governing Law
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                These terms and conditions are governed by and construed in accordance with the laws of the jurisdiction where Couple Games Hub operates, and you irrevocably submit to the exclusive jurisdiction of the courts in that location.
+                These terms and conditions are governed by and construed in accordance with the laws of the United States. You irrevocably submit to the exclusive jurisdiction of the courts located in the United States for any disputes arising from your use of this service.
               </p>
             </section>
 
@@ -134,14 +143,23 @@ export const Terms: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
                 12. Contact Information
               </h2>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                If you have any questions about these Terms of Service, please contact us through the contact information provided in our Privacy Policy.
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
+                If you have any questions about these Terms of Service, please contact us:
               </p>
+              <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-4 border border-pink-200 dark:border-pink-800">
+                <p className="text-gray-700 dark:text-gray-300">
+                  <strong>Website:</strong> <a href="https://games.shizzandsparkles.fun/" className="text-pink-600 dark:text-pink-400 hover:underline">https://games.shizzandsparkles.fun/</a>
+                </p>
+                <p className="text-gray-700 dark:text-gray-300 mt-2">
+                  <strong>Privacy Policy:</strong> <a href="/privacy" className="text-pink-600 dark:text-pink-400 hover:underline">https://games.shizzandsparkles.fun/privacy</a>
+                </p>
+              </div>
             </section>
 
             <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Last Updated: March 2026
+                <strong>Last Updated:</strong> March 23, 2026<br />
+                <strong>Service:</strong> Couple Games Hub (https://games.shizzandsparkles.fun/)
               </p>
             </div>
           </div>

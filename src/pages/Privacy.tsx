@@ -28,7 +28,7 @@ export const Privacy: React.FC = () => {
                 1. Introduction
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                Couple Games Hub ("we," "us," "our," or "Company") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our services.
+                Couple Games Hub ("we," "us," "our," or "Company") located at <strong>https://games.shizzandsparkles.fun/</strong> is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our services. Please read this policy carefully. If you do not agree with our practices, please do not use our service.
               </p>
             </section>
 
@@ -37,32 +37,32 @@ export const Privacy: React.FC = () => {
                 2. Information We Collect
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-semibold mb-3">
-                We may collect information about you in a variety of ways. The information we may collect on the site includes:
+                When you use Couple Games Hub (https://games.shizzandsparkles.fun/), we collect the following types of information:
               </p>
               <ul className="space-y-3 text-gray-700 dark:text-gray-300">
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>Account Information:</strong> When you create an account, we collect your email address, name, and authentication credentials for login purposes.</span>
+                  <span><strong>Account Information:</strong> Email address, name, password, and authentication credentials when you sign up or log in via Google OAuth.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>Game Data:</strong> We collect information about your gameplay, including game history, scores, achievements, and statistics to provide personalized experiences and leaderboards.</span>
+                  <span><strong>Game Data:</strong> Game history, scores, achievements, statistics, and gameplay time across all 13 games (Tic-Tac-Toe, Pictionary, Scrabble, Word Scramble, etc.).</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>Device Information:</strong> We may collect device type, operating system, browser type, and device identifiers for analytics and improvement purposes.</span>
+                  <span><strong>Device Information:</strong> Device type, operating system, browser version, IP address, and unique device identifiers for security and analytics.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>Usage Data:</strong> We automatically collect information about your interaction with our services, including pages visited, time spent, and features used.</span>
+                  <span><strong>Usage Analytics:</strong> Pages visited, time spent in each game, features used, leaderboard interactions, and engagement patterns.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>OAuth Data:</strong> If you authenticate through Google or other third-party providers, we collect information per their authorization (email, basic profile).</span>
+                  <span><strong>Google OAuth Data:</strong> When authenticating through Google, we collect email and profile information per Google's authorization scope.</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
-                  <span><strong>Cookies and Analytics:</strong> We use cookies and similar tracking technologies for analytics, preferences, and service improvement through Vercel Analytics.</span>
+                  <span><strong>Cookies & Tracking:</strong> We use cookies, session storage, and Vercel Analytics for user experience optimization and analytical insights.</span>
                 </li>
               </ul>
             </section>
@@ -72,17 +72,18 @@ export const Privacy: React.FC = () => {
                 3. Use of Your Information
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
-                Having accurate information about you permits us to provide you with a smooth, efficient, and customized experience. Specifically, we may use information collected about you via the site to:
+                We use the information we collect to enhance your gaming experience and operate Couple Games Hub effectively. Specifically, we use your data to:
               </p>
               <ul className="list-disc list-inside text-gray-700 dark:text-gray-300 space-y-2">
-                <li>Create and manage your user account</li>
-                <li>Process your game data and track your progress</li>
-                <li>Generate personalized reports through the Leaderboard and Profile pages</li>
-                <li>Email you regarding your account or game activity</li>
-                <li>Analyze website usage through analytics tools</li>
-                <li>Improve our services based on user behavior and preferences</li>
-                <li>Detect fraud and maintain service security</li>
-                <li>Comply with legal obligations and enforce our Terms of Service</li>
+                <li>Create, authenticate, and manage your user account securely</li>
+                <li>Track your game progress, scores, and achievement history</li>
+                <li>Display personalized leaderboards and statistics on your profile</li>
+                <li>Enable multiplayer gameplay between you and your partner</li>
+                <li>Send you account notifications and game invitations (optional)</li>
+                <li>Analyze usage patterns to improve game quality and user experience</li>
+                <li>Detect and prevent fraudulent activity and unauthorized access</li>
+                <li>Comply with legal requirements and enforce our Terms of Service</li>
+                <li>Provide customer support and respond to inquiries</li>
               </ul>
             </section>
 
@@ -117,9 +118,33 @@ export const Privacy: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
                 5. Security of Your Information
               </h2>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                We use administrative, technical, and physical security measures to protect your personal information. However, no method of transmission over the Internet or method of electronic storage is 100% secure. We cannot guarantee absolute security of your information. Your use of our service is at your own risk.
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+                We implement comprehensive security measures to protect your personal data:
               </p>
+              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300 space-y-2 mb-4">
+                <li>Secure HTTPS encryption for all data transmission</li>
+                <li>Secure password hashing and storage</li>
+                <li>Access controls and authentication protocols</li>
+                <li>Regular security audits and updates</li>
+                <li>Firebase and Supabase security infrastructure</li>
+              </ul>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                However, no security system is 100% secure. We cannot guarantee absolute protection against all cyber threats. Your use of our service is at your own risk. We are not liable for unauthorized access to your account resulting from weak passwords or account compromise.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+                5.5 Data Retention and Deletion
+              </h2>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+                We retain your personal data as long as your account is active or as needed to provide you with the service. You can request deletion of your account and associated data at any time:
+              </p>
+              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300 space-y-2">
+                <li>When you delete your account, all game history and personal data is permanently removed within 30 days</li>
+                <li>Aggregated, anonymized data may be retained for analytics purposes</li>
+                <li>We may retain data if required by law or legitimate business purposes</li>
+              </ul>
             </section>
 
             <section>
@@ -127,11 +152,17 @@ export const Privacy: React.FC = () => {
                 6. Contact Us With Privacy Questions
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
-                If you have questions or comments about this Privacy Policy, please contact us at:
+                If you have questions or comments about this Privacy Policy, please contact us:
               </p>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+              <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-4 border border-pink-200 dark:border-pink-800 space-y-3">
                 <p className="text-gray-700 dark:text-gray-300">
-                  <strong>Email:</strong> support@couplegameshub.com
+                  <strong>Website:</strong> <a href="https://games.shizzandsparkles.fun/" className="text-pink-600 dark:text-pink-400 hover:underline" target="_blank" rel="noopener noreferrer">https://games.shizzandsparkles.fun/</a>
+                </p>
+                <p className="text-gray-700 dark:text-gray-300">
+                  <strong>Terms of Service:</strong> <a href="/terms" className="text-pink-600 dark:text-pink-400 hover:underline">https://games.shizzandsparkles.fun/terms</a>
+                </p>
+                <p className="text-gray-700 dark:text-gray-300 text-sm">
+                  We will respond to any privacy inquiries within 30 days of receipt.
                 </p>
               </div>
             </section>
@@ -168,8 +199,29 @@ export const Privacy: React.FC = () => {
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
                 9. Third-Party Services
               </h2>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                Our service integrates with third-party services including Firebase, Supabase, Google OAuth, and Vercel Analytics. These third parties have their own privacy policies governing how they collect and use your information. We encourage you to review their privacy policies as we are not responsible for their privacy practices.
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+                Our service relies on third-party providers to operate. These services have access to specific information:
+              </p>
+              <ul className="space-y-3 text-gray-700 dark:text-gray-300">
+                <li className="flex gap-3">
+                  <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
+                  <span><strong>Firebase:</strong> Stores user authentication, game sessions, and real-time data synchronization</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
+                  <span><strong>Supabase:</strong> Stores game history, statistics, and user profiles</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
+                  <span><strong>Google OAuth:</strong> Handles authentication and provides email/profile verification</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-pink-600 dark:text-pink-400">•</span>
+                  <span><strong>Vercel Analytics:</strong> Collects anonymized usage analytics for performance monitoring</span>
+                </li>
+              </ul>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
+                Each third-party service has its own privacy policy. We encourage you to review them, but we are not responsible for their practices.
               </p>
             </section>
 
@@ -178,13 +230,18 @@ export const Privacy: React.FC = () => {
                 10. Children's Privacy
               </h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                Our service is not intended for children under the age of 13. We do not knowingly collect personal information from children under 13. If we become aware that we have collected personal information from a child under 13, we will take steps to delete such information and terminate the child's account.
+                Couple Games Hub is designed for and intended to be used by adults (18+), and is not intended for children under the age of 13. We comply with the Children's Online Privacy Protection Act (COPPA) and do not knowingly collect personal information from children under 13.
+              </p>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-3">
+                If we become aware that a user is a child under 13, we will immediately suspend the account and delete all associated personal information within 30 days. If you believe your child has created an account with us, please contact us immediately using the information in Section 6.
               </p>
             </section>
 
             <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Last Updated: March 2026
+                <strong>Last Updated:</strong> March 23, 2026<br />
+                <strong>Service:</strong> Couple Games Hub (https://games.shizzandsparkles.fun/)<br />
+                <strong>Data Protection:</strong> Your privacy is important to us. This policy is subject to applicable privacy laws.
               </p>
             </div>
           </div>
