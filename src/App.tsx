@@ -22,7 +22,6 @@ import { RockPaperScissors } from './components/simple-games/RockPaperScissors/R
 import { Pictionary } from './components/simple-games/Pictionary/Pictionary';
 import { MathDuel } from './components/simple-games/MathDuel/MathDuel';
 import { TruthOrDare } from './components/simple-games/TruthOrDare/TruthOrDare';
-import { Detective } from './components/simple-games/Detective/Detective';
 import { Scrabble } from './components/simple-games/Scrabble/Scrabble';
 import { StoryBuilder } from './components/simple-games/StoryBuilder/StoryBuilder';
 import { KissingWheel } from './components/simple-games/KissingWheel/KissingWheel';
@@ -44,9 +43,8 @@ function App() {
               </div>
 
               {/* App shell */}
-              <div className="relative z-10 flex flex-col min-h-screen">
+              <div className="z-10 flex flex-col min-h-screen">
                 <Navbar />
-                <BottomNav />
                 <main className="flex-1 overflow-y-auto">
                   <Routes>
                     {/* ── Public routes ───────────────────────── */}
@@ -95,9 +93,6 @@ function App() {
                     <Route path="/games/truthordare" element={
                       <ProtectedRoute><TruthOrDare /></ProtectedRoute>
                     } />
-                    <Route path="/games/detective" element={
-                      <ProtectedRoute><Detective /></ProtectedRoute>
-                    } />
                     <Route path="/games/scrabble" element={
                       <ProtectedRoute><Scrabble /></ProtectedRoute>
                     } />
@@ -114,6 +109,9 @@ function App() {
                 </main>
                 <Footer />
               </div>
+
+              {/* Bottom Nav - positioned outside relative container for proper fixed positioning */}
+              <BottomNav />
             </div>
             <Analytics />
           </Router>
