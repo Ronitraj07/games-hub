@@ -249,6 +249,27 @@ export const Home: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* Legal Footer */}
+        <div className="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex flex-wrap justify-center items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-center">
+              <h2 className="font-semibold text-gray-900 dark:text-white mb-2">Couple Games Hub</h2>
+              <p className="text-xs">Love & Gaming 💕</p>
+            </div>
+            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
+            <Link to="/privacy" className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors">
+              Privacy Policy
+            </Link>
+            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
+            <Link to="/terms" className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors">
+              Terms of Service
+            </Link>
+          </div>
+          <p className="text-center text-xs text-gray-500 dark:text-gray-500 mt-6">
+            © 2026 Couple Games Hub. All rights reserved. | <a href="https://games.shizzandsparkles.fun/" className="hover:text-pink-600">https://games.shizzandsparkles.fun/</a>
+          </p>
+        </div>
       </div>
     </div>
   );
