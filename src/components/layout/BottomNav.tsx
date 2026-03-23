@@ -20,7 +20,7 @@ export const BottomNav: React.FC = () => {
   if (!user) return null;
 
   const navItems = [
-    { path: '/', icon: Home, label: 'Home', color: 'pink' },
+    { path: '/dashboard', icon: Home, label: 'Home', color: 'pink' },
     { path: '/leaderboard', icon: Trophy, label: 'Scores', color: 'yellow' },
     { path: '/profile', icon: Gamepad2, label: 'Profile', color: 'purple' },
   ];
@@ -62,14 +62,14 @@ export const BottomNav: React.FC = () => {
 
           {/* Home */}
           <Link
-            to="/"
+            to="/dashboard"
             className={`flex flex-col items-center justify-center gap-1.5 py-3 px-5 rounded-[20px] transition-all duration-300 group relative overflow-hidden min-w-[72px] ${
-              isActive('/')
+              isActive('/dashboard')
                 ? 'bg-gradient-to-br from-pink-400/60 to-pink-500/40 text-pink-600 dark:text-pink-300 shadow-lg shadow-pink-400/50 scale-110'
                 : 'text-gray-700 dark:text-gray-300 hover:bg-pink-400/25 hover:text-pink-600 dark:hover:text-pink-400 hover:scale-105 active:scale-95'
             }`}
             aria-label="Go to Home"
-            aria-current={isActive('/') ? 'page' : undefined}
+            aria-current={isActive('/dashboard') ? 'page' : undefined}
           >
             <div className="absolute inset-0 bg-gradient-to-b from-white/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-[20px]" />
             <Home size={24} className="relative z-10 drop-shadow-sm" />

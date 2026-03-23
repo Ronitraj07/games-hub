@@ -7,6 +7,7 @@ import { GameProvider } from './contexts/GameContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav } from './components/layout/BottomNav';
+import { Landing } from './pages/Landing';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -50,13 +51,14 @@ function App() {
                 <main className="flex-1 overflow-y-auto pb-28 sm:pb-0">
                   <Routes>
                     {/* ── Public routes ───────────────────────── */}
+                    <Route path="/" element={<Landing />} />
                     <Route path="/login"  element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/terms" element={<Terms />} />
                     <Route path="/privacy" element={<Privacy />} />
 
                     {/* ── Protected routes ────────────────────── */}
-                    <Route path="/" element={
+                    <Route path="/dashboard" element={
                       <ProtectedRoute><Home /></ProtectedRoute>
                     } />
                     <Route path="/profile" element={

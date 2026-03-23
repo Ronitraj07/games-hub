@@ -29,7 +29,7 @@ export const Navbar: React.FC = () => {
         <div className="flex justify-between items-center h-20 relative z-10">
 
           {/* Logo */}
-          <Link to="/" className="hover:opacity-90 transition-opacity transform hover:scale-105 duration-200">
+          <Link to={user ? "/dashboard" : "/"} className="hover:opacity-90 transition-opacity transform hover:scale-105 duration-200">
             <GamesHubLogo size={40} showText={true} />
           </Link>
 
@@ -63,9 +63,9 @@ export const Navbar: React.FC = () => {
             {user && (
               <>
                 {/* Home */}
-                <Link to="/"
+                <Link to="/dashboard"
                   className={`glass-btn relative flex items-center gap-2 px-4 py-3 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 group overflow-hidden ${
-                    location.pathname === '/'
+                    location.pathname === '/dashboard'
                       ? 'text-pink-600 dark:text-pink-400 bg-gradient-to-r from-pink-200/50 to-pink-100/30 dark:from-pink-900/40 dark:to-pink-800/20 shadow-lg shadow-pink-300/30'
                       : 'text-gray-700 dark:text-gray-300 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-white/40 dark:hover:bg-white/15'
                   }`}>
