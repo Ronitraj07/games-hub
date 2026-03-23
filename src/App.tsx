@@ -47,7 +47,7 @@ function App() {
               {/* App shell */}
               <div className="z-10 flex flex-col min-h-screen">
                 <Navbar />
-                <main className="flex-1 overflow-y-auto">
+                <main className="flex-1 overflow-y-auto pb-28 sm:pb-0">
                   <Routes>
                     {/* ── Public routes ───────────────────────── */}
                     <Route path="/login"  element={<Login />} />
