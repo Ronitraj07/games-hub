@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getDisplayNameFromEmail } from '@/lib/auth-config';
 
 // Fix: added 'truthordare' so TruthOrDare games are persisted correctly
-export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordscramble' | 'pictionary' | 'mathduel' | 'truthordare' | 'scrabble' | 'storybuilder' | 'detective' | 'kissingwheel';
+export type GameType   = 'trivia' | 'rps' | 'memorymatch' | 'tictactoe' | 'connect4' | 'wordscramble' | 'pictionary' | 'mathduel' | 'truthordare' | 'scrabble' | 'storybuilder' | 'kissingwheel';
 export type GameResult = 'win' | 'loss' | 'draw';
 export type GameMode   = 'solo' | 'vs-partner' | 'vs-ai';
 

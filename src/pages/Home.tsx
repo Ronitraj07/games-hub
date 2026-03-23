@@ -90,15 +90,6 @@ const SIMPLE_GAMES = [
     estimatedTime: '10+ min',
   },
   {
-    id: 'detective',
-    name: 'Detective',
-    description: 'Solve mysteries together',
-    route: '/games/detective',
-    difficulty: 'Hard',
-    players: '1-2' as const,
-    estimatedTime: '15-25 min',
-  },
-  {
     id: 'scrabble',
     name: 'Scrabble',
     description: 'Word game on shared board',

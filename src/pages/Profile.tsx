@@ -27,7 +27,6 @@ const ALL_GAMES: { id: GameType; label: string; emoji: string }[] = [
   { id: 'pictionary',   label: 'Pictionary',          emoji: '🎴' },
   { id: 'mathduel',     label: 'Math Duel',           emoji: '⚡' },
   { id: 'truthordare',  label: 'Truth or Dare',       emoji: '🔥' },
-  { id: 'detective',    label: 'Detective',           emoji: '🔍' },
   { id: 'scrabble',     label: 'Scrabble',            emoji: '📝' },
   { id: 'storybuilder', label: 'Story Builder',       emoji: '📖' },
   { id: 'kissingwheel', label: 'Kissing Wheel',       emoji: '🎡' },

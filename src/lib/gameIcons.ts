@@ -98,16 +98,7 @@ export const GAME_ICONS: Record<string, GameStyle> = {
     darkBg: 'dark:bg-rose-900/30',
   },
 
-  // NEW 5 GAMES
-  detective: {
-    icon: '🔎',
-    emoji: '🔎',
-    gradient: 'from-slate-500 to-purple-700',
-    glowColor: 'shadow-slate-400/60 dark:shadow-purple-600/40',
-    accentColor: 'text-slate-600 dark:text-slate-300',
-    lightBg: 'bg-slate-50/50 dark:bg-slate-900/20',
-    darkBg: 'dark:bg-slate-900/30',
-  },
+  // NEW 4 GAMES
   scrabble: {
     icon: '🎯',
     emoji: '🎯',

@@ -6,7 +6,6 @@ import { GameProvider } from './contexts/GameContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav } from './components/layout/BottomNav';
-import { Footer } from './components/layout/Footer';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -107,7 +106,6 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>
-                <Footer />
               </div>
 
               {/* Bottom Nav - positioned outside relative container for proper fixed positioning */}

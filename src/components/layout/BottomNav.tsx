@@ -22,8 +22,7 @@ export const BottomNav: React.FC = () => {
   const navItems = [
     { path: '/', icon: Home, label: 'Home', color: 'pink' },
     { path: '/leaderboard', icon: Trophy, label: 'Scores', color: 'yellow' },
-    { path: '', icon: Gamepad2, label: 'Games', color: 'purple' }, // Placeholder - could link to games page
-    { path: '/profile', icon: Gamepad2, label: 'Profile', color: 'purple' }, // Will use avatar if available
+    { path: '/profile', icon: Gamepad2, label: 'Profile', color: 'purple' },
   ];
 
   const isActive = (path: string) => location.pathname === path;

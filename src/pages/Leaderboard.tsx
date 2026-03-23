@@ -8,7 +8,7 @@ import { ALLOWED_EMAILS, getDisplayNameFromEmail, getPlayerEmoji } from '@/lib/a
 type GameType =
   | 'tictactoe' | 'wordscramble' | 'memorymatch' | 'connect4'
   | 'trivia'    | 'rps'          | 'pictionary'  | 'mathduel' | 'truthordare'
-  | 'detective' | 'scrabble'     | 'storybuilder' | 'kissingwheel';
+  | 'scrabble'     | 'storybuilder' | 'kissingwheel';
 
 interface PlayerStat {
   email:       string;
@@ -44,7 +44,6 @@ const GAME_META: Record<GameType, { label: string; icon: React.ReactNode; color:
   pictionary:   { label: 'Pictionary',         icon: <Image size={16}/>,      color: 'text-rose-500'   },
   mathduel:     { label: 'Math Duel',          icon: <Calculator size={16}/>, color: 'text-lime-500'   },
   truthordare:  { label: 'Truth or Dare',      icon: <Flame size={16}/>,      color: 'text-red-500'    },
-  detective:    { label: 'Detective',          icon: <Brain size={16}/>,      color: 'text-purple-600' },
   scrabble:     { label: 'Scrabble',           icon: <Gamepad2 size={16}/>,   color: 'text-blue-600'   },
   storybuilder: { label: 'Story Builder',      icon: <Rocket size={16}/>,     color: 'text-pink-600'   },
   kissingwheel: { label: 'Kissing Wheel',      icon: <Heart size={16}/>,      color: 'text-red-600'    },
